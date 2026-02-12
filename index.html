@@ -5,6 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>static void studio</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎨</text></svg>">
+  <meta name="description" content="software development, creative technology, audiovisual services, art, and consulting">
 
   <style>
     * {
@@ -26,16 +28,21 @@
       min-height: -webkit-fill-available;
       align-items: center;
       justify-content: center;
-      background-image: linear-gradient(rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.3)), url('./tile1.jpg');
-      background-color: #111;
+      background-image: linear-gradient(rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.6)), url('./tile1.jpg');
+      background-color: #0a0a0a;
       background-attachment: fixed;
       background-position: 50%;
-      /* background-size: fill, 100%; */
-      color: #fff;
+      color: #b8b8b8;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
     }
 
     a {
       color: inherit;
+      transition: filter 0.2s ease;
+    }
+
+    a:hover {
+      filter: brightness(1.2);
     }
 
 
@@ -55,7 +62,44 @@
     }
 
     h1.title {
-      font-size: 2.6rem;
+      font-size: clamp(2.5rem, 8vw, 3.5rem);
+      font-weight: bold;
+      color: #ddd;
+      letter-spacing: 0.02em;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+      position: relative;
+    }
+
+    h1.title::before {
+      content: 'static void studio';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(
+        90deg,
+        rgba(180, 180, 180, 0.5) 0%,
+        rgba(255, 255, 255, 0.7) 25%,
+        rgba(160, 160, 160, 0.55) 50%,
+        rgba(255, 255, 255, 0.7) 75%,
+        rgba(180, 180, 180, 0.5) 100%
+      );
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: blur(12px) brightness(1.5);
+      z-index: -1;
+      animation: fog-drift 6s linear infinite;
+    }
+
+    @keyframes fog-drift {
+      0% {
+        background-position: 0% 50%;
+      }
+      100% {
+        background-position: 200% 50%;
+      }
     }
 
     .construction {
@@ -66,6 +110,11 @@
 
     .links {
       font-size: 1.5rem;
+      color: #ccc;
+    }
+
+    .links a {
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
     }
 
     .marquee-wrapper {
@@ -89,6 +138,7 @@
       display: inline-block;
       margin: 0;
       font-size: 1.25rem;
+      opacity: 0.85;
     }
 
     @keyframes marquee {
@@ -124,7 +174,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Comic+Neue&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
 </head>
 
 <body>
@@ -134,10 +184,10 @@
     <div class="marquee-wrapper">
       <div class="marquee">
         <p>
-          freelance software development / creative technology / audiovisual services / art / consulting /
+          software development / creative technology / audiovisual services / art / consulting /
         </p>
         <p aria-hidden="true">
-          freelance software development / creative technology / audiovisual services / art / consulting /
+          software development / creative technology / audiovisual services / art / consulting /
         </p>
       </div>
     </div>
