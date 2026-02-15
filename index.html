@@ -34,6 +34,28 @@
       background-position: 50%;
       color: #b8b8b8;
       text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+      position: relative;
+    }
+
+    /* Fixed background for iOS/mobile where background-attachment: fixed doesn't work */
+    @supports (-webkit-touch-callout: none) {
+      body {
+        background: #0a0a0a;
+      }
+
+      body::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100vh;
+        background-image: linear-gradient(rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.6)), url('./tile1.jpg');
+        background-color: #0a0a0a;
+        background-position: 50%;
+        background-size: cover;
+        z-index: -1;
+      }
     }
 
     a {
@@ -198,10 +220,10 @@
       </div>
       <br />
       <div>
-        <a href="https://orbitalharp.com">🪉 orbital harp</a>
+        <a href="https://orbitalharp.com" style="text-decoration: none;"><span>🪉 </span><span style="text-decoration: underline;">orbital harp</span></a> <span style="font-size: 0.85rem; color: #ff0; font-weight: bold;">OUT NOW‼️</span>
       </div>
       <div>
-        <a href="https://senseweave.xyz">✨ senseweave</a>
+        <a href="https://senseweave.xyz" style="text-decoration: none;"><span>✨ </span><span style="text-decoration: underline;">senseweave</span></a>
       </div>
       <br />
       <div>
@@ -216,11 +238,6 @@
     </div>
 
     <div class="videos">
-      <iframe class="youtube-short" src="https://www.youtube.com/embed/yd5cb34wQTI"
-        title="YouTube video player" frameborder="0"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowfullscreen></iframe>
-
       <iframe class="youtube-video" src="https://www.youtube.com/embed/vpTnaFEX4tc?si=QXMHMaRjCjIQyI4F"
         title="YouTube video player" frameborder="0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
