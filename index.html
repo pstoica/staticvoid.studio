@@ -184,13 +184,14 @@
     .youtube-video {
       aspect-ratio: 16 / 9;
       width: 100%;
+      border-radius: 0.75rem;
     }
 
     .youtube-short {
       aspect-ratio: 9 / 20;
-      width: 100%;
-      max-width: 400px;
+      width: min(100%, 400px, calc(80vh * 9 / 20));
       margin: 0 auto;
+      border-radius: 0.75rem;
     }
   </style>
 
@@ -240,6 +241,10 @@
 
     <div class="videos">
       <iframe class="youtube-video" src="https://www.youtube.com/embed/vpTnaFEX4tc?si=QXMHMaRjCjIQyI4F"
+        title="YouTube video player" frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen></iframe>
+      <iframe class="youtube-short" src="https://www.youtube.com/embed/FvbiWd4Auws?controls=0&modestbranding=1"
         title="YouTube video player" frameborder="0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowfullscreen></iframe>
