@@ -777,12 +777,14 @@ function draw(res){
   // Columns walk the circle of fifths; rows stack triad/+7/+9/+11. The pick latches,
   // so once chosen both hands are free to strum until the next palette pinch.
   chordHover = null; chordPick = null;
+  let chordInPalette = false;       // left hand reaching the palette = picking a chord, not strumming
   if(chordHand && !freeMode){
     const cmx=(MX(chordHand[8])+MX(chordHand[4]))/2, cmy=(chordHand[8].y+chordHand[4].y)/2;
     if(!lockChord){
       const d = pinchDistOf(chordHand);
       cPinchOn = cPinchOn ? d < 0.088 : d < 0.062;
       if(inRect(CHORD,cmx,cmy)){
+        chordInPalette = true;
         const fx=(cmx-CHORD.x0)/(CHORD.x1-CHORD.x0), fyUp=(CHORD.y1-cmy)/(CHORD.y1-CHORD.y0);
         const hDeg = DEGREE_ORDER[clampi(Math.floor(fx*7),0,6)];
         const hExt = clampi(Math.floor(fyUp*cfg.extRows),0,cfg.extRows-1);
@@ -796,15 +798,20 @@ function draw(res){
   const runLen = rowsPerCol(), cols = curCols();
   drawChordPanel(W, H);
   drawPlate(W, H, runLen, cols);
-  if(chordHand && !freeMode){ drawHand(chordHand, "#62e09a"); if(chordPick) drawPick(chordPick.x, chordPick.y, chordPick.on); }
 
-  // ----- strum: free mode plays both hands; Voice 1 = left hand, Voice 2 = right hand -----
+  // ----- strum: both hands play the plate; chord mode shares one voice, free mode is per-hand -----
   if(freeMode){
     strumWith(chordHand, strumState[0], W, H, runLen, cols, "#62e09a", cfg.voiceFreeL);  // left
     strumWith(strumHand, strumState[1], W, H, runLen, cols, "#56b6ff", cfg.voiceFreeR);  // right
   } else {
-    strumWith(strumHand, strumState[0], W, H, runLen, cols, "#56b6ff", cfg.voiceChord);
-    strumState[1].lastIdx = -1; releaseMono(strumState[1]);
+    strumWith(strumHand, strumState[1], W, H, runLen, cols, "#56b6ff", cfg.voiceChord); // right hand strums
+    if(chordInPalette){                                     // left hand is selecting — show its palette pick, don't strum
+      strumState[0].lastIdx = -1; releaseMono(strumState[0]);
+      if(chordHand) drawHand(chordHand, "#62e09a");
+      if(chordPick) drawPick(chordPick.x, chordPick.y, chordPick.on);
+    } else {
+      strumWith(chordHand, strumState[0], W, H, runLen, cols, "#62e09a", cfg.voiceChord); // left hand strums too
+    }
   }
 
   // ----- hand-driven ambience (tamed): higher hand = more reverb, righter hand = longer echo -----
