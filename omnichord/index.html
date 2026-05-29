@@ -380,12 +380,12 @@ volEl.addEventListener("input", ()=>{ volVal.textContent = fmt2(parseFloat(volEl
 // osc: [waveform, freq multiple, detune cents]; g: per-osc level.
 // atk/dec = env ramp times; lp0→lp1 over lpDec = a tone-darkening filter sweep.
 const VOICES = {
-  Pluck: { osc:[["triangle",1,0],["sine",2,4]],                g:[1,0.28],      atk:0.006, dec:1.4, lp0:5000, lp1:1200, lpDec:1.0, peak:1.0 },
+  Pluck: { osc:[["square",1,0],["sine",2,4]],                 g:[0.7,0.16],    atk:0.006, dec:1.3, lp0:4200, lp1:900,  lpDec:0.9, peak:0.9 },
   Keys:  { osc:[["sine",1,0],["sine",2,3],["triangle",3,0]],   g:[1,0.18,0.06], atk:0.004, dec:1.9, lp0:4200, lp1:900,  lpDec:1.5, peak:1.0 },
   Bell:  { osc:[["sine",1,0],["sine",2.76,0],["sine",5.4,0]],  g:[1,0.26,0.08], atk:0.002, dec:1.7, lp0:7000, lp1:2200, lpDec:1.5, peak:0.85 },
   Pad:   { osc:[["sawtooth",1,-7],["sawtooth",1,7],["sine",0.5,0]], g:[0.45,0.45,0.3], atk:0.35, dec:3.0, lp0:1500, lp1:1100, lpDec:2.6, peak:0.7 },
   Saw:   { osc:[["sawtooth",1,0],["sawtooth",1,-9],["sawtooth",2,6]], g:[0.5,0.5,0.16], atk:0.008, dec:1.5, lp0:5200, lp1:1500, lpDec:1.1, peak:0.82 },
-  Theremin:{ osc:[["sine",1,0],["sine",2,0]], g:[1,0.06], atk:0.09, lp1:3400, peak:0.95, vib:{rate:5.5, depth:11}, mono:true, glide:0.10, rel:0.32 },
+  Theremin:{ osc:[["sine",1,0],["sine",2,0]], g:[1,0.06], atk:0.09, lp1:3400, peak:0.95, vib:{rate:5.5, depth:11}, mono:true, glide:0.06, rel:0.32 },
 };
 function playNote(freq, vel=0.55, voiceName="Pluck"){
   if(!actx) return;
