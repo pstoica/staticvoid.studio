@@ -15,7 +15,8 @@
   * { box-sizing: border-box; }
   html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
     font-family:var(--font); -webkit-font-smoothing:antialiased; letter-spacing:.01em; }
-  #stage { position:relative; width:100vw; height:100vh; overflow:hidden; }
+  #stage { position:relative; width:100vw; height:100vh; overflow:hidden;
+    user-select:none; -webkit-user-select:none; }   /* dragging boxes never selects the labels */
   #cam, #overlay { position:absolute; inset:0; width:100%; height:100%;
     object-fit:cover; object-position:center; }
   #cam { visibility:hidden; }
@@ -42,7 +43,7 @@
   .val { font-size:11px; color:var(--muted); min-width:26px; text-align:right;
     font-variant-numeric:tabular-nums; }
 
-  #chordName { position:absolute; z-index:3; left:22px; bottom:20px;
+  #chordName { position:absolute; z-index:3; left:22px; bottom:20px; pointer-events:none;
     font-size:52px; font-weight:600; letter-spacing:-1.5px; line-height:1;
     text-shadow:0 2px 30px rgba(0,0,0,.7); }
   #mode { font-size:10.5px; font-weight:500; text-transform:uppercase;
@@ -51,7 +52,7 @@
   #legend { position:absolute; z-index:3; right:14px; bottom:14px;
     background:var(--glass); border:1px solid var(--line); border-radius:10px;
     padding:11px 13px; font-size:11px; line-height:1.65; max-width:250px;
-    color:rgba(238,241,246,.72); backdrop-filter:blur(14px); }
+    color:rgba(238,241,246,.72); backdrop-filter:blur(14px); text-wrap:balance; }
   #legend b { color:var(--accent); font-weight:600; }
   #legendClose { position:absolute; top:4px; right:6px; cursor:pointer;
     font-size:14px; line-height:1; color:rgba(238,241,246,.5);
@@ -65,19 +66,58 @@
   body.legend-hidden #legend { display:none; }
   body.legend-hidden #legendShow { display:flex; }
 
+  /* intro sits on top of the live (blurred) interface — the app loads underneath */
   #start { position:absolute; z-index:10; inset:0; display:flex; flex-direction:column;
-    align-items:center; justify-content:center; gap:20px; background:var(--bg);
-    text-align:center; padding:24px;
-    background-image:radial-gradient(60% 60% at 50% 38%, rgba(157,180,255,.08), transparent); }
-  #start h1 { font-size:38px; font-weight:600; letter-spacing:-1px; margin:0; }
-  #start p { max-width:500px; opacity:.6; line-height:1.6; margin:0; font-size:14px; }
+    align-items:center; justify-content:center; gap:22px; text-align:center; padding:24px;
+    background:rgba(7,8,9,.5); backdrop-filter:blur(26px) saturate(1.1);
+    -webkit-backdrop-filter:blur(26px) saturate(1.1);
+    transition:opacity .5s ease; }
+  #start.hide { opacity:0; pointer-events:none; }
+  #start h1 { font-size:46px; font-weight:600; letter-spacing:-1.2px; margin:0; line-height:1.04;
+    color:var(--ink); text-wrap:balance; }
+  #start p { max-width:46ch; color:rgba(238,241,246,.66); line-height:1.65; margin:0; font-size:15px;
+    text-wrap:balance; }
   #start b { color:var(--accent); font-weight:600; }
-  #start button { font-size:15px; font-weight:500; padding:13px 26px; border-radius:10px;
-    background:var(--accent); border:none; color:#0b0d18; }
-  #start button:hover { filter:brightness(1.08); }
-  .hint { font-size:11.5px; opacity:.4; }
+  /* squared, beveled button with a gradient hairline border — minimal, not candy */
+  #start button { font-size:13px; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
+    padding:15px 36px; border-radius:0; cursor:pointer; color:var(--ink); font-family:var(--font);
+    border:1px solid transparent;
+    background:
+      linear-gradient(#171a22,#0f1116) padding-box,
+      linear-gradient(125deg, oklch(.72 .15 25), oklch(.8 .15 90), oklch(.76 .14 150),
+                              oklch(.74 .13 235), oklch(.72 .15 320), oklch(.72 .15 25)) border-box;
+    background-size:100% 100%, 240% 240%;          /* oversize the border layer so it can pan */
+    background-position:0 0, 0% 50%;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.12), inset 0 -2px 0 rgba(0,0,0,.5), 0 8px 22px rgba(0,0,0,.45);
+    transition:transform .1s ease, box-shadow .12s ease, filter .12s ease; }
+  #start button:hover { filter:brightness(1.12);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.16), inset 0 -2px 0 rgba(0,0,0,.5), 0 10px 28px rgba(0,0,0,.5); }
+  #start button:active { transform:translateY(2px);
+    box-shadow:inset 0 2px 5px rgba(0,0,0,.6), 0 2px 8px rgba(0,0,0,.4); }
+  .hint { font-size:12px; color:rgba(238,241,246,.38); }
+  .warn { display:none; max-width:36ch; margin-top:2px; padding:9px 13px; font-size:12.5px;
+    line-height:1.5; color:#f0c79a; border:1px solid rgba(240,170,90,.28); background:rgba(240,160,60,.07); }
+  body.is-mobile .warn { display:block; }
+  .madeby { position:absolute; bottom:18px; left:0; right:0; font-size:11px; letter-spacing:.04em;
+    color:rgba(238,241,246,.32); }
+  .madeby a { color:rgba(238,241,246,.5); text-decoration:none; border-bottom:1px solid rgba(238,241,246,.2); }
+  .madeby a:hover { color:var(--ink); }
+  @keyframes riseIn { from{ opacity:0; transform:translateY(12px); } to{ opacity:1; transform:none; } }
+  /* gentle ping-pong pan of the border gradient (alternate = mirror, no harsh loop seam) */
+  @keyframes btnphase { from{ background-position:0 0, 0% 50%; } to{ background-position:0 0, 240% 50%; } }
+  #start h1, #start p, #start .hint { animation:riseIn .55s cubic-bezier(.2,.7,.2,1) backwards; }
+  #start h1 { animation-delay:.04s; }
+  #start p  { animation-delay:.14s; }
+  #start .hint { animation-delay:.36s; }
+  #start button { animation:
+    riseIn .55s cubic-bezier(.2,.7,.2,1) .26s backwards,
+    btnphase 12s ease-in-out 1s infinite alternate; }
+  @media (prefers-reduced-motion:reduce){
+    #start h1,#start p,#start button,#start .hint{ animation:none; }
+    #start{ transition:none; }
+  }
   #status { position:absolute; z-index:3; bottom:18px; left:50%; transform:translateX(-50%);
-    font-size:11px; letter-spacing:.04em; color:var(--muted); }
+    pointer-events:none; font-size:11px; letter-spacing:.04em; color:var(--muted); }
 </style>
 </head>
 <body>
@@ -88,12 +128,16 @@
   <div id="hud">
     <div class="row">
       <div class="panel">
+        <div class="ctrl"><label>Mode</label><button id="modeBtn">Chord</button></div>
+        <div class="ctrl"><button id="lockBtn">Lock chord</button></div>
+      </div>
+      <div class="panel">
         <div class="ctrl"><label>Key</label><select id="keySel"></select></div>
         <div class="ctrl" id="scalePanel" style="display:none"><label>Scale</label><select id="scaleSel"></select></div>
       </div>
       <div class="panel">
-        <div class="ctrl"><label>Mode</label><button id="modeBtn">Chord</button></div>
-        <div class="ctrl"><button id="lockBtn">Lock chord</button></div>
+        <div class="ctrl"><label id="voiceALabel">Voice</label><select id="voiceASel"></select></div>
+        <div class="ctrl" id="voiceBPanel" style="display:none"><label>Right</label><select id="voiceBSel"></select></div>
       </div>
       <div class="panel">
         <div class="ctrl"><label>Strum</label>
@@ -140,12 +184,14 @@
   <div id="status">starting…</div>
 
   <div id="start">
-    <h1>Hand Omnichord</h1>
-    <p>One hand <b>pinches</b> a chord from the left palette (laid out by the circle of fifths).
-       The other <b>pinches</b> and sweeps the grid to strum it — scale-locked, like an Omnichord
-       harp. Press <b>F</b> for free-scale mode, where both hands play the grid.</p>
-    <button id="startBtn">Enable camera & sound</button>
-    <div class="hint">Needs a webcam · runs entirely in your browser</div>
+    <h1 id="title">Hand Omnichord</h1>
+    <p>Make music by waving your hands at the camera. <b>Pinch</b> with one hand to
+       pick a chord, then <b>pinch</b> and sweep with the other to play it — every note
+       stays in key, so it always sounds good. Press <b>F</b> to let both hands roam free.</p>
+    <button id="startBtn">Enable sound</button>
+    <div class="hint">Runs entirely in your browser · needs a webcam</div>
+    <div class="warn">Best on a desktop or laptop — this needs a webcam and a mouse, and isn't built for phones yet.</div>
+    <div class="madeby">made with <a href="https://mediapipe.dev" target="_blank" rel="noopener">MediaPipe</a></div>
   </div>
 </div>
 
@@ -209,11 +255,12 @@ NOTE_NAMES.forEach((n,i)=>{ const o=document.createElement("option"); o.value=i;
 Object.keys(SCALES).forEach(s=>{ const o=document.createElement("option"); o.value=s; o.textContent=s; scaleSel.appendChild(o); });
 [1,2,3,4].forEach(o=>{ const e=document.createElement("option"); e.value=o; e.textContent="C"+o; if(o===3)e.selected=true; baseSel.appendChild(e); });
 
-const cfg = { orientation:"vertical", octaves:3, baseOctave:3, cols:1, layout:"4th", extRows:4,
-              reverb:0.10, delayWet:0.14, delayTime:0.28, delayFb:0.22 };
+const cfg = { orientation:"vertical", baseOctave:3, octavesChord:3, octavesFree:3, colsChord:1, colsFree:4, layoutChord:"oct", layoutFree:"4th", extRows:3,
+              reverb:0.10, delayWet:0.14, delayTime:0.28, delayFb:0.22,
+              voiceChord:"Pluck", voiceFreeL:"Pluck", voiceFreeR:"Pad" };   // voices are per-mode
 orientSel.addEventListener("change", ()=> cfg.orientation = orientSel.value);
-octSel.addEventListener("input", ()=>{ cfg.octaves = parseInt(octSel.value); octVal.textContent = octSel.value; });
-colSel.addEventListener("input", ()=>{ cfg.cols = parseInt(colSel.value); colVal.textContent = colSel.value; });
+octSel.addEventListener("input", ()=>{ const v=parseInt(octSel.value); if(freeMode) cfg.octavesFree=v; else cfg.octavesChord=v; octVal.textContent = octSel.value; });
+colSel.addEventListener("input", ()=>{ const v=parseInt(colSel.value); if(freeMode) cfg.colsFree=v; else cfg.colsChord=v; colVal.textContent = colSel.value; });
 stackSel.addEventListener("input", ()=>{ cfg.extRows = parseInt(stackSel.value); stackVal.textContent = stackSel.value; currentExt = Math.min(currentExt, cfg.extRows-1); });
 const revSel = document.getElementById("revSel"), revVal = document.getElementById("revVal");
 const dlySel = document.getElementById("dlySel"), dlyVal = document.getElementById("dlyVal");
@@ -225,7 +272,7 @@ revSel.addEventListener("input", ()=>{ cfg.reverb = parseFloat(revSel.value); re
 dlySel.addEventListener("input", ()=>{ cfg.delayWet = parseFloat(dlySel.value); dlyVal.textContent = fmt2(cfg.delayWet); if(delayWet) delayWet.gain.setTargetAtTime(cfg.delayWet, actx.currentTime, 0.1); });
 timeSel.addEventListener("input",()=>{ cfg.delayTime = parseFloat(timeSel.value); timeVal.textContent = fmt2(cfg.delayTime); if(delay) delay.delayTime.setTargetAtTime(cfg.delayTime, actx.currentTime, 0.05); });
 fbSel.addEventListener("input",  ()=>{ cfg.delayFb = parseFloat(fbSel.value); fbVal.textContent = fmt2(cfg.delayFb); if(delayFb) delayFb.gain.setTargetAtTime(cfg.delayFb, actx.currentTime, 0.1); });
-layoutSel.addEventListener("change", ()=> cfg.layout = layoutSel.value);
+layoutSel.addEventListener("change", ()=>{ if(freeMode) cfg.layoutFree = layoutSel.value; else cfg.layoutChord = layoutSel.value; });
 baseSel.addEventListener("change", ()=> cfg.baseOctave = parseInt(baseSel.value));
 
 const FONT = '"Helvetica Neue",Arial,sans-serif';     // concrete: avoids canvas serif fallback
@@ -238,6 +285,8 @@ const clampi = (v,lo,hi)=> Math.min(hi, Math.max(lo, v));
 // ---------- Scale-locked note model ----------
 // Everything is indexed in *scale degrees*, so all transposition stays in key.
 function activeSteps(){ return freeMode ? SCALES[scaleName] : MAJOR; }
+const curOct  = () => freeMode ? cfg.octavesFree : cfg.octavesChord;   // octaves + columns are per-mode
+const curCols = () => freeMode ? cfg.colsFree    : cfg.colsChord;
 function scaleLen(){ return activeSteps().length; }
 function tonicMidi(){ return (cfg.baseOctave+1)*12 + keyRoot; }
 function scaleNote(step){                                // step = scale degrees above tonic
@@ -255,17 +304,17 @@ function chordToneSteps(){
 }
 // column offset in scale degrees -> 4th=3, 5th=4 are diatonic (stay in key)
 function colSteps(){
-  switch(cfg.layout){
+  switch(freeMode ? cfg.layoutFree : cfg.layoutChord){
     case "4th": return 3;
     case "5th": return 4;
     case "oct": return scaleLen();
-    case "cont": return scaleLen()*cfg.octaves;
+    case "cont": return scaleLen()*curOct();
     default: return 3;
   }
 }
 function rowsPerCol(){
-  return freeMode ? cfg.octaves*scaleLen() + 1
-                  : cfg.octaves*chordToneSteps().length + 1;
+  return freeMode ? curOct()*scaleLen() + 1
+                  : curOct()*chordToneSteps().length + 1;
 }
 function cellNote(line, r){
   if(freeMode) return scaleNote(r + colSteps()*line);
@@ -277,12 +326,10 @@ function cellNote(line, r){
 
 legendEl.innerHTML = `
   <span id="legendClose" title="Hide (H)">×</span>
-  <b>Chord hand</b> — pinch a cell in the left palette<br>
-  columns walk the circle of fifths · rows add 7·9·11<br>
-  <b>Strum hand</b> — pinch (thumb+index) + sweep the grid<br>
-  tighter pinch = louder · release to jump<br>
-  raise hand = more space · reach right = longer echo<br>
-  drag panels to move · edges to resize · <b>L</b> locks chord · <b>H</b> hides this`;
+  <b>Pinch left</b> to pick a chord · <b>pinch + sweep right</b> to strum<br>
+  tighter pinch = louder · raise hand = more space · reach right = longer echo<br>
+  drag panels to move, edges to resize<br>
+  <b>L</b> lock chord · <b>F</b> free scale · <b>M</b> mute · <b>R</b> reset · <b>H</b> hide`;
 
 const legendShowEl = document.getElementById("legendShow");
 const setLegend = show => { document.body.classList.toggle("legend-hidden", !show); saveState(); };
@@ -319,24 +366,48 @@ function initAudio(){
   master.connect(reverb); delay.connect(reverb); reverb.connect(revWet); revWet.connect(comp);
   comp.connect(actx.destination);
 }
-volEl.addEventListener("input", ()=>{ volVal.textContent = fmt2(parseFloat(volEl.value)); if(master) master.gain.value = parseFloat(volEl.value); });
+volEl.addEventListener("input", ()=>{ volVal.textContent = fmt2(parseFloat(volEl.value)); if(master && !muted) master.gain.value = parseFloat(volEl.value); });
 
-function pluck(freq, vel=0.55){
+// synth voices — all built from oscillators, no samples.
+// osc: [waveform, freq multiple, detune cents]; g: per-osc level.
+// atk/dec = env ramp times; lp0→lp1 over lpDec = a tone-darkening filter sweep.
+const VOICES = {
+  Pluck: { osc:[["triangle",1,0],["sine",2,4]],                g:[1,0.28],      atk:0.006, dec:1.4, lp0:5000, lp1:1200, lpDec:1.0, peak:1.0 },
+  Keys:  { osc:[["sine",1,0],["sine",2,3],["triangle",3,0]],   g:[1,0.18,0.06], atk:0.004, dec:1.9, lp0:4200, lp1:900,  lpDec:1.5, peak:1.0 },
+  Bell:  { osc:[["sine",1,0],["sine",2.76,0],["sine",5.4,0]],  g:[1,0.26,0.08], atk:0.002, dec:1.7, lp0:7000, lp1:2200, lpDec:1.5, peak:0.85 },
+  Pad:   { osc:[["sawtooth",1,-7],["sawtooth",1,7],["sine",0.5,0]], g:[0.45,0.45,0.3], atk:0.35, dec:3.0, lp0:1500, lp1:1100, lpDec:2.6, peak:0.7 },
+};
+function playNote(freq, vel=0.55, voiceName="Pluck"){
   if(!actx) return;
-  const t = actx.currentTime;
-  const o1 = actx.createOscillator(); o1.type="triangle"; o1.frequency.value=freq;
-  const o2 = actx.createOscillator(); o2.type="sine"; o2.frequency.value=freq*2.0; o2.detune.value=4;
-  const o2g = actx.createGain(); o2g.gain.value = 0.28; o2.connect(o2g);   // sparkle, quieter
+  const V = VOICES[voiceName] || VOICES.Pluck;
+  const t = actx.currentTime, peak = Math.max(0.0001, vel*V.peak);
   const env = actx.createGain();
   env.gain.setValueAtTime(0.0001, t);
-  env.gain.exponentialRampToValueAtTime(vel, t+0.006);
-  env.gain.exponentialRampToValueAtTime(0.0001, t+1.4);
+  env.gain.exponentialRampToValueAtTime(peak, t + V.atk);
+  env.gain.exponentialRampToValueAtTime(0.0001, t + V.dec);
   const lp = actx.createBiquadFilter(); lp.type="lowpass";
-  lp.frequency.setValueAtTime(5000, t);
-  lp.frequency.exponentialRampToValueAtTime(1200, t+1.0);
-  o1.connect(env); o2g.connect(env); env.connect(lp); lp.connect(master);
-  o1.start(t); o2.start(t); o1.stop(t+1.5); o2.stop(t+1.5);
+  lp.frequency.setValueAtTime(V.lp0, t);
+  lp.frequency.exponentialRampToValueAtTime(V.lp1, t + V.lpDec);
+  const stop = t + V.dec + 0.1;
+  V.osc.forEach(([type,mult,det],i)=>{
+    const o = actx.createOscillator(); o.type=type; o.frequency.value=freq*mult; o.detune.value=det||0;
+    const g = actx.createGain(); g.gain.value = V.g[i];
+    o.connect(g); g.connect(env); o.start(t); o.stop(stop);
+  });
+  env.connect(lp); lp.connect(master);
 }
+// voice pickers — primary hand always; second hand appears in free-scale mode
+const voiceASel = document.getElementById("voiceASel");
+const voiceBSel = document.getElementById("voiceBSel");
+const voiceBPanel = document.getElementById("voiceBPanel");
+const voiceALabel = document.getElementById("voiceALabel");
+Object.keys(VOICES).forEach(name=>{
+  for(const sel of [voiceASel, voiceBSel]){
+    const o=document.createElement("option"); o.value=name; o.textContent=name; sel.appendChild(o);
+  }
+});
+voiceASel.addEventListener("change", ()=>{ if(freeMode) cfg.voiceFreeL = voiceASel.value; else cfg.voiceChord = voiceASel.value; });
+voiceBSel.addEventListener("change", ()=> cfg.voiceFreeR = voiceBSel.value);
 
 // ---------- State ----------
 let freeMode = false;
@@ -345,6 +416,7 @@ let scaleName = "Major Pentatonic";
 let currentDegree = 1;
 let currentExt = 0;         // 0=triad 1=+7th 2=+9th 3=+11th (picked on the chord palette)
 let lockChord = false;      // freeze chord so the palette ignores pinches
+let muted = false;          // M toggles master to silence without touching the volume slider
 let cPinchOn = false;       // chord-hand hysteretic pinch
 // independent per-hand strum state — slot 0 is the primary (right) hand,
 // slot 1 is the second hand that also plays in free-scale mode
@@ -353,6 +425,7 @@ const strumState = [
   { smx:null, smy:null, pinchOn:false, lastIdx:-1 },
 ];
 let fxMod = null, fyMod = null; // heavily-smoothed strum-hand position for ambience
+let singleSide = "right";       // which side a lone hand last committed to (hysteretic)
 
 keySel.addEventListener("change", ()=> keyRoot = parseInt(keySel.value));
 scaleSel.addEventListener("change", ()=> scaleName = scaleSel.value);
@@ -361,15 +434,27 @@ function setMode(free){
   modeBtn.classList.toggle("active", free);
   modeBtn.textContent = free ? "Free scale" : "Chord";
   scalePanel.style.display = free ? "" : "none";
+  voiceBPanel.style.display = free ? "" : "none";   // second-hand voice only matters in free mode
+  voiceALabel.textContent = free ? "Left" : "Voice";
+  voiceASel.value = free ? cfg.voiceFreeL : cfg.voiceChord;    // voice is per-mode
+  layoutSel.value = free ? cfg.layoutFree : cfg.layoutChord;   // layout is per-mode
+  octSel.value = curOct();  octVal.textContent = curOct();     // octaves + columns are per-mode
+  colSel.value = curCols(); colVal.textContent = curCols();
 }
 const lockBtn = document.getElementById("lockBtn");
 function setLock(on){ lockChord = on; lockBtn.classList.toggle("active", on); }
+function setMute(on){
+  muted = on;
+  if(master) master.gain.setTargetAtTime(on ? 0 : parseFloat(volEl.value), actx.currentTime, 0.02);
+}
 modeBtn.addEventListener("click", ()=> setMode(!freeMode));
 lockBtn.addEventListener("click", ()=> setLock(!lockChord));
 window.addEventListener("keydown", e=>{
   if(e.key==="f"||e.key==="F") setMode(!freeMode);
   if(e.key==="l"||e.key==="L") setLock(!lockChord);
+  if(e.key==="m"||e.key==="M") setMute(!muted);
   if(e.key==="h"||e.key==="H") setLegend(document.body.classList.contains("legend-hidden"));
+  if(e.key==="r"||e.key==="R"){ if(confirm("Reset all settings and panel layout to defaults?")){ localStorage.removeItem(LS_KEY); location.reload(); } }
 });
 
 // mirrored x so screen coords match the selfie view
@@ -379,12 +464,14 @@ const pinchDistOf = lm => Math.hypot(lm[8].x-lm[4].x, lm[8].y-lm[4].y);
 
 // ---------- Regions (fraction of screen) — chord palette + strum plate ----------
 const regions = {
-  chord: { x0:0.01, x1:0.34, y0:0.16, y1:0.92 },     // left: pinch a chord
-  strum: { x0:0.52, x1:0.99, y0:0.16, y1:0.92 },     // right: pinch + sweep
+  chord:     { x0:0.05, x1:0.33, y0:0.16, y1:0.90 },  // left: pinch a chord (chord mode)
+  strum:     { x0:0.55, x1:0.95, y0:0.16, y1:0.90 },  // right: pinch + sweep (chord mode)
+  strumFree: { x0:0.13, x1:0.95, y0:0.16, y1:0.90 },  // right edge matches chord-mode strum so the switch only grows leftward
 };
-const CHORD = regions.chord, PLATE = regions.strum;  // aliases (mutated in place, never reassigned)
+const CHORD = regions.chord;                          // chord palette (mutated in place)
+const plate = () => freeMode ? regions.strumFree : regions.strum;   // active strum plate per mode
 const inRect = (r,mx,my)=> mx>=r.x0 && mx<=r.x1 && my>=r.y0 && my<=r.y1;
-function inPlate(mx,my){ return inRect(PLATE,mx,my); }
+function inPlate(mx,my){ return inRect(plate(),mx,my); }
 
 // ---------- Persistence (localStorage) ----------
 const LS_KEY = "omnichord.settings.v1";
@@ -393,7 +480,7 @@ function saveState(){
     localStorage.setItem(LS_KEY, JSON.stringify({
       cfg, keyRoot, scaleName,
       vol: parseFloat(volEl.value),
-      regions: { chord:{...CHORD}, strum:{...PLATE} },
+      regions: { chord:{...CHORD}, strum:{...regions.strum}, strumFree:{...regions.strumFree} },
       legendHidden: document.body.classList.contains("legend-hidden"),
     }));
   }catch(e){ /* private mode / quota — settings just won't persist */ }
@@ -401,10 +488,11 @@ function saveState(){
 function syncControls(){     // reflect cfg + state into the HUD inputs
   keySel.value=keyRoot; scaleSel.value=scaleName;
   orientSel.value=cfg.orientation;
-  octSel.value=cfg.octaves;   octVal.textContent=cfg.octaves;
-  colSel.value=cfg.cols;      colVal.textContent=cfg.cols;
+  octSel.value=curOct();   octVal.textContent=curOct();
+  colSel.value=curCols();  colVal.textContent=curCols();
   stackSel.value=cfg.extRows; stackVal.textContent=cfg.extRows;
-  layoutSel.value=cfg.layout; baseSel.value=cfg.baseOctave;
+  layoutSel.value = freeMode ? cfg.layoutFree : cfg.layoutChord; baseSel.value=cfg.baseOctave;
+  voiceASel.value = freeMode ? cfg.voiceFreeL : cfg.voiceChord; voiceBSel.value=cfg.voiceFreeR;
   revSel.value=cfg.reverb; revVal.textContent=fmt2(cfg.reverb);
   dlySel.value=cfg.delayWet; dlyVal.textContent=fmt2(cfg.delayWet);
   timeSel.value=cfg.delayTime; timeVal.textContent=fmt2(cfg.delayTime);
@@ -419,7 +507,8 @@ function loadState(){
   if(typeof s.scaleName==="string" && SCALES[s.scaleName]) scaleName=s.scaleName;
   if(typeof s.vol==="number") volEl.value=s.vol;
   if(s.regions?.chord) Object.assign(CHORD, s.regions.chord);
-  if(s.regions?.strum) Object.assign(PLATE, s.regions.strum);
+  if(s.regions?.strum) Object.assign(regions.strum, s.regions.strum);
+  if(s.regions?.strumFree) Object.assign(regions.strumFree, s.regions.strumFree);
   if(s.legendHidden) document.body.classList.add("legend-hidden");
   currentExt=Math.min(currentExt, cfg.extRows-1);
   syncControls();
@@ -431,6 +520,7 @@ loadState();
 
 // ---- drag to move / edges to resize either region (mouse only; hands play) ----
 let drag = null, hoverTarget = null, hoverEdge = "";
+const handleFade = new Map();                        // region -> eased 0..1 hover alpha
 const EDGE = 0.018;                                  // edge grab band, in screen-fraction
 function evToFrac(e){                                // client px -> screen-fraction (object-fit:cover aware)
   const rect = canvas.getBoundingClientRect();
@@ -449,7 +539,8 @@ function hitEdge(r,fx,fy){
 const CURSORS = {n:"ns-resize",s:"ns-resize",e:"ew-resize",w:"ew-resize",
   ne:"nesw-resize",sw:"nesw-resize",nw:"nwse-resize",se:"nwse-resize"};
 const nearRect = (r,fx,fy)=> fx>=r.x0-EDGE&&fx<=r.x1+EDGE&&fy>=r.y0-EDGE&&fy<=r.y1+EDGE;
-const regionAt = (fx,fy)=> nearRect(PLATE,fx,fy) ? PLATE : (nearRect(CHORD,fx,fy) ? CHORD : null);
+const regionAt = (fx,fy)=> nearRect(plate(),fx,fy) ? plate()
+  : (!freeMode && nearRect(CHORD,fx,fy) ? CHORD : null);   // palette only draggable in chord mode
 canvas.addEventListener("pointermove", e=>{
   const {fx,fy}=evToFrac(e);
   if(drag){
@@ -489,7 +580,8 @@ async function setup(){
       modelAssetPath:"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
       delegate:"GPU"
     },
-    runningMode:"VIDEO", numHands:2
+    runningMode:"VIDEO", numHands:2,
+    minHandDetectionConfidence:0.6, minHandPresenceConfidence:0.6, minTrackingConfidence:0.6
   });
   const stream = await navigator.mediaDevices.getUserMedia({ video:{ width:1280, height:720 } });
   video.srcObject = stream;
@@ -526,42 +618,51 @@ function draw(res){
   ctx.fillStyle = "rgba(11,13,18,.32)"; ctx.fillRect(0,0,W,H);
 
   const hands = res.landmarks || [];
-  // assign chord vs strum hand by screen position (left = chord, right = strum)
+  // assign hands by screen position: left-of-frame = chord/Voice 1, right = strum/Voice 2.
+  // A lone hand commits to a side only past a center dead-zone, so it can't flip-flop
+  // frame to frame (which was making the voice "alternate" with one hand up).
   let chordHand=null, strumHand=null;
-  if(hands.length===1){ strumHand = hands[0]; }
-  else if(hands.length>=2){
+  if(hands.length>=2){
     const sorted = [...hands].sort((a,b)=> MX(a[0]) - MX(b[0]));
-    chordHand = sorted[0]; strumHand = sorted[sorted.length-1];
+    chordHand = sorted[0]; strumHand = sorted[sorted.length-1];   // leftmost, rightmost
+  } else if(hands.length===1){
+    const x = MX(hands[0][0]);                                    // wrist screen-x
+    if(x < 0.42) singleSide = "left"; else if(x > 0.58) singleSide = "right";
+    if(singleSide==="left") chordHand = hands[0]; else strumHand = hands[0];
   }
 
   // ----- chord selection: pinch (thumb+index) a cell in the left palette -----
   // Position + the one reliable pinch — no fragile finger-count/curl classification.
   // Columns walk the circle of fifths; rows stack triad/+7/+9/+11. The pick latches,
   // so once chosen both hands are free to strum until the next palette pinch.
-  if(chordHand && !lockChord && !freeMode){
-    const d = pinchDistOf(chordHand);
-    cPinchOn = cPinchOn ? d < 0.088 : d < 0.062;
-    if(cPinchOn){
-      const mx=(MX(chordHand[8])+MX(chordHand[4]))/2, my=(chordHand[8].y+chordHand[4].y)/2;
-      if(inRect(CHORD,mx,my)){
-        const fx=(mx-CHORD.x0)/(CHORD.x1-CHORD.x0), fyUp=(CHORD.y1-my)/(CHORD.y1-CHORD.y0);
-        currentDegree = DEGREE_ORDER[clampi(Math.floor(fx*7),0,6)];
-        currentExt    = clampi(Math.floor(fyUp*cfg.extRows),0,cfg.extRows-1);
+  chordHover = null; chordPick = null;
+  if(chordHand && !freeMode){
+    const cmx=(MX(chordHand[8])+MX(chordHand[4]))/2, cmy=(chordHand[8].y+chordHand[4].y)/2;
+    if(!lockChord){
+      const d = pinchDistOf(chordHand);
+      cPinchOn = cPinchOn ? d < 0.088 : d < 0.062;
+      if(inRect(CHORD,cmx,cmy)){
+        const fx=(cmx-CHORD.x0)/(CHORD.x1-CHORD.x0), fyUp=(CHORD.y1-cmy)/(CHORD.y1-CHORD.y0);
+        const hDeg = DEGREE_ORDER[clampi(Math.floor(fx*7),0,6)];
+        const hExt = clampi(Math.floor(fyUp*cfg.extRows),0,cfg.extRows-1);
+        chordHover = { deg:hDeg, ext:hExt };               // cell the hand is over (highlight even before pinching)
+        if(cPinchOn){ currentDegree = hDeg; currentExt = hExt; }
       }
-    }
+    } else { cPinchOn = false; }
+    chordPick = { x:cmx*W, y:cmy*H, on:cPinchOn };          // drawn on top of the palette below
   } else { cPinchOn = false; }
-  if(chordHand && !freeMode) drawHand(chordHand, "#62e09a");
 
-  const runLen = rowsPerCol(), cols = cfg.cols;
+  const runLen = rowsPerCol(), cols = curCols();
   drawChordPanel(W, H);
   drawPlate(W, H, runLen, cols);
+  if(chordHand && !freeMode){ drawHand(chordHand, "#62e09a"); if(chordPick) drawPick(chordPick.x, chordPick.y, chordPick.on); }
 
-  // ----- strum: right hand always plays; free-scale mode lets the left hand play too -----
+  // ----- strum: free mode plays both hands; Voice 1 = left hand, Voice 2 = right hand -----
   if(freeMode){
-    strumWith(strumHand, strumState[0], W, H, runLen, cols, "#56b6ff");
-    strumWith(chordHand, strumState[1], W, H, runLen, cols, "#62e09a");
+    strumWith(chordHand, strumState[0], W, H, runLen, cols, "#62e09a", cfg.voiceFreeL);  // left
+    strumWith(strumHand, strumState[1], W, H, runLen, cols, "#56b6ff", cfg.voiceFreeR);  // right
   } else {
-    strumWith(strumHand, strumState[0], W, H, runLen, cols, "#56b6ff");
+    strumWith(strumHand, strumState[0], W, H, runLen, cols, "#56b6ff", cfg.voiceChord);
     strumState[1].lastIdx = -1;
   }
 
@@ -585,7 +686,7 @@ function draw(res){
 
 // one hand strumming the plate (thumb+index pinch = pick, tightness = velocity).
 // `st` holds that hand's own pinch/smoothing/retrigger state so two hands stay independent.
-function strumWith(hand, st, W, H, runLen, cols, color){
+function strumWith(hand, st, W, H, runLen, cols, color, voice){
   if(!hand){ st.pinchOn=false; st.smx=null; st.smy=null; st.lastIdx=-1; return; }
   const pinchDist = pinchDistOf(hand);
   st.pinchOn = st.pinchOn ? pinchDist < 0.088 : pinchDist < 0.062;
@@ -594,35 +695,55 @@ function strumWith(hand, st, W, H, runLen, cols, color){
   if(st.smx===null || !st.pinchOn){ st.smx=mx; st.smy=my; }   // snap on (re)engage, glide while held
   else { st.smx += (mx-st.smx)*0.45; st.smy += (my-st.smy)*0.45; }
   mx=st.smx; my=st.smy;
-  if(st.pinchOn && inPlate(mx,my)){
-    const fx = (mx - PLATE.x0) / (PLATE.x1 - PLATE.x0);
-    const fyUp = (PLATE.y1 - my) / (PLATE.y1 - PLATE.y0);  // bottom=low, top=high
-    let line, step;
-    if(cfg.orientation==="horizontal"){
+  const horiz = cfg.orientation==="horizontal";
+  const inP = inPlate(mx,my);
+  let line=-1, step=-1;
+  if(inP){
+    const P = plate();
+    const fx = (mx - P.x0) / (P.x1 - P.x0);
+    const fyUp = (P.y1 - my) / (P.y1 - P.y0);             // bottom=low, top=high
+    if(horiz){
       line = clampi(Math.floor(fyUp*cols), 0, cols-1);   // lines stack vertically
       step = clampi(Math.floor(fx*runLen), 0, runLen-1);
     } else {
       line = clampi(Math.floor(fx*cols), 0, cols-1);     // columns spread across
       step = clampi(Math.floor(fyUp*runLen), 0, runLen-1);
     }
+  }
+  if(st.pinchOn && inP){
     const idx = line*runLen + step;
     if(idx !== st.lastIdx){
       const vel = clampi(0.95 - (pinchDist/0.07)*0.6, 0.32, 0.95);  // tighter pinch = louder
-      pluck(midiToFreq(cellNote(line, step)), vel);
+      playNote(midiToFreq(cellNote(line, step)), vel, voice);
       st.lastIdx = idx;
       flash[idx] = performance.now();
     }
     drawPick(mx*W, my*H, true);
   } else {
     st.lastIdx = -1;                                     // released = muted, can jump
+    if(inP){                                             // hover: outline the cell you'd hit so same-color cells are distinguishable
+      const {sx,sy,sw,sh} = plateCellRect(plate(), line, step, W, H, cols, runLen, horiz);
+      ctx.save();
+      ctx.fillStyle = color+"22"; ctx.fillRect(sx,sy,sw,sh);
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.strokeRect(sx+1,sy+1,sw-2,sh-2);
+      ctx.restore();
+    }
     drawPick(mx*W, my*H, false);
   }
   drawHand(hand, color);
 }
 
 const flash = {};                                    // cell idx -> last trigger time (ms)
+let chordHover = null, chordPick = null;             // chord-palette hover cell + pick cursor, per frame
+// screen rect of one plate cell — shared by the grid render and the hover highlight
+function plateCellRect(P,line,r,W,H,cols,runLen,horiz){
+  const x0=P.x0*W, x1=P.x1*W, y0=P.y0*H, y1=P.y1*H;
+  if(horiz) return { sw:(x1-x0)/runLen, sh:(y1-y0)/cols, sx:x0+r*((x1-x0)/runLen), sy:y1-(line+1)*((y1-y0)/cols) };
+  return { sw:(x1-x0)/cols, sh:(y1-y0)/runLen, sx:x0+line*((x1-x0)/cols), sy:y1-(r+1)*((y1-y0)/runLen) };
+}
 function drawPlate(W,H,runLen,cols){
-  const x0=PLATE.x0*W, x1=PLATE.x1*W, y0=PLATE.y0*H, y1=PLATE.y1*H;
+  const P=plate();
+  const x0=P.x0*W, x1=P.x1*W, y0=P.y0*H, y1=P.y1*H;
   const horiz = cfg.orientation==="horizontal";
   const now = performance.now();
   ctx.textAlign="center"; ctx.textBaseline="middle";
@@ -631,9 +752,7 @@ function drawPlate(W,H,runLen,cols){
       const note = cellNote(line, r);
       const idx  = line*runLen + r;
       const tonic = (((note - keyRoot) % 12) + 12) % 12 === 0;
-      let sx,sy,sw,sh;
-      if(horiz){ sh=(y1-y0)/cols; sy=y1-(line+1)*sh; sw=(x1-x0)/runLen; sx=x0+r*sw; }
-      else     { sw=(x1-x0)/cols; sx=x0+line*sw;     sh=(y1-y0)/runLen; sy=y1-(r+1)*sh; }
+      const {sx,sy,sw,sh} = plateCellRect(P,line,r,W,H,cols,runLen,horiz);
       // continuous fade after a trigger: 1 at the hit, eased back to rest over ~650ms
       const lin = Math.max(0, 1 - (now - (flash[idx] || -1e9)) / 650);
       const g = lin*lin;
@@ -648,14 +767,17 @@ function drawPlate(W,H,runLen,cols){
     }
   }
   ctx.textAlign="left"; ctx.textBaseline="alphabetic";
-  drawHandles(PLATE, x0, y0, x1, y1);
+  drawHandles(P, x0, y0, x1, y1);
 }
-// faint frame + corner handles, only while hovering/dragging this region
+// faint frame + corner handles, fading in/out as you hover/drag this region
 function drawHandles(r, x0, y0, x1, y1){
-  if(hoverTarget!==r && drag?.target!==r) return;
-  ctx.strokeStyle="rgba(255,255,255,.4)"; ctx.lineWidth=1;
+  const target = (hoverTarget===r || drag?.target===r) ? 1 : 0;
+  const a = (handleFade.get(r) ?? 0) + (target - (handleFade.get(r) ?? 0)) * 0.18;
+  handleFade.set(r, a);
+  if(a < 0.01) return;
+  ctx.strokeStyle=`rgba(255,255,255,${0.4*a})`; ctx.lineWidth=1;
   ctx.strokeRect(x0,y0,x1-x0,y1-y0);
-  ctx.fillStyle="rgba(255,255,255,.9)"; const hs=7;
+  ctx.fillStyle=`rgba(255,255,255,${0.9*a})`; const hs=7;
   for(const [cx,cy] of [[x0,y0],[x1,y0],[x0,y1],[x1,y1]])
     ctx.fillRect(cx-hs/2,cy-hs/2,hs,hs);
 }
@@ -670,8 +792,10 @@ function drawChordPanel(W,H){
     for(let ext=0;ext<cfg.extRows;ext++){
       const sx=x0+c*cw, sy=y1-(ext+1)*ch;          // ext0 (triad) at the bottom
       const sel = (deg===currentDegree && ext===currentExt && !freeMode);
+      const hov = chordHover && chordHover.deg===deg && chordHover.ext===ext && !sel;
       ctx.fillStyle = noteColor((root+12*5), sel?66:54, sel?92:46, sel?0.92:0.16);
       ctx.fillRect(sx,sy,cw,ch);
+      if(hov){ ctx.strokeStyle="rgba(255,255,255,.8)"; ctx.lineWidth=2; ctx.strokeRect(sx+1,sy+1,cw-2,ch-2); ctx.lineWidth=1; }
       if(cw>22 && ch>13){
         ctx.font=(sel?"600 ":"400 ")+"11px "+FONT;
         ctx.fillStyle=`rgba(255,255,255,${sel?0.98:0.5})`;
@@ -706,7 +830,7 @@ function drawHand(lm,color){
 }
 
 function updateChordLabel(){
-  const lock = lockChord ? " · locked" : "";
+  const lock = (muted ? " · muted" : "") + (lockChord ? " · locked" : "");
   if(freeMode){
     chordNameEl.firstChild.textContent = `${NOTE_NAMES[keyRoot]} ${scaleName}`;
     chordNameEl.style.color = noteColor(keyRoot, 72, 85, 1);   // tonic hue
@@ -727,18 +851,34 @@ function chordTag(deg, ext){
 }
 
 // ---------- Start ----------
-document.getElementById("startBtn").addEventListener("click", async ()=>{
+// the app loads up front: camera + tracking begin on page load and render behind the
+// blurred intro. Audio needs a user gesture, so the button only unlocks sound + dismisses.
+let camStarted = false;
+async function startCamera(){
+  if(camStarted) return;
+  camStarted = true;
   try{
-    initAudio(); await actx.resume();
-    setMode(false);
-    startEl.style.display="none";
-    statusEl.textContent="loading model…";
+    statusEl.textContent = "loading model…";
     await setup();
   }catch(err){
-    statusEl.textContent = "Error: " + err.message;
-    startEl.style.display="flex";
+    camStarted = false;
+    statusEl.textContent = "Camera unavailable: " + err.message;
     console.error(err);
   }
+}
+if(matchMedia("(pointer:coarse)").matches || window.innerWidth < 760)
+  document.body.classList.add("is-mobile");
+setMode(false);
+startCamera();
+
+document.getElementById("startBtn").addEventListener("click", async ()=>{
+  try{ if(!actx) initAudio(); await actx.resume(); }
+  catch(err){ console.error(err); }
+  startCamera();                                   // retry if camera was blocked/slow at load
+  startEl.classList.add("hide");
+});
+startEl.addEventListener("transitionend", ()=>{    // drop from layout once faded
+  if(startEl.classList.contains("hide")) startEl.style.display="none";
 });
 </script>
 </body>
