@@ -4,6 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Hand Omnichord</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <style>
   :root {
     color-scheme: dark;
@@ -73,8 +76,8 @@
     -webkit-backdrop-filter:blur(26px) saturate(1.1);
     transition:opacity .5s ease; }
   #start.hide { opacity:0; pointer-events:none; }
-  #start h1 { font-size:46px; font-weight:600; letter-spacing:-1.2px; margin:0; line-height:1.04;
-    color:var(--ink); text-wrap:balance; }
+  #start h1 { font-family:"Space Grotesk",var(--font); font-size:44px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.04em; margin:0; line-height:1.06; color:var(--ink); text-wrap:balance; }
   #start p { max-width:46ch; color:rgba(238,241,246,.66); line-height:1.65; margin:0; font-size:15px;
     text-wrap:balance; }
   #start b { color:var(--accent); font-weight:600; }
@@ -792,8 +795,8 @@ function strumWith(hand, st, W, H, runLen, cols, color, voice){
     if(inP){                                             // hover: outline the cell you'd hit so same-color cells are distinguishable
       const {sx,sy,sw,sh} = plateCellRect(plate(), line, step, W, H, cols, runLen, horiz);
       ctx.save();
-      ctx.fillStyle = color+"22"; ctx.fillRect(sx,sy,sw,sh);
-      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.strokeRect(sx+1,sy+1,sw-2,sh-2);
+      ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.fillRect(sx,sy,sw,sh);
+      ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1; ctx.strokeRect(sx+0.5,sy+0.5,sw-1,sh-1);
       ctx.restore();
     }
     drawPick(mx*W, my*H, false);
