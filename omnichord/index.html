@@ -130,6 +130,7 @@
       <div class="panel">
         <div class="ctrl"><label>Mode</label><button id="modeBtn">Chord</button></div>
         <div class="ctrl"><button id="lockBtn">Lock chord</button></div>
+        <div class="ctrl"><button id="editBtn">Move panels</button></div>
       </div>
       <div class="panel">
         <div class="ctrl"><label>Key</label><select id="keySel"></select></div>
@@ -329,7 +330,7 @@ legendEl.innerHTML = `
   <b>Pinch left</b> to pick a chord · <b>pinch + sweep right</b> to strum<br>
   tighter pinch = louder · raise hand = more space · reach right = longer echo<br>
   drag panels to move, edges to resize<br>
-  <b>L</b> lock chord · <b>F</b> free scale · <b>M</b> mute · <b>R</b> reset · <b>H</b> hide`;
+  <b>L</b> lock chord · <b>F</b> free scale · <b>M</b> mute · <b>E</b> move panels · <b>R</b> reset · <b>H</b> hide`;
 
 const legendShowEl = document.getElementById("legendShow");
 const setLegend = show => { document.body.classList.toggle("legend-hidden", !show); saveState(); };
@@ -426,6 +427,13 @@ const strumState = [
 ];
 let fxMod = null, fyMod = null; // heavily-smoothed strum-hand position for ambience
 let singleSide = "right";       // which side a lone hand last committed to (hysteretic)
+let editMode = false;           // E / "Move panels": pinch-drag panels instead of playing
+const editState = [             // per-hand pinch + grab state for editing panels
+  { pinchOn:false, prevOn:false, grab:null, lastmx:0, lastmy:0 },
+  { pinchOn:false, prevOn:false, grab:null, lastmx:0, lastmy:0 },
+];
+let twoHandGrab = null;         // pane being resized with both hands (bbox between the pinches)
+let editWasActive = false;      // a grab/resize was live last frame → save on release
 
 keySel.addEventListener("change", ()=> keyRoot = parseInt(keySel.value));
 scaleSel.addEventListener("change", ()=> scaleName = scaleSel.value);
@@ -443,16 +451,28 @@ function setMode(free){
 }
 const lockBtn = document.getElementById("lockBtn");
 function setLock(on){ lockChord = on; lockBtn.classList.toggle("active", on); }
+const editBtn = document.getElementById("editBtn");
+function setEdit(on){
+  editMode = on;
+  editBtn.classList.toggle("active", on);
+  if(!on){
+    if(twoHandGrab || editState[0].grab || editState[1].grab) saveState();
+    twoHandGrab = null; editWasActive = false;
+    for(const st of editState){ st.pinchOn=false; st.prevOn=false; st.grab=null; }
+  }
+}
 function setMute(on){
   muted = on;
   if(master) master.gain.setTargetAtTime(on ? 0 : parseFloat(volEl.value), actx.currentTime, 0.02);
 }
 modeBtn.addEventListener("click", ()=> setMode(!freeMode));
 lockBtn.addEventListener("click", ()=> setLock(!lockChord));
+editBtn.addEventListener("click", ()=> setEdit(!editMode));
 window.addEventListener("keydown", e=>{
   if(e.key==="f"||e.key==="F") setMode(!freeMode);
   if(e.key==="l"||e.key==="L") setLock(!lockChord);
   if(e.key==="m"||e.key==="M") setMute(!muted);
+  if(e.key==="e"||e.key==="E") setEdit(!editMode);
   if(e.key==="h"||e.key==="H") setLegend(document.body.classList.contains("legend-hidden"));
   if(e.key==="r"||e.key==="R"){ if(confirm("Reset all settings and panel layout to defaults?")){ localStorage.removeItem(LS_KEY); location.reload(); } }
 });
@@ -631,6 +651,16 @@ function draw(res){
     if(singleSide==="left") chordHand = hands[0]; else strumHand = hands[0];
   }
 
+  // ----- edit mode: pinch-drag panels instead of playing -----
+  if(editMode){
+    chordHover = null; chordPick = null;
+    drawChordPanel(W, H);
+    drawPlate(W, H, rowsPerCol(), curCols());
+    handleEdit(chordHand, strumHand, W, H);
+    updateChordLabel();
+    return;
+  }
+
   // ----- chord selection: pinch (thumb+index) a cell in the left palette -----
   // Position + the one reliable pinch — no fragile finger-count/curl classification.
   // Columns walk the circle of fifths; rows stack triad/+7/+9/+11. The pick latches,
@@ -733,6 +763,53 @@ function strumWith(hand, st, W, H, runLen, cols, color, voice){
   drawHand(hand, color);
 }
 
+// ----- edit mode gestures: one hand moves a panel, two hands resize it -----
+// hysteretic thumb+index pinch → midpoint; `just` flags the frame it engaged.
+function editPinch(hand, st){
+  if(!hand){ st.prevOn=st.pinchOn; st.pinchOn=false; return null; }
+  const mx=(MX(hand[8])+MX(hand[4]))/2, my=(hand[8].y+hand[4].y)/2;
+  const d=pinchDistOf(hand);
+  st.prevOn=st.pinchOn;
+  st.pinchOn = st.pinchOn ? d<0.088 : d<0.062;
+  return { on:st.pinchOn, just:st.pinchOn && !st.prevOn, mx, my };
+}
+// single hand: grab the panel under the pinch and translate it, keeping size.
+function editMove(p, st, grabbed){
+  if(!p || !p.on){ st.grab=null; return; }
+  if(p.just){ const r=regionAt(p.mx,p.my); st.grab=(r && !grabbed.has(r))?r:null; st.lastmx=p.mx; st.lastmy=p.my; }
+  if(st.grab){
+    grabbed.add(st.grab);
+    const r=st.grab, w=r.x1-r.x0, h=r.y1-r.y0;
+    const nx0=clampi(r.x0+(p.mx-st.lastmx),0,1-w), ny0=clampi(r.y0+(p.my-st.lastmy),0,1-h);
+    r.x0=nx0; r.x1=nx0+w; r.y0=ny0; r.y1=ny0+h;
+    st.lastmx=p.mx; st.lastmy=p.my;
+  }
+}
+function handleEdit(h1, h2, W, H){
+  const a = editPinch(h1, editState[0]);
+  const b = editPinch(h2, editState[1]);
+  if(a && b && a.on && b.on){                             // two hands → resize: pane spans the two pinches
+    if(!twoHandGrab) twoHandGrab = regionAt((a.mx+b.mx)/2,(a.my+b.my)/2);
+    if(twoHandGrab){
+      const r=twoHandGrab, MIN=0.08;
+      let x0=Math.min(a.mx,b.mx), x1=Math.max(a.mx,b.mx), y0=Math.min(a.my,b.my), y1=Math.max(a.my,b.my);
+      if(x1-x0<MIN){ const c=(x0+x1)/2; x0=c-MIN/2; x1=c+MIN/2; }
+      if(y1-y0<MIN){ const c=(y0+y1)/2; y0=c-MIN/2; y1=c+MIN/2; }
+      r.x0=clampi(x0,0,1); r.x1=clampi(x1,0,1); r.y0=clampi(y0,0,1); r.y1=clampi(y1,0,1);
+    }
+    editState[0].grab=null; editState[1].grab=null;       // suspend single-hand move while resizing
+  } else {
+    twoHandGrab = null;
+    const grabbed=new Set();
+    editMove(a, editState[0], grabbed);
+    editMove(b, editState[1], grabbed);
+  }
+  const active = !!(twoHandGrab || editState[0].grab || editState[1].grab);
+  if(editWasActive && !active) saveState();               // persist on release
+  editWasActive = active;
+  for(const [p,hand] of [[a,h1],[b,h2]]){ if(p){ drawPick(p.mx*W,p.my*H,p.on); drawHand(hand,"#ffd479"); } }
+}
+
 const flash = {};                                    // cell idx -> last trigger time (ms)
 let chordHover = null, chordPick = null;             // chord-palette hover cell + pick cursor, per frame
 // screen rect of one plate cell — shared by the grid render and the hover highlight
@@ -771,7 +848,7 @@ function drawPlate(W,H,runLen,cols){
 }
 // faint frame + corner handles, fading in/out as you hover/drag this region
 function drawHandles(r, x0, y0, x1, y1){
-  const target = (hoverTarget===r || drag?.target===r) ? 1 : 0;
+  const target = (editMode || hoverTarget===r || drag?.target===r) ? 1 : 0;
   const a = (handleFade.get(r) ?? 0) + (target - (handleFade.get(r) ?? 0)) * 0.18;
   handleFade.set(r, a);
   if(a < 0.01) return;
@@ -830,6 +907,12 @@ function drawHand(lm,color){
 }
 
 function updateChordLabel(){
+  if(editMode){
+    chordNameEl.firstChild.textContent = "Move panels";
+    chordNameEl.style.color = "#ffd479";
+    modeEl.textContent = "one hand moves · two hands resize · E to finish";
+    return;
+  }
   const lock = (muted ? " · muted" : "") + (lockChord ? " · locked" : "");
   if(freeMode){
     chordNameEl.firstChild.textContent = `${NOTE_NAMES[keyRoot]} ${scaleName}`;
