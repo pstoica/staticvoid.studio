@@ -108,8 +108,10 @@
   body.is-mobile .warn { display:block; }
   .madeby { position:absolute; bottom:18px; left:0; right:0; font-size:11px; letter-spacing:.04em;
     color:rgba(238,241,246,.32); }
-  .madeby a { color:rgba(238,241,246,.5); text-decoration:none; border-bottom:1px solid rgba(238,241,246,.2); }
-  .madeby a:hover { color:var(--ink); }
+  .madeby a { color:rgba(238,241,246,.5); text-decoration:none; border-bottom:1px solid rgba(238,241,246,.2);
+    transition:color .15s ease, border-color .15s ease; }
+  .madeby a:hover { color:var(--ink); border-color:rgba(238,241,246,.5); }
+  .madeby .dot { margin:0 .6em; color:rgba(238,241,246,.22); }
   @keyframes riseIn { from{ opacity:0; transform:translateY(12px); } to{ opacity:1; transform:none; } }
   /* gentle ping-pong pan of the border gradient (alternate = mirror, no harsh loop seam) */
   @keyframes btnphase { from{ background-position:0 0, 0% 50%; } to{ background-position:0 0, 240% 50%; } }
@@ -197,7 +199,7 @@
     <button id="startBtn">Enable sound</button>
     <div class="hint">Runs entirely in your browser · needs a webcam</div>
     <div class="warn">Best on a desktop or laptop — this needs a webcam and a mouse, and isn't built for phones yet.</div>
-    <div class="madeby">made with <a href="https://mediapipe.dev" target="_blank" rel="noopener">MediaPipe</a></div>
+    <div class="madeby">made by <a href="https://patrickstoica.com" target="_blank" rel="noopener">patrick stoica</a><span class="dot">·</span><a href="https://staticvoid.studio" target="_blank" rel="noopener">staticvoid.studio</a><span class="dot">·</span><a href="https://mediapipe.dev" target="_blank" rel="noopener">mediapipe</a></div>
   </div>
 </div>
 
@@ -382,7 +384,8 @@ const VOICES = {
   Keys:  { osc:[["sine",1,0],["sine",2,3],["triangle",3,0]],   g:[1,0.18,0.06], atk:0.004, dec:1.9, lp0:4200, lp1:900,  lpDec:1.5, peak:1.0 },
   Bell:  { osc:[["sine",1,0],["sine",2.76,0],["sine",5.4,0]],  g:[1,0.26,0.08], atk:0.002, dec:1.7, lp0:7000, lp1:2200, lpDec:1.5, peak:0.85 },
   Pad:   { osc:[["sawtooth",1,-7],["sawtooth",1,7],["sine",0.5,0]], g:[0.45,0.45,0.3], atk:0.35, dec:3.0, lp0:1500, lp1:1100, lpDec:2.6, peak:0.7 },
-  Theremin:{ osc:[["sine",1,0],["sine",2,0]], g:[1,0.06], atk:0.08, dec:2.6, lp0:6000, lp1:3200, lpDec:2.2, peak:0.92, vib:{rate:5.5, depth:11} },
+  Saw:   { osc:[["sawtooth",1,0],["sawtooth",1,-9],["sawtooth",2,6]], g:[0.5,0.5,0.16], atk:0.008, dec:1.5, lp0:5200, lp1:1500, lpDec:1.1, peak:0.82 },
+  Theremin:{ osc:[["sine",1,0],["sine",2,0]], g:[1,0.06], atk:0.09, lp1:3400, peak:0.95, vib:{rate:5.5, depth:11}, mono:true, glide:0.10, rel:0.32 },
 };
 function playNote(freq, vel=0.55, voiceName="Pluck"){
   if(!actx) return;
@@ -411,6 +414,50 @@ function playNote(freq, vel=0.55, voiceName="Pluck"){
   });
   env.connect(lp); lp.connect(master);
 }
+
+// ----- monophonic legato voice (theremin): one persistent oscillator per strum slot that glides between notes -----
+function buildMono(V){
+  const env = actx.createGain(); env.gain.value = 0.0001;
+  const lp = actx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value = V.lp1 || 4000;
+  let vibGain = null;
+  if(V.vib){
+    const lfo = actx.createOscillator(); lfo.type="sine"; lfo.frequency.value = V.vib.rate;
+    vibGain = actx.createGain(); vibGain.gain.value = 0; lfo.connect(vibGain); lfo.start();
+  }
+  const oscs = V.osc.map(([type,mult,det],i)=>{
+    const o = actx.createOscillator(); o.type=type; o.detune.value = det||0;
+    const g = actx.createGain(); g.gain.value = V.g[i] ?? 1;
+    if(vibGain) vibGain.connect(o.detune);
+    o.connect(g); g.connect(env); o.start();
+    return { o, mult };
+  });
+  env.connect(lp); lp.connect(master);
+  return { V, oscs, env, vibGain, active:false, midiNote:null };
+}
+function monoGlide(m, freq, snap){       // snap on (re)engage, portamento while sweeping
+  const t = actx.currentTime;
+  for(const {o,mult} of m.oscs){
+    if(snap) o.frequency.setValueAtTime(freq*mult, t);
+    else     o.frequency.setTargetAtTime(freq*mult, t, m.V.glide || 0.08);
+  }
+}
+function monoOn(m, vel){
+  const t = actx.currentTime, peak = Math.max(0.0001, vel*m.V.peak);
+  m.env.gain.cancelScheduledValues(t); m.env.gain.setValueAtTime(Math.max(0.0001, m.env.gain.value), t);
+  m.env.gain.exponentialRampToValueAtTime(peak, t + m.V.atk);
+  if(m.vibGain){ m.vibGain.gain.cancelScheduledValues(t); m.vibGain.gain.setValueAtTime(m.vibGain.gain.value, t);
+    m.vibGain.gain.linearRampToValueAtTime(m.V.vib.depth, t + 0.3); }
+  m.active = true;
+}
+function monoOff(m){
+  const t = actx.currentTime;
+  m.env.gain.cancelScheduledValues(t); m.env.gain.setValueAtTime(Math.max(0.0001, m.env.gain.value), t);
+  m.env.gain.exponentialRampToValueAtTime(0.0001, t + (m.V.rel || 0.25));
+  if(m.vibGain){ m.vibGain.gain.cancelScheduledValues(t); m.vibGain.gain.setValueAtTime(m.vibGain.gain.value, t);
+    m.vibGain.gain.linearRampToValueAtTime(0, t + 0.2); }
+  m.active = false;
+}
+
 // voice pickers — compact ‹ name › stepper; primary hand always, second hand appears in free-scale mode
 const voiceBPanel = document.getElementById("voiceBPanel");
 const voiceALabel = document.getElementById("voiceALabel");
@@ -464,6 +511,14 @@ function sendMidiNote(note, vel){       // note on now, auto note-off shortly af
   midiOut.send([0x90, note, v]);
   midiActive.set(note, setTimeout(()=>{ if(midiOut) midiOut.send([0x80, note, 0]); midiActive.delete(note); }, 350));
 }
+function midiOn(note, vel){              // sustained note-on for legato/mono voices (no auto-off)
+  if(!midiOut) return; note = Math.round(note); if(note < 0 || note > 127) return;
+  midiOut.send([0x90, note, clampi(Math.round(vel*127), 1, 127)]);
+}
+function midiOff(note){
+  if(!midiOut || note == null) return; note = Math.round(note); if(note < 0 || note > 127) return;
+  midiOut.send([0x80, note, 0]);
+}
 
 // ---------- State ----------
 let freeMode = false;
@@ -477,8 +532,8 @@ let cPinchOn = false;       // chord-hand hysteretic pinch
 // independent per-hand strum state — slot 0 is the primary (right) hand,
 // slot 1 is the second hand that also plays in free-scale mode
 const strumState = [
-  { smx:null, smy:null, pinchOn:false, lastIdx:-1 },
-  { smx:null, smy:null, pinchOn:false, lastIdx:-1 },
+  { smx:null, smy:null, pinchOn:false, lastIdx:-1, mono:null, monoVoice:null, monoMidi:null },
+  { smx:null, smy:null, pinchOn:false, lastIdx:-1, mono:null, monoVoice:null, monoMidi:null },
 ];
 let fxMod = null, fyMod = null; // heavily-smoothed strum-hand position for ambience
 let singleSide = "right";       // which side a lone hand last committed to (hysteretic)
@@ -749,7 +804,7 @@ function draw(res){
     strumWith(strumHand, strumState[1], W, H, runLen, cols, "#56b6ff", cfg.voiceFreeR);  // right
   } else {
     strumWith(strumHand, strumState[0], W, H, runLen, cols, "#56b6ff", cfg.voiceChord);
-    strumState[1].lastIdx = -1;
+    strumState[1].lastIdx = -1; releaseMono(strumState[1]);
   }
 
   // ----- hand-driven ambience (tamed): higher hand = more reverb, righter hand = longer echo -----
@@ -772,8 +827,12 @@ function draw(res){
 
 // one hand strumming the plate (thumb+index pinch = pick, tightness = velocity).
 // `st` holds that hand's own pinch/smoothing/retrigger state so two hands stay independent.
+function releaseMono(st){     // fade the held legato tone + end its MIDI note
+  if(st.mono && st.mono.active) monoOff(st.mono);
+  if(st.monoMidi != null){ midiOff(st.monoMidi); st.monoMidi = null; }
+}
 function strumWith(hand, st, W, H, runLen, cols, color, voice){
-  if(!hand){ st.pinchOn=false; st.smx=null; st.smy=null; st.lastIdx=-1; return; }
+  if(!hand){ st.pinchOn=false; st.smx=null; st.smy=null; st.lastIdx=-1; releaseMono(st); return; }
   const pinchDist = pinchDistOf(hand);
   st.pinchOn = st.pinchOn ? pinchDist < 0.088 : pinchDist < 0.062;
   const th = hand[4], tip = hand[8];
@@ -796,19 +855,38 @@ function strumWith(hand, st, W, H, runLen, cols, color, voice){
       step = clampi(Math.floor(fyUp*runLen), 0, runLen-1);
     }
   }
+  const V = VOICES[voice] || VOICES.Pluck;
   if(st.pinchOn && inP){
     const idx = line*runLen + step;
-    if(idx !== st.lastIdx){
-      const vel = clampi(0.95 - (pinchDist/0.07)*0.6, 0.32, 0.95);  // tighter pinch = louder
-      const note = cellNote(line, step);
-      playNote(midiToFreq(note), vel, voice);
-      sendMidiNote(note, vel);
-      st.lastIdx = idx;
-      flash[idx] = performance.now();
+    const vel = clampi(0.95 - (pinchDist/0.07)*0.6, 0.32, 0.95);    // tighter pinch = louder
+    const note = cellNote(line, step);
+    if(V.mono){                                          // legato glide: one held voice, glissando between notes
+      let fresh = st.lastIdx === -1;                     // (re)engaged → snap pitch + new note-on
+      if(actx){
+        if(!st.mono || st.monoVoice!==voice){ if(st.mono) monoOff(st.mono); st.mono = buildMono(V); st.monoVoice = voice; fresh = true; }
+        monoGlide(st.mono, midiToFreq(note), fresh);
+        if(fresh) monoOn(st.mono, vel);
+      }
+      if(idx !== st.lastIdx){
+        midiOn(note, vel);                               // mono MIDI: sound the new note, then release the old (legato)
+        if(!fresh) midiOff(st.monoMidi);
+        st.monoMidi = note;
+        flash[idx] = performance.now();
+        st.lastIdx = idx;
+      }
+    } else {
+      if(st.mono && st.mono.active) releaseMono(st);      // switched off a mono voice → silence the held tone
+      if(idx !== st.lastIdx){
+        playNote(midiToFreq(note), vel, voice);
+        sendMidiNote(note, vel);
+        st.lastIdx = idx;
+        flash[idx] = performance.now();
+      }
     }
     drawPick(mx*W, my*H, true);
   } else {
     st.lastIdx = -1;                                     // released = muted, can jump
+    releaseMono(st);
     if(inP){                                             // hover: outline the cell you'd hit so same-color cells are distinguishable
       const {sx,sy,sw,sh} = plateCellRect(plate(), line, step, W, H, cols, runLen, horiz);
       ctx.save();
