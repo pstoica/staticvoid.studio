@@ -377,6 +377,7 @@ const VOICES = {
   Keys:  { osc:[["sine",1,0],["sine",2,3],["triangle",3,0]],   g:[1,0.18,0.06], atk:0.004, dec:1.9, lp0:4200, lp1:900,  lpDec:1.5, peak:1.0 },
   Bell:  { osc:[["sine",1,0],["sine",2.76,0],["sine",5.4,0]],  g:[1,0.26,0.08], atk:0.002, dec:1.7, lp0:7000, lp1:2200, lpDec:1.5, peak:0.85 },
   Pad:   { osc:[["sawtooth",1,-7],["sawtooth",1,7],["sine",0.5,0]], g:[0.45,0.45,0.3], atk:0.35, dec:3.0, lp0:1500, lp1:1100, lpDec:2.6, peak:0.7 },
+  Theremin:{ osc:[["sine",1,0],["sine",2,0]], g:[1,0.06], atk:0.08, dec:2.6, lp0:6000, lp1:3200, lpDec:2.2, peak:0.92, vib:{rate:5.5, depth:11} },
 };
 function playNote(freq, vel=0.55, voiceName="Pluck"){
   if(!actx) return;
@@ -390,8 +391,16 @@ function playNote(freq, vel=0.55, voiceName="Pluck"){
   lp.frequency.setValueAtTime(V.lp0, t);
   lp.frequency.exponentialRampToValueAtTime(V.lp1, t + V.lpDec);
   const stop = t + V.dec + 0.1;
+  let vibGain = null;                                  // pitch LFO (theremin-style vibrato that swells in)
+  if(V.vib){
+    const lfo = actx.createOscillator(); lfo.type="sine"; lfo.frequency.value = V.vib.rate;
+    vibGain = actx.createGain(); vibGain.gain.setValueAtTime(0, t);
+    vibGain.gain.linearRampToValueAtTime(V.vib.depth, t + Math.min(V.atk + 0.3, V.dec));
+    lfo.connect(vibGain); lfo.start(t); lfo.stop(stop);
+  }
   V.osc.forEach(([type,mult,det],i)=>{
     const o = actx.createOscillator(); o.type=type; o.frequency.value=freq*mult; o.detune.value=det||0;
+    if(vibGain) vibGain.connect(o.detune);
     const g = actx.createGain(); g.gain.value = V.g[i];
     o.connect(g); g.connect(env); o.start(t); o.stop(stop);
   });
