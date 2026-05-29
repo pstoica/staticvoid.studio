@@ -43,6 +43,9 @@
   button { padding:3px 8px; border-radius:6px; border:1px solid transparent; transition:.12s; }
   button:hover { background:rgba(255,255,255,.05); }
   button.active { background:var(--accent-dim); border-color:rgba(157,180,255,.4); color:var(--accent); }
+  .seg { display:flex; gap:2px; }
+  .seg button { padding:3px 7px; font-size:11.5px; color:var(--muted); }
+  .seg button.on { background:var(--accent-dim); border-color:rgba(157,180,255,.4); color:var(--accent); }
   input[type=range]{ accent-color:var(--accent); height:3px; width:62px; }
   .val { font-size:11px; color:var(--muted); min-width:26px; text-align:right;
     font-variant-numeric:tabular-nums; }
@@ -141,8 +144,8 @@
         <div class="ctrl" id="scalePanel" style="display:none"><label>Scale</label><select id="scaleSel"></select></div>
       </div>
       <div class="panel">
-        <div class="ctrl"><label id="voiceALabel">Voice</label><select id="voiceASel"></select></div>
-        <div class="ctrl" id="voiceBPanel" style="display:none"><label>Right</label><select id="voiceBSel"></select></div>
+        <div class="ctrl"><label id="voiceALabel">Voice</label><div class="seg" id="voiceA"></div></div>
+        <div class="ctrl" id="voiceBPanel" style="display:none"><label>Right</label><div class="seg" id="voiceB"></div></div>
         <div class="ctrl"><label>MIDI</label><select id="midiSel"><option value="">Off</option></select></div>
       </div>
       <div class="panel">
@@ -407,18 +410,22 @@ function playNote(freq, vel=0.55, voiceName="Pluck"){
   });
   env.connect(lp); lp.connect(master);
 }
-// voice pickers — primary hand always; second hand appears in free-scale mode
-const voiceASel = document.getElementById("voiceASel");
-const voiceBSel = document.getElementById("voiceBSel");
+// voice pickers — tappable instrument buttons; primary hand always, second hand appears in free-scale mode
 const voiceBPanel = document.getElementById("voiceBPanel");
 const voiceALabel = document.getElementById("voiceALabel");
-Object.keys(VOICES).forEach(name=>{
-  for(const sel of [voiceASel, voiceBSel]){
-    const o=document.createElement("option"); o.value=name; o.textContent=name; sel.appendChild(o);
+function reflectSeg(seg, active){ for(const b of seg.children) b.classList.toggle("on", b.dataset.voice===active); }
+function buildSeg(seg, getActive, pick){
+  for(const name of Object.keys(VOICES)){
+    const b=document.createElement("button"); b.textContent=name; b.dataset.voice=name;
+    b.addEventListener("click", ()=>{ pick(name); reflectSeg(seg, getActive()); });
+    seg.appendChild(b);
   }
-});
-voiceASel.addEventListener("change", ()=>{ if(freeMode) cfg.voiceFreeL = voiceASel.value; else cfg.voiceChord = voiceASel.value; });
-voiceBSel.addEventListener("change", ()=> cfg.voiceFreeR = voiceBSel.value);
+}
+const voiceA = document.getElementById("voiceA");
+const voiceB = document.getElementById("voiceB");
+buildSeg(voiceA, ()=> freeMode ? cfg.voiceFreeL : cfg.voiceChord,
+                 name=>{ if(freeMode) cfg.voiceFreeL=name; else cfg.voiceChord=name; });
+buildSeg(voiceB, ()=> cfg.voiceFreeR, name=>{ cfg.voiceFreeR=name; });
 
 // ---------- Web MIDI output (single channel 1) ----------
 let midiAccess = null, midiOut = null;
@@ -488,7 +495,8 @@ function setMode(free){
   scalePanel.style.display = free ? "" : "none";
   voiceBPanel.style.display = free ? "" : "none";   // second-hand voice only matters in free mode
   voiceALabel.textContent = free ? "Left" : "Voice";
-  voiceASel.value = free ? cfg.voiceFreeL : cfg.voiceChord;    // voice is per-mode
+  reflectSeg(voiceA, free ? cfg.voiceFreeL : cfg.voiceChord);  // voice is per-mode
+  reflectSeg(voiceB, cfg.voiceFreeR);
   layoutSel.value = free ? cfg.layoutFree : cfg.layoutChord;   // layout is per-mode
   octSel.value = curOct();  octVal.textContent = curOct();     // octaves + columns are per-mode
   colSel.value = curCols(); colVal.textContent = curCols();
@@ -556,7 +564,7 @@ function syncControls(){     // reflect cfg + state into the HUD inputs
   colSel.value=curCols();  colVal.textContent=curCols();
   stackSel.value=cfg.extRows; stackVal.textContent=cfg.extRows;
   layoutSel.value = freeMode ? cfg.layoutFree : cfg.layoutChord; baseSel.value=cfg.baseOctave;
-  voiceASel.value = freeMode ? cfg.voiceFreeL : cfg.voiceChord; voiceBSel.value=cfg.voiceFreeR;
+  reflectSeg(voiceA, freeMode ? cfg.voiceFreeL : cfg.voiceChord); reflectSeg(voiceB, cfg.voiceFreeR);
   revSel.value=cfg.reverb; revVal.textContent=fmt2(cfg.reverb);
   dlySel.value=cfg.delayWet; dlyVal.textContent=fmt2(cfg.delayWet);
   timeSel.value=cfg.delayTime; timeVal.textContent=fmt2(cfg.delayTime);
