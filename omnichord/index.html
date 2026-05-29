@@ -84,7 +84,7 @@
     border:1px solid transparent;
     background:
       linear-gradient(#171a22,#0f1116) padding-box,
-      linear-gradient(125deg, oklch(.72 .15 25), oklch(.8 .15 90), oklch(.76 .14 150),
+      linear-gradient(125deg in oklch, oklch(.72 .15 25), oklch(.8 .15 90), oklch(.76 .14 150),
                               oklch(.74 .13 235), oklch(.72 .15 320), oklch(.72 .15 25)) border-box;
     background-size:100% 100%, 240% 240%;          /* oversize the border layer so it can pan */
     background-position:0 0, 0% 50%;
@@ -139,6 +139,7 @@
       <div class="panel">
         <div class="ctrl"><label id="voiceALabel">Voice</label><select id="voiceASel"></select></div>
         <div class="ctrl" id="voiceBPanel" style="display:none"><label>Right</label><select id="voiceBSel"></select></div>
+        <div class="ctrl"><label>MIDI</label><select id="midiSel"><option value="">Off</option></select></div>
       </div>
       <div class="panel">
         <div class="ctrl"><label>Strum</label>
@@ -149,8 +150,8 @@
         </div>
         <div class="ctrl"><label>Layout</label>
           <select id="layoutSel">
-            <option value="4th" selected>4th · in key</option>
-            <option value="5th">5th · in key</option>
+            <option value="4th" selected>4th</option>
+            <option value="5th">5th</option>
             <option value="oct">Octave</option>
             <option value="cont">Continue</option>
           </select>
@@ -187,8 +188,8 @@
   <div id="start">
     <h1 id="title">Hand Omnichord</h1>
     <p>Make music by waving your hands at the camera. <b>Pinch</b> with one hand to
-       pick a chord, then <b>pinch</b> and sweep with the other to play it — every note
-       stays in key, so it always sounds good. Press <b>F</b> to let both hands roam free.</p>
+       pick a chord, then <b>pinch</b> and sweep with the other to play it — it always
+       sounds good. Press <b>F</b> to let both hands roam free.</p>
     <button id="startBtn">Enable sound</button>
     <div class="hint">Runs entirely in your browser · needs a webcam</div>
     <div class="warn">Best on a desktop or laptop — this needs a webcam and a mouse, and isn't built for phones yet.</div>
@@ -409,6 +410,40 @@ Object.keys(VOICES).forEach(name=>{
 });
 voiceASel.addEventListener("change", ()=>{ if(freeMode) cfg.voiceFreeL = voiceASel.value; else cfg.voiceChord = voiceASel.value; });
 voiceBSel.addEventListener("change", ()=> cfg.voiceFreeR = voiceBSel.value);
+
+// ---------- Web MIDI output (single channel 1) ----------
+let midiAccess = null, midiOut = null;
+const midiSel = document.getElementById("midiSel");
+const midiActive = new Map();      // note number -> pending noteoff timeout id
+function refreshMidiOutputs(){
+  if(!midiAccess) return;
+  const prev = midiSel.value;
+  midiSel.innerHTML = '<option value="">Off</option>';
+  for(const out of midiAccess.outputs.values()){
+    const o = document.createElement("option"); o.value = out.id; o.textContent = out.name; midiSel.appendChild(o);
+  }
+  midiSel.value = [...midiSel.options].some(o=>o.value===prev) ? prev : "";
+  midiOut = midiAccess.outputs.get(midiSel.value) || null;
+}
+midiSel.addEventListener("change", ()=>{ midiOut = midiAccess ? midiAccess.outputs.get(midiSel.value) : null; });
+async function initMidi(){
+  if(midiAccess || !navigator.requestMIDIAccess) return;
+  try{
+    midiAccess = await navigator.requestMIDIAccess();
+    midiAccess.onstatechange = refreshMidiOutputs;
+    refreshMidiOutputs();
+  }catch(e){ /* denied or unsupported — stay silent, audio still works */ }
+}
+function sendMidiNote(note, vel){       // note on now, auto note-off shortly after (plucky)
+  if(!midiOut) return;
+  note = Math.round(note);
+  if(note < 0 || note > 127) return;
+  const v = clampi(Math.round(vel*127), 1, 127);
+  const pending = midiActive.get(note);
+  if(pending){ clearTimeout(pending); midiOut.send([0x80, note, 0]); }   // retrigger: end the old one first
+  midiOut.send([0x90, note, v]);
+  midiActive.set(note, setTimeout(()=>{ if(midiOut) midiOut.send([0x80, note, 0]); midiActive.delete(note); }, 350));
+}
 
 // ---------- State ----------
 let freeMode = false;
@@ -745,7 +780,9 @@ function strumWith(hand, st, W, H, runLen, cols, color, voice){
     const idx = line*runLen + step;
     if(idx !== st.lastIdx){
       const vel = clampi(0.95 - (pinchDist/0.07)*0.6, 0.32, 0.95);  // tighter pinch = louder
-      playNote(midiToFreq(cellNote(line, step)), vel, voice);
+      const note = cellNote(line, step);
+      playNote(midiToFreq(note), vel, voice);
+      sendMidiNote(note, vel);
       st.lastIdx = idx;
       flash[idx] = performance.now();
     }
@@ -958,6 +995,7 @@ startCamera();
 document.getElementById("startBtn").addEventListener("click", async ()=>{
   try{ if(!actx) initAudio(); await actx.resume(); }
   catch(err){ console.error(err); }
+  initMidi();                                      // ask for MIDI output (non-blocking; fine if denied)
   startCamera();                                   // retry if camera was blocked/slow at load
   startEl.classList.add("hide");
 });
