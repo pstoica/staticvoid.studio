@@ -520,18 +520,19 @@ function syncControls(){     // reflect cfg + state into the HUD inputs
   volVal.textContent=fmt2(parseFloat(volEl.value));
 }
 function loadState(){
-  let s; try{ s=JSON.parse(localStorage.getItem(LS_KEY)); }catch(e){ return; }
-  if(!s) return;
-  if(s.cfg) Object.assign(cfg, s.cfg);
-  if(typeof s.keyRoot==="number") keyRoot=s.keyRoot;
-  if(typeof s.scaleName==="string" && SCALES[s.scaleName]) scaleName=s.scaleName;
-  if(typeof s.vol==="number") volEl.value=s.vol;
-  if(s.regions?.chord) Object.assign(CHORD, s.regions.chord);
-  if(s.regions?.strum) Object.assign(regions.strum, s.regions.strum);
-  if(s.regions?.strumFree) Object.assign(regions.strumFree, s.regions.strumFree);
-  if(s.legendHidden) document.body.classList.add("legend-hidden");
+  let s; try{ s=JSON.parse(localStorage.getItem(LS_KEY)); }catch(e){ s=null; }
+  if(s){
+    if(s.cfg) Object.assign(cfg, s.cfg);
+    if(typeof s.keyRoot==="number") keyRoot=s.keyRoot;
+    if(typeof s.scaleName==="string" && SCALES[s.scaleName]) scaleName=s.scaleName;
+    if(typeof s.vol==="number") volEl.value=s.vol;
+    if(s.regions?.chord) Object.assign(CHORD, s.regions.chord);
+    if(s.regions?.strum) Object.assign(regions.strum, s.regions.strum);
+    if(s.regions?.strumFree) Object.assign(regions.strumFree, s.regions.strumFree);
+    if(s.legendHidden) document.body.classList.add("legend-hidden");
+  }
   currentExt=Math.min(currentExt, cfg.extRows-1);
-  syncControls();
+  syncControls();                                    // always reflect cfg into the HUD, even with no saved state
 }
 const hudEl = document.getElementById("hud");
 hudEl.addEventListener("input", saveState);
