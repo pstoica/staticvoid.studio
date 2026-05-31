@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "omnichord",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8731"],
+      "cwd": "src/omnichord",
+      "port": 8731
+    }
+  ]
+}
