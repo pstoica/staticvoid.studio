@@ -1,0 +1,15 @@
+{
+  "name": "staticvoid-studio",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "static void studio — landing page + one-off micro-apps, built with Vite (multi-page).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.4.10"
+  }
+}

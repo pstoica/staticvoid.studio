@@ -128,3 +128,7 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Vite build output (Cloudflare Pages builds this; do not commit)
+dist/
+.DS_Store
