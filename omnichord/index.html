@@ -361,7 +361,7 @@ function cellNote(line, r){
 legendEl.innerHTML = `
   <span id="legendClose" title="Hide (H)">×</span>
   <b>Pinch left</b> to pick a chord · <b>pinch + sweep right</b> to strum<br>
-  tighter pinch = louder<br>
+  sweep faster = louder<br>
   drag panels to move, edges to resize<br>
   <span class="kbd"><b>L</b> lock chord</span> · <span class="kbd"><b>F</b> free scale</span> · <span class="kbd"><b>O</b> omnichord</span> · <span class="kbd"><b>M</b> mute</span> · <span class="kbd"><b>E</b> move panels</span> · <span class="kbd"><b>R</b> reset</span> · <span class="kbd"><b>H</b> hide</span>`;
 
@@ -561,8 +561,8 @@ let cPinchOn = false;       // chord-hand hysteretic pinch
 // independent per-hand strum state — slot 0 is the primary (right) hand,
 // slot 1 is the second hand that also plays in free-scale mode
 const strumState = [
-  { smx:null, smy:null, pinchOn:false, lastIdx:-1, mono:null, monoVoice:null, monoMidi:null },
-  { smx:null, smy:null, pinchOn:false, lastIdx:-1, mono:null, monoVoice:null, monoMidi:null },
+  { smx:null, smy:null, psmx:null, psmy:null, spd:0, pinchOn:false, lastIdx:-1, mono:null, monoVoice:null, monoMidi:null },
+  { smx:null, smy:null, psmx:null, psmy:null, spd:0, pinchOn:false, lastIdx:-1, mono:null, monoVoice:null, monoMidi:null },
 ];
 let singleSide = "right";       // which side a lone hand last committed to (hysteretic)
 let editMode = false;           // E / "Move panels": pinch-drag panels instead of playing
@@ -862,7 +862,7 @@ function draw(res){
   updateChordLabel();
 }
 
-// one hand strumming the plate (thumb+index pinch = pick, tightness = velocity).
+// one hand strumming the plate (thumb+index pinch = pick, sweep speed = velocity).
 // `st` holds that hand's own pinch/smoothing/retrigger state so two hands stay independent.
 function releaseMono(st){     // fade the held legato tone + end its MIDI note
   if(st.mono && st.mono.active) monoOff(st.mono);
@@ -874,9 +874,12 @@ function strumWith(hand, st, W, H, runLen, cols, color, voice){
   st.pinchOn = st.pinchOn ? pinchDist < 0.088 : pinchDist < 0.062;
   const th = hand[4], tip = hand[8];
   let mx = (MX(tip)+MX(th))/2, my = (tip.y+th.y)/2;     // midpoint = pick tip
-  if(st.smx===null || !st.pinchOn){ st.smx=mx; st.smy=my; }   // snap on (re)engage, glide while held
+  if(st.smx===null || !st.pinchOn){ st.smx=mx; st.smy=my; st.psmx=mx; st.psmy=my; st.spd=0; }   // snap on (re)engage, glide while held
   else { st.smx += (mx-st.smx)*0.45; st.smy += (my-st.smy)*0.45; }
   mx=st.smx; my=st.smy;
+  const sweep = Math.hypot(mx-st.psmx, my-st.psmy);          // how far the pick moved this frame
+  st.spd += (sweep - st.spd)*0.5;                            // lightly smoothed sweep speed → strum velocity
+  st.psmx=mx; st.psmy=my;
   const horiz = cfg.orientation==="horizontal";
   const inP = inPlate(mx,my);
   let line=-1, step=-1;
@@ -895,7 +898,7 @@ function strumWith(hand, st, W, H, runLen, cols, color, voice){
   const V = VOICES[voice] || VOICES.Pluck;
   if(st.pinchOn && inP){
     const idx = line*runLen + step;
-    const vel = clampi(0.95 - (pinchDist/0.07)*0.6, 0.32, 0.95);    // tighter pinch = louder
+    const vel = clampi(0.35 + st.spd*9, 0.35, 0.95);                // faster sweep = louder
     const note = cellNote(line, step);
     if(V.mono){                                          // legato glide: one held voice, glissando between notes
       let fresh = st.lastIdx === -1;                     // (re)engaged → snap pitch + new note-on
