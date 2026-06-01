@@ -739,7 +739,8 @@
       var px = null, py = null, pt = null;            // previous event (for speed)
       var sx = null, sy = null, hue = 0;              // last spawn point
       var mode = 'free', lastCell = '', lastRoll = 0, GRID = 26;    // 'free' = freehand circles, 'grid' = quantized squares
-      function spawn(x, y) {
+      var live = [];                                  // live dots, capped to avoid lag
+      function spawnDot(x, y) {
         hue = (hue + 22) % 360;                       // quicker walk across the spectrum
         var d = document.createElement('div');
         var square = mode === 'grid';
@@ -749,8 +750,10 @@
         d.style.setProperty('--dot-y', (y + window.scrollY) + 'px');
         d.style.setProperty('--dot-hue', hue + 'deg');
         d.style.animationDuration = (1.7 + Math.random() * 1.0).toFixed(2) + 's';  // vary life
-        d.addEventListener('animationend', function () { d.remove(); });
+        d.addEventListener('animationend', function () { d.remove(); var i = live.indexOf(d); if (i >= 0) live.splice(i, 1); });
         document.body.appendChild(d);
+        live.push(d);
+        while (live.length > 48) live.shift().remove();   // cap concurrent dots
       }
       window.addEventListener('pointermove', function (e) {
         if (e.pointerType && e.pointerType !== 'mouse') return;
@@ -768,12 +771,12 @@
           var cell = gx + ',' + gy;
           if (cell === lastCell) return;              // one square per grid cell
           lastCell = cell;
-          spawn(gx, gy);
+          spawnDot(gx, gy);
         } else {
           var spacing = Math.max(5, 15 - speed * 8);  // faster mouse -> denser dots
           if ((x - sx) * (x - sx) + (y - sy) * (y - sy) < spacing * spacing) return;
           sx = x; sy = y;
-          spawn(x, y);
+          spawnDot(x, y);
         }
       }, { passive: true });
     })();
