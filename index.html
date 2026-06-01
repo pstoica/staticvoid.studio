@@ -137,7 +137,22 @@
 
     .links a {
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+      transition: color 1.6s ease, filter 0.2s ease;   /* slow drift back to gray */
     }
+    .links a:hover {
+      color: oklch(0.82 0.17 var(--lh, 320));
+      transition: color 0.12s ease, filter 0.2s ease;  /* quick colorize on hover */
+    }
+    /* a distinct hue per link so hovering walks the rainbow */
+    .links > div:nth-of-type(1) { --lh: 215; }   /* email */
+    .links > div:nth-of-type(2) { --lh: 265; }   /* aka patrick */
+    .links > div:nth-of-type(4) { --lh: 25; }    /* orbital harp */
+    .links > div:nth-of-type(5) { --lh: 305; }   /* wave omnichord */
+    .links > div:nth-of-type(6) { --lh: 150; }   /* senseweave */
+    .links > div:nth-of-type(7) { --lh: 95; }    /* tic-tac-toe */
+    .links > div:nth-of-type(8) { --lh: 345; }   /* tiktok */
+    .links > div:nth-of-type(9) { --lh: 35; }    /* instagram */
+    .links > div:nth-of-type(10) { --lh: 5; }    /* youtube */
 
     .marquee-wrapper {
       width: 350px;
@@ -283,7 +298,7 @@
     /* gentle rainbow cursor trail — small dots that fade in, pulse a couple of
        times, then fade out; hue walks the spectrum so the trail flows */
     .cursor-dot {
-      position: fixed;
+      position: absolute;   /* anchored to the page, so dots scroll with content */
       top: 0;
       left: 0;
       width: 6px;
@@ -476,8 +491,8 @@
         hue = (hue + 9) % 360;                        // gentle walk across the spectrum
         var d = document.createElement('div');
         d.className = 'cursor-dot';
-        d.style.setProperty('--dot-x', e.clientX + 'px');
-        d.style.setProperty('--dot-y', e.clientY + 'px');
+        d.style.setProperty('--dot-x', (e.clientX + window.scrollX) + 'px');
+        d.style.setProperty('--dot-y', (e.clientY + window.scrollY) + 'px');
         d.style.setProperty('--dot-hue', hue + 'deg');
         // vary life so the dots don't all pulse in lockstep
         d.style.animationDuration = (1.9 + Math.random() * 1.1).toFixed(2) + 's';
