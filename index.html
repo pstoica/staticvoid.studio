@@ -469,8 +469,9 @@
     /* all dots live inside a single container that carries the blend mode — one
        compositing layer total instead of one per dot (big perf win) */
     #trail {
-      position: absolute;
+      position: fixed;      /* fixed = always clips to viewport, can never cause scrollbar */
       inset: 0;
+      overflow: hidden;
       pointer-events: none;
       z-index: 9999;
       mix-blend-mode: screen;
@@ -792,7 +793,7 @@
         hue = (hue + 22) % 360;
         var d = document.createElement('div');
         d.className = 'cursor-dot';
-        d.style.setProperty('--dot-x', x + 'px');
+        d.style.setProperty('--dot-x', x + 'px');    /* viewport coords; trail is position:fixed */
         d.style.setProperty('--dot-y', y + 'px');
         d.style.setProperty('--dot-hue', hue + 'deg');
         d.style.animationDuration = (1.7 + Math.random() * 1.0).toFixed(2) + 's';
@@ -801,7 +802,7 @@
         live.push(d);
         while (live.length > 48) live.shift().remove();
       }
-      function gridSpawn(cx, cy) {   // snap to grid and spawn (page coords)
+      function gridSpawn(cx, cy) {   // snap to grid and spawn (viewport coords)
         var gx = Math.round(cx / GRID) * GRID, gy = Math.round(cy / GRID) * GRID;
         var cell = gx + ',' + gy;
         if (cell === lastCell) return;
@@ -812,7 +813,7 @@
       // mouse trail (desktop)
       window.addEventListener('pointermove', function (e) {
         if (e.pointerType !== 'mouse') return;
-        gridSpawn(e.clientX + window.scrollX, e.clientY + window.scrollY);
+        gridSpawn(e.clientX, e.clientY);
       }, { passive: true });
 
       // tap: stamp a random symmetrical pixel-sprite at the tap point
@@ -835,8 +836,7 @@
         [[-1,-1],[1,-1],[-2,0],[-1,0],[0,0],[1,0],[2,0],[-1,1],[0,1],[1,1],[0,2]],
       ];
       window.addEventListener('pointerdown', function (e) {
-        if (e.pointerType === 'mouse') return;
-        var cx = e.clientX + window.scrollX, cy = e.clientY + window.scrollY;
+        var cx = e.clientX, cy = e.clientY;
         var sprite = SPRITES[Math.floor(Math.random() * SPRITES.length)];
         sprite.forEach(function (off) {
           gridSpawn(cx + off[0] * GRID, cy + off[1] * GRID);
@@ -851,7 +851,7 @@
         avy += (Math.random() - 0.5) * 12 - avy * 0.06;
         ax = Math.max(GRID, Math.min(window.innerWidth - GRID, ax + avx));
         ay = Math.max(GRID, Math.min(window.innerHeight * 0.9, ay + avy));
-        gridSpawn(ax + window.scrollX, ay + window.scrollY);
+        gridSpawn(ax, ay);   /* ambient uses viewport coords — trail is fixed */
       }
       function scheduleAuto() {
         var steps = 0, maxSteps = 18;
