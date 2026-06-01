@@ -228,6 +228,21 @@
       text-align: center;
     }
 
+    /* a captioned clip: the player with its app name beneath */
+    .clip {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .clip-cap {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #ccc;
+      text-align: center;
+    }
+
     /* "NEW" badge — one solid color, rotating the oklch hue (constant L+C, so
        every hue is equally bright/saturated — no muddy sRGB hue-rotate greens) */
     @property --new-hue {
@@ -308,19 +323,32 @@
         title="YouTube video player" frameborder="0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowfullscreen></iframe>
+    </div>
+
+    <div class="videos">
+      <h2 class="section-title">apps</h2>
       <div class="shorts">
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7611012088848256269"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7556472061347073294"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7640954015458659598"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
+        <figure class="clip">
+          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7611012088848256269"
+            title="TikTok video player" frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+            allowfullscreen></iframe>
+          <figcaption class="clip-cap">orbital harp</figcaption>
+        </figure>
+        <figure class="clip">
+          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7556472061347073294"
+            title="TikTok video player" frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+            allowfullscreen></iframe>
+          <figcaption class="clip-cap">senseweave</figcaption>
+        </figure>
+        <figure class="clip">
+          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7640954015458659598"
+            title="TikTok video player" frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+            allowfullscreen></iframe>
+          <figcaption class="clip-cap">video granulator</figcaption>
+        </figure>
       </div>
     </div>
 
