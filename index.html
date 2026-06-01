@@ -370,7 +370,7 @@
       100% { opacity: 0;    transform: translate(var(--dot-x), var(--dot-y)) scale(0.5); }
     }
     @keyframes dot-cycle {
-      to { --dot-phase: 340deg; }   /* hue keeps advancing through the dot's life */
+      to { --dot-phase: 560deg; }   /* hue keeps advancing through the dot's life (faster) */
     }
     @media (prefers-reduced-motion: reduce) {
       .cursor-dot { display: none; }
@@ -639,7 +639,7 @@
         var sdx = x - sx, sdy = y - sy;
         if (sdx * sdx + sdy * sdy < spacing * spacing) return;
         sx = x; sy = y;
-        hue = (hue + 15) % 360;                       // quicker walk across the spectrum
+        hue = (hue + 22) % 360;                       // quicker walk across the spectrum
         var d = document.createElement('div');
         d.className = 'cursor-dot';
         d.style.setProperty('--dot-x', (x + window.scrollX) + 'px');
