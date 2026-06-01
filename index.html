@@ -194,6 +194,13 @@
       border-radius: 0.75rem;
     }
 
+    .tiktok-video {
+      aspect-ratio: 9 / 16;
+      width: min(100%, 360px, calc(80vh * 9 / 16));
+      margin: 0 auto;
+      border-radius: 0.75rem;
+    }
+
     /* "NEW" badge — one solid color, rotating the oklch hue (constant L+C, so
        every hue is equally bright/saturated — no muddy sRGB hue-rotate greens) */
     @property --new-hue {
@@ -277,6 +284,10 @@
       <iframe class="youtube-short" src="https://www.youtube.com/embed/FvbiWd4Auws?controls=0&modestbranding=1"
         title="YouTube video player" frameborder="0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen></iframe>
+      <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7556472061347073294"
+        title="TikTok video player" frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
         allowfullscreen></iframe>
     </div>
   </div>
