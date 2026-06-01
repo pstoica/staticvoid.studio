@@ -315,17 +315,34 @@
       transform: translate(-50%, -50%) scale(1.07);
     }
 
-    /* the vertical clips (YouTube short + TikToks) stack on mobile, sit in a
-       3-column row on tablet/desktop */
+    /* on mobile: horizontal scroll slider showing ~1.5 clips (hints more).
+       on tablet/desktop: 3-column grid as before */
     .shorts {
-      display: grid;
-      grid-template-columns: 1fr;
+      display: flex;
       gap: 1rem;
       align-items: start;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 0.5rem;                /* room for scroll bar if any */
+      scrollbar-width: none;                 /* Firefox */
+    }
+    .shorts::-webkit-scrollbar { display: none; }  /* Chrome/Safari */
+    .shorts > * {
+      scroll-snap-align: start;
+      flex: 0 0 72vw;                        /* show ~1.5 clips on narrow screens */
+      min-width: 0;
+      width: auto;
+      margin: 0;
     }
     @media (min-width: 768px) {
       .shorts {
+        display: grid;
         grid-template-columns: repeat(3, 1fr);
+        overflow-x: visible;
+      }
+      .shorts > * {
+        flex: unset;
       }
       /* a two-clip row: same column width as the 3-up rows, but centered */
       .shorts--pair {
@@ -731,14 +748,12 @@
     (function () {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       if (matchMedia('(pointer: coarse)').matches) return;
-      var px = null, py = null, pt = null;            // previous event (for speed)
-      var sx = null, sy = null, hue = 0;              // last spawn point
-      var mode = 'free', lastCell = '', lastRoll = 0, GRID = 26;    // 'free' = freehand circles, 'grid' = quantized squares
+      var lastCell = '', hue = 0, GRID = 26;          // quantized to a grid; one square per cell
       var live = [];                                  // live dots, capped to avoid lag
       function spawnDot(x, y) {
         hue = (hue + 22) % 360;                       // quicker walk across the spectrum
         var d = document.createElement('div');
-        d.className = 'cursor-dot' + (mode === 'grid' ? ' square' : '');
+        d.className = 'cursor-dot square';
         d.style.setProperty('--dot-x', (x + window.scrollX) + 'px');
         d.style.setProperty('--dot-y', (y + window.scrollY) + 'px');
         d.style.setProperty('--dot-hue', hue + 'deg');
@@ -750,27 +765,11 @@
       }
       window.addEventListener('pointermove', function (e) {
         if (e.pointerType && e.pointerType !== 'mouse') return;
-        var now = (window.performance && performance.now) ? performance.now() : Date.now();
-        var x = e.clientX, y = e.clientY;
-        if (px === null) { px = x; py = y; pt = now; sx = x; sy = y; return; }
-        var gap = now - pt;
-        var speed = Math.hypot(x - px, y - py) / Math.max(1, gap);   // px per ms
-        // flip between freehand circles and quantized squares often (every ~450ms
-        // of movement, or on a pause)
-        if (gap > 350 || now - lastRoll > 450) { mode = Math.random() < 0.62 ? 'grid' : 'free'; lastRoll = now; lastCell = ''; }
-        px = x; py = y; pt = now;
-        if (mode === 'grid') {
-          var gx = Math.round(x / GRID) * GRID, gy = Math.round(y / GRID) * GRID;
-          var cell = gx + ',' + gy;
-          if (cell === lastCell) return;              // one square per grid cell
-          lastCell = cell;
-          spawnDot(gx, gy);
-        } else {
-          var spacing = Math.max(5, 15 - speed * 8);  // faster mouse -> denser dots
-          if ((x - sx) * (x - sx) + (y - sy) * (y - sy) < spacing * spacing) return;
-          sx = x; sy = y;
-          spawnDot(x, y);
-        }
+        var gx = Math.round(e.clientX / GRID) * GRID, gy = Math.round(e.clientY / GRID) * GRID;
+        var cell = gx + ',' + gy;
+        if (cell === lastCell) return;                // one square per grid cell
+        lastCell = cell;
+        spawnDot(gx, gy);
       }, { passive: true });
     })();
   </script>
