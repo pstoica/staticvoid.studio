@@ -218,6 +218,16 @@
         grid-template-columns: repeat(2, calc((100% - 2rem) / 3));
         justify-content: center;
       }
+      /* a flexible row (4+ clips): 3 per row at the same column width, centered,
+         so a 4th wraps neatly below instead of stretching the grid */
+      .shorts--wrap {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .shorts--wrap > * {
+        width: calc((100% - 2rem) / 3 - 0.5px);
+      }
     }
 
     /* section headers — a soft oklch rainbow band that slowly drifts; each header
@@ -267,6 +277,36 @@
       text-decoration: underline;
       text-underline-offset: 2px;
       text-decoration-thickness: 1px;
+    }
+
+    /* gentle rainbow cursor trail — small dots that fade in, pulse a couple of
+       times, then fade out; hue walks the spectrum so the trail flows */
+    .cursor-dot {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 7px;
+      height: 7px;
+      margin: -3.5px 0 0 -3.5px;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9999;
+      background: oklch(0.82 0.16 var(--dot-hue));
+      box-shadow: 0 0 7px oklch(0.82 0.16 var(--dot-hue) / 0.55);
+      animation: dot-life 2.4s ease-out forwards;
+      will-change: transform, opacity;
+    }
+    @keyframes dot-life {
+      0%   { opacity: 0;    transform: translate(var(--dot-x), var(--dot-y)) scale(0.2); }
+      12%  { opacity: 1;    transform: translate(var(--dot-x), var(--dot-y)) scale(1); }
+      30%  {                transform: translate(var(--dot-x), var(--dot-y)) scale(0.7); }
+      48%  {                transform: translate(var(--dot-x), var(--dot-y)) scale(1.1); }
+      66%  {                transform: translate(var(--dot-x), var(--dot-y)) scale(0.8); }
+      84%  { opacity: 0.45; transform: translate(var(--dot-x), var(--dot-y)) scale(1); }
+      100% { opacity: 0;    transform: translate(var(--dot-x), var(--dot-y)) scale(0.5); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cursor-dot { display: none; }
     }
 
     /* "NEW" badge — one solid color, rotating the oklch hue (constant L+C, so
@@ -353,7 +393,7 @@
 
     <div class="videos">
       <h2 class="section-title">apps</h2>
-      <div class="shorts">
+      <div class="shorts shorts--wrap">
         <figure class="clip">
           <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7611012088848256269"
             title="TikTok video player" frameborder="0"
@@ -374,6 +414,13 @@
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowfullscreen></iframe>
           <figcaption class="clip-cap" style="color:oklch(0.8 0.07 265)">video granulator</figcaption>
+        </figure>
+        <figure class="clip">
+          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7645457832401227022"
+            title="TikTok video player" frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+            allowfullscreen></iframe>
+          <figcaption class="clip-cap" style="color:oklch(0.8 0.07 320)"><a href="/omnichord/">wave omnichord</a></figcaption>
         </figure>
       </div>
     </div>
@@ -410,6 +457,31 @@
       </div>
     </div>
   </div>
+
+  <script>
+    // gentle rainbow cursor trail (mouse only; skipped for touch + reduced motion)
+    (function () {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      if (matchMedia('(pointer: coarse)').matches) return;
+      var lastX = null, lastY = null, hue = 0;
+      var MIN_DIST = 22;
+      window.addEventListener('pointermove', function (e) {
+        if (e.pointerType && e.pointerType !== 'mouse') return;
+        if (lastX === null) { lastX = e.clientX; lastY = e.clientY; }
+        var dx = e.clientX - lastX, dy = e.clientY - lastY;
+        if (dx * dx + dy * dy < MIN_DIST * MIN_DIST) return;
+        lastX = e.clientX; lastY = e.clientY;
+        hue = (hue + 13) % 360;                       // walk the spectrum dot to dot
+        var d = document.createElement('div');
+        d.className = 'cursor-dot';
+        d.style.setProperty('--dot-x', e.clientX + 'px');
+        d.style.setProperty('--dot-y', e.clientY + 'px');
+        d.style.setProperty('--dot-hue', hue + 'deg');
+        d.addEventListener('animationend', function () { d.remove(); });
+        document.body.appendChild(d);
+      }, { passive: true });
+    })();
+  </script>
 
   <script>
     !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
