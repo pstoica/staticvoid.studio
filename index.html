@@ -327,11 +327,11 @@
       scrollbar-width: none;                 /* Firefox */
       /* scroll-shadow: fade left/right — animated, softer 28px */
       -webkit-mask-image: linear-gradient(to right,
-        transparent 0px, black var(--fl, 0px),
-        black calc(100% - var(--fr, 28px)), transparent 100%);
+        rgba(0,0,0,0.25) 0px, black var(--fl, 0px),
+        black calc(100% - var(--fr, 18px)), rgba(0,0,0,0.25) 100%);
       mask-image: linear-gradient(to right,
-        transparent 0px, black var(--fl, 0px),
-        black calc(100% - var(--fr, 28px)), transparent 100%);
+        rgba(0,0,0,0.25) 0px, black var(--fl, 0px),
+        black calc(100% - var(--fr, 18px)), rgba(0,0,0,0.25) 100%);
       transition: mask-size 0.35s ease, -webkit-mask-size 0.35s ease;
     }
     .shorts::-webkit-scrollbar { display: none; }  /* Chrome/Safari */
@@ -772,7 +772,7 @@
 
     // faded edges on horizontal scroll rows — update mask when scrolled
     (function () {
-      var FADE = '48px';
+      var FADE = '18px';
       function update(el) {
         var atLeft  = el.scrollLeft < 4;
         var atRight = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4;
