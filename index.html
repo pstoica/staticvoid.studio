@@ -173,10 +173,13 @@
       --chroma: 0; --ll: 0.82;                           /* light gray at rest */
       transition: --chroma 2.6s ease, --ll 2.6s ease, filter 0.2s ease;  /* linger, then fade to gray */
     }
-    .links a:hover {
+    /* .lit is toggled by JS on pointerenter/leave — more reliable than :hover for
+       these registered-custom-property transitions. transition:none = instant
+       colorize; removing .lit falls back to the base 2.6s transition (slow fade) */
+    .links a:hover, .links a.lit {
       --chroma: 0.2; --ll: 0.72;                         /* vivid + dark enough that pale hues don't read white */
       filter: none;                                      /* drop the global brightness(1.2) that whitened it */
-      transition: none;                                  /* colorize instantly (robust); fade-out uses the base transition */
+      transition: none;
     }
     @media (prefers-reduced-motion: reduce) {
       .links { animation: none; }                        /* hover = static per-link hue */
@@ -619,6 +622,15 @@
   </div>
 
   <script>
+    // light up nav links on real pointer hover (reliable where :hover + registered
+    // custom-property transitions are flaky, e.g. under DevTools force-state)
+    (function () {
+      document.querySelectorAll('.links a').forEach(function (a) {
+        a.addEventListener('pointerenter', function () { a.classList.add('lit'); });
+        a.addEventListener('pointerleave', function () { a.classList.remove('lit'); });
+      });
+    })();
+
     // split the title into per-letter spans so hover can fan them into a rainbow
     // wave (each span carries its letter index --i; CSS does the rest)
     (function () {
