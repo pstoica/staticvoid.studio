@@ -193,6 +193,24 @@
       margin: 0 auto;
       border-radius: 0.75rem;
     }
+
+    /* "NEW" badge — rainbow text echoing the wave omnichord logo, hue cycling */
+    .rainbow-new {
+      font-size: 0.85rem;
+      font-weight: bold;
+      background: linear-gradient(90deg in oklch,
+        oklch(.78 .15 25), oklch(.8 .15 110), oklch(.76 .15 200), oklch(.74 .15 300), oklch(.78 .15 25));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: rainbow-hue 6s linear infinite;
+    }
+    @keyframes rainbow-hue {
+      to { filter: hue-rotate(360deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .rainbow-new { animation: none; }
+    }
   </style>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -228,7 +246,7 @@
         <a href="https://orbitalharp.com" style="text-decoration: none;"><span>🪉 </span><span style="text-decoration: underline;">orbital harp</span></a> <span style="font-size: 0.85rem; color: #ff0; font-weight: bold;">OUT NOW‼️</span>
       </div>
       <div>
-        <a href="/omnichord/" style="text-decoration: none;"><span>👋 </span><span style="text-decoration: underline;">wave omnichord</span></a> <span style="font-size: 0.85rem; color: #ff0; font-weight: bold;">NEW‼️</span>
+        <a href="/omnichord/" style="text-decoration: none;"><span>👋 </span><span style="text-decoration: underline;">wave omnichord</span></a> <span class="rainbow-new">NEW</span><span style="font-size: 0.85rem; font-weight: bold;">‼️</span>
       </div>
       <div>
         <a href="https://senseweave.xyz" style="text-decoration: none;"><span>✨ </span><span style="text-decoration: underline;">senseweave</span></a>
