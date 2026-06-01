@@ -31,6 +31,9 @@
 .board > g {
   transform-box: fill-box;
   transform-origin: center;
+  /* hint GPU promotion before animateBoardIn runs so the browser doesn't have
+     to promote mid-animation (the main cause of the mobile blip) */
+  will-change: transform, opacity;
 }
 
 .board__grid-line {
@@ -38,6 +41,7 @@
   stroke-width: 1.25;
   stroke-linecap: round;
   opacity: 0;
+  will-change: opacity;
 }
 
 /* opaque so the background shapes behind the board don't bleed through

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   animateBoardIn,
   animateBoardOut,
@@ -69,11 +69,18 @@ export function Board({ board, outcome, current, busy, onCellClick }: BoardProps
     }
   };
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!turnBadgeRef.current) return;
     const cells = cellRefs.current.filter((c): c is SVGGElement => !!c);
     const lines = gridRefs.current.filter((c): c is SVGLineElement => !!c);
-    animateBoardIn(turnBadgeRef.current, cells, lines);
+    // Defer animateBoardIn past the first paint via rAF so the browser can
+    // commit the new frame before animejs sets initial values on the SVG nodes.
+    // useLayoutEffect caused a forced synchronous layout (utils.set reads layout
+    // mid-commit) which produced a visible blip on mobile.
+    const raf = requestAnimationFrame(() => {
+      animateBoardIn(turnBadgeRef.current!, cells, lines);
+    });
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   const winningSet = outcome.kind === 'win' ? new Set<number>(outcome.line) : null;
