@@ -337,11 +337,16 @@
     }
     .shorts::-webkit-scrollbar { display: none; }  /* Chrome/Safari */
     .shorts > * {
-      scroll-snap-align: start;
+      scroll-snap-align: center;
       flex: 0 0 72vw;                        /* show ~1.5 clips on narrow screens */
       min-width: 0;
       width: auto;
       margin: 0;
+    }
+    /* padding lets first and last items center in the viewport */
+    .shorts::before, .shorts::after {
+      content: '';
+      flex: 0 0 14vw;
     }
     @media (min-width: 768px) {
       .shorts {
@@ -769,11 +774,10 @@
       });
     })();
 
-    // gentle rainbow cursor trail (mouse only; skipped for touch + reduced motion)
+    // cursor/touch trail
     (function () {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      if (matchMedia('(pointer: coarse)').matches) return;
-      // single container with the blend mode — one compositing layer for all dots
+      // single container — one compositing layer for all dots
       var trail = document.createElement('div');
       trail.id = 'trail';
       document.body.appendChild(trail);
@@ -784,8 +788,8 @@
         hue = (hue + 22) % 360;
         var d = document.createElement('div');
         d.className = 'cursor-dot';
-        d.style.setProperty('--dot-x', (x + window.scrollX) + 'px');
-        d.style.setProperty('--dot-y', (y + window.scrollY) + 'px');
+        d.style.setProperty('--dot-x', x + 'px');
+        d.style.setProperty('--dot-y', y + 'px');
         d.style.setProperty('--dot-hue', hue + 'deg');
         d.style.animationDuration = (1.7 + Math.random() * 1.0).toFixed(2) + 's';
         d.addEventListener('animationend', function () { d.remove(); var i = live.indexOf(d); if (i >= 0) live.splice(i, 1); });
@@ -793,47 +797,48 @@
         live.push(d);
         while (live.length > 48) live.shift().remove();
       }
-
-      // mouse trail (desktop only)
-      if (!matchMedia('(pointer: coarse)').matches) {
-        window.addEventListener('pointermove', function (e) {
-          if (e.pointerType && e.pointerType !== 'mouse') return;
-          var gx = Math.round(e.clientX / GRID) * GRID, gy = Math.round(e.clientY / GRID) * GRID;
-          var cell = gx + ',' + gy;
-          if (cell === lastCell) return;
-          lastCell = cell;
-          spawnDot(gx, gy);
-        }, { passive: true });
+      function gridSpawn(cx, cy) {   // snap to grid and spawn (page coords)
+        var gx = Math.round(cx / GRID) * GRID, gy = Math.round(cy / GRID) * GRID;
+        var cell = gx + ',' + gy;
+        if (cell === lastCell) return;
+        lastCell = cell;
+        spawnDot(gx, gy);
       }
 
-      // mobile ambient trail — a stray walk that occasionally wanders across the page
-      if (matchMedia('(pointer: coarse)').matches) {
-        var ax = window.innerWidth / 2, ay = window.innerHeight * 0.35;
-        var avx = 0, avy = 0;
-        var lastAuto = 0;
-        function autoStep(now) {
-          // drift with brown-noise-ish momentum: small random nudges + gentle centering pull
-          avx += (Math.random() - 0.5) * 18 - avx * 0.06;
-          avy += (Math.random() - 0.5) * 12 - avy * 0.06;
-          ax = Math.max(GRID, Math.min(window.innerWidth - GRID, ax + avx));
-          ay = Math.max(GRID, Math.min(window.innerHeight - GRID + window.scrollY, ay + avy));
-          var gx = Math.round(ax / GRID) * GRID, gy = Math.round(ay / GRID) * GRID;
-          var cell = gx + ',' + gy;
-          if (cell !== lastCell) { lastCell = cell; spawnDot(gx, gy + window.scrollY); }
+      // mouse trail (desktop)
+      window.addEventListener('pointermove', function (e) {
+        if (e.pointerType !== 'mouse') return;
+        gridSpawn(e.clientX + window.scrollX, e.clientY + window.scrollY);
+      }, { passive: true });
+
+      // tap burst: scatter squares around the tap point (works in device emulator too)
+      window.addEventListener('pointerdown', function (e) {
+        if (e.pointerType === 'mouse') return;
+        var cx = e.clientX + window.scrollX, cy = e.clientY + window.scrollY;
+        for (var i = 0; i < 9; i++) {
+          var ang = Math.random() * 6.2832, r = Math.random() * GRID * 2.5;
+          gridSpawn(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r);
         }
-        function scheduleAuto() {
-          // burst of ~18 steps, then sleep 4–9 seconds before the next wander
-          var steps = 0, maxSteps = 18;
-          var iv = setInterval(function () {
-            autoStep();
-            if (++steps >= maxSteps) {
-              clearInterval(iv);
-              setTimeout(scheduleAuto, 4000 + Math.random() * 5000);
-            }
-          }, 60);
-        }
-        setTimeout(scheduleAuto, 2500);   // first wander after page settles
+      }, { passive: true });
+
+      // ambient trail — stray walk that wanders every few seconds (mobile + desktop)
+      var ax = window.innerWidth / 2, ay = window.innerHeight * 0.35;
+      var avx = 0, avy = 0;
+      function autoStep() {
+        avx += (Math.random() - 0.5) * 18 - avx * 0.06;
+        avy += (Math.random() - 0.5) * 12 - avy * 0.06;
+        ax = Math.max(GRID, Math.min(window.innerWidth - GRID, ax + avx));
+        ay = Math.max(GRID, Math.min(window.innerHeight * 0.9, ay + avy));
+        gridSpawn(ax + window.scrollX, ay + window.scrollY);
       }
+      function scheduleAuto() {
+        var steps = 0, maxSteps = 18;
+        var iv = setInterval(function () {
+          autoStep();
+          if (++steps >= maxSteps) { clearInterval(iv); setTimeout(scheduleAuto, 4000 + Math.random() * 5000); }
+        }, 60);
+      }
+      setTimeout(scheduleAuto, 2500);
     })();
   </script>
 
