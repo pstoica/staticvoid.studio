@@ -244,14 +244,15 @@
       font-weight: 700;
       text-align: center;
       background: linear-gradient(95deg,
-        oklch(0.82 0.13 calc(var(--title-hue))),
-        oklch(0.82 0.13 calc(var(--title-hue) + 70deg)),
-        oklch(0.82 0.13 calc(var(--title-hue) + 140deg)),
-        oklch(0.82 0.13 calc(var(--title-hue) + 210deg)));
+        oklch(0.88 0.19 calc(var(--title-hue))),
+        oklch(0.88 0.19 calc(var(--title-hue) + 70deg)),
+        oklch(0.88 0.19 calc(var(--title-hue) + 140deg)),
+        oklch(0.88 0.19 calc(var(--title-hue) + 210deg)));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
-      animation: title-hue 18s linear infinite;
+      text-shadow: 0 0 20px rgba(0, 0, 0, 0.35);   /* soft halo so it reads over the busy bg */
+      animation: title-hue 10s linear infinite;     /* a touch quicker so the color visibly flows */
     }
     @keyframes title-hue {
       to { --title-hue: 360deg; }
@@ -285,15 +286,16 @@
       position: fixed;
       top: 0;
       left: 0;
-      width: 7px;
-      height: 7px;
-      margin: -3.5px 0 0 -3.5px;
+      width: 6px;
+      height: 6px;
+      margin: -3px 0 0 -3px;
       border-radius: 50%;
       pointer-events: none;
       z-index: 9999;
-      background: oklch(0.82 0.16 var(--dot-hue));
-      box-shadow: 0 0 7px oklch(0.82 0.16 var(--dot-hue) / 0.55);
-      animation: dot-life 2.4s ease-out forwards;
+      background: oklch(0.87 0.2 var(--dot-hue));
+      box-shadow: 0 0 9px oklch(0.87 0.2 var(--dot-hue) / 0.85),
+                  0 0 3px oklch(0.92 0.16 var(--dot-hue) / 0.9);
+      animation: dot-life 2.4s ease-out forwards;   /* duration varied per-dot in JS to desync the pulse */
       will-change: transform, opacity;
     }
     @keyframes dot-life {
@@ -395,28 +397,28 @@
       <h2 class="section-title">apps</h2>
       <div class="shorts shorts--wrap">
         <figure class="clip">
-          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7611012088848256269"
+          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7611012088848256269?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0"
             title="TikTok video player" frameborder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowfullscreen></iframe>
           <figcaption class="clip-cap" style="color:oklch(0.8 0.07 30)"><a href="https://orbitalharp.com">orbital harp</a></figcaption>
         </figure>
         <figure class="clip">
-          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7556472061347073294"
+          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7556472061347073294?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0"
             title="TikTok video player" frameborder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowfullscreen></iframe>
           <figcaption class="clip-cap" style="color:oklch(0.8 0.07 155)"><a href="https://senseweave.xyz">senseweave</a></figcaption>
         </figure>
         <figure class="clip">
-          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7640954015458659598"
+          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7640954015458659598?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0"
             title="TikTok video player" frameborder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowfullscreen></iframe>
           <figcaption class="clip-cap" style="color:oklch(0.8 0.07 265)">video granulator</figcaption>
         </figure>
         <figure class="clip">
-          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7645457832401227022"
+          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7645457832401227022?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0"
             title="TikTok video player" frameborder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowfullscreen></iframe>
@@ -426,17 +428,17 @@
     </div>
 
     <div class="videos">
-      <h2 class="section-title" style="animation-delay:-6s">livecoding</h2>
+      <h2 class="section-title" style="animation-delay:-3.3s">livecoding</h2>
       <div class="shorts">
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7562682507280338189"
+        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7562682507280338189?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0"
           title="TikTok video player" frameborder="0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowfullscreen></iframe>
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7567180191869521166"
+        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7567180191869521166?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0"
           title="TikTok video player" frameborder="0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowfullscreen></iframe>
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7553112395581836599"
+        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7553112395581836599?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0"
           title="TikTok video player" frameborder="0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowfullscreen></iframe>
@@ -444,13 +446,13 @@
     </div>
 
     <div class="videos">
-      <h2 class="section-title" style="animation-delay:-12s">juggling</h2>
+      <h2 class="section-title" style="animation-delay:-6.7s">juggling</h2>
       <div class="shorts shorts--pair">
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7625866999666642189"
+        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7625866999666642189?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0"
           title="TikTok video player" frameborder="0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowfullscreen></iframe>
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7626839235735129358"
+        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7626839235735129358?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0"
           title="TikTok video player" frameborder="0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowfullscreen></iframe>
@@ -464,19 +466,21 @@
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       if (matchMedia('(pointer: coarse)').matches) return;
       var lastX = null, lastY = null, hue = 0;
-      var MIN_DIST = 22;
+      var MIN_DIST = 11;                              // denser trail
       window.addEventListener('pointermove', function (e) {
         if (e.pointerType && e.pointerType !== 'mouse') return;
         if (lastX === null) { lastX = e.clientX; lastY = e.clientY; }
         var dx = e.clientX - lastX, dy = e.clientY - lastY;
         if (dx * dx + dy * dy < MIN_DIST * MIN_DIST) return;
         lastX = e.clientX; lastY = e.clientY;
-        hue = (hue + 13) % 360;                       // walk the spectrum dot to dot
+        hue = (hue + 9) % 360;                        // gentle walk across the spectrum
         var d = document.createElement('div');
         d.className = 'cursor-dot';
         d.style.setProperty('--dot-x', e.clientX + 'px');
         d.style.setProperty('--dot-y', e.clientY + 'px');
         d.style.setProperty('--dot-hue', hue + 'deg');
+        // vary life so the dots don't all pulse in lockstep
+        d.style.animationDuration = (1.9 + Math.random() * 1.1).toFixed(2) + 's';
         d.addEventListener('animationend', function () { d.remove(); });
         document.body.appendChild(d);
       }, { passive: true });
