@@ -194,15 +194,22 @@
       border-radius: 0.75rem;
     }
 
-    /* "NEW" badge — one solid color, smoothly rotating through the spectrum */
+    /* "NEW" badge — one solid color, rotating the oklch hue (constant L+C, so
+       every hue is equally bright/saturated — no muddy sRGB hue-rotate greens) */
+    @property --new-hue {
+      syntax: "<angle>";
+      inherits: false;
+      initial-value: 0deg;
+    }
     .rainbow-new {
       font-size: 0.85rem;
       font-weight: bold;
-      color: oklch(0.78 0.2 25);
+      color: oklch(0.8 0.17 var(--new-hue));
       animation: rainbow-hue 6s linear infinite;
     }
     @keyframes rainbow-hue {
-      to { filter: hue-rotate(360deg); }
+      from { --new-hue: 0deg; }
+      to   { --new-hue: 360deg; }
     }
     @media (prefers-reduced-motion: reduce) {
       .rainbow-new { animation: none; }
