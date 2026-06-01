@@ -326,13 +326,14 @@
       -webkit-overflow-scrolling: touch;
       padding-bottom: 0.5rem;                /* room for scroll bar if any */
       scrollbar-width: none;                 /* Firefox */
-      /* scroll-shadow: fade left/right based on --fl/--fr set by JS */
+      /* scroll-shadow: fade left/right — animated, softer 28px */
       -webkit-mask-image: linear-gradient(to right,
         transparent 0px, black var(--fl, 0px),
-        black calc(100% - var(--fr, 48px)), transparent 100%);
+        black calc(100% - var(--fr, 28px)), transparent 100%);
       mask-image: linear-gradient(to right,
         transparent 0px, black var(--fl, 0px),
-        black calc(100% - var(--fr, 48px)), transparent 100%);
+        black calc(100% - var(--fr, 28px)), transparent 100%);
+      transition: mask-size 0.35s ease, -webkit-mask-size 0.35s ease;
     }
     .shorts::-webkit-scrollbar { display: none; }  /* Chrome/Safari */
     .shorts > * {
@@ -444,6 +445,11 @@
       color: rgba(204, 204, 204, 0.5);
     }
 
+    /* animatable scroll-fade custom properties */
+    @property --fl { syntax: "<length>"; inherits: false; initial-value: 0px; }
+    @property --fr { syntax: "<length>"; inherits: false; initial-value: 28px; }
+    .shorts { transition: --fl 0.35s ease, --fr 0.35s ease; }
+
     /* gentle rainbow cursor trail — small dots that fade in, pulse a couple of
        times, then fade out; hue walks the spectrum so the trail flows */
     @property --dot-phase {
@@ -451,32 +457,27 @@
       inherits: false;
       initial-value: 0deg;
     }
-    .cursor-dot {
-      position: absolute;   /* anchored to the page, so dots scroll with content */
-      top: 0;
-      left: 0;
-      width: 6px;
-      height: 6px;
-      margin: -3px 0 0 -3px;
-      border-radius: 50%;
+    /* all dots live inside a single container that carries the blend mode — one
+       compositing layer total instead of one per dot (big perf win) */
+    #trail {
+      position: absolute;
+      inset: 0;
       pointer-events: none;
       z-index: 9999;
-      /* --dot-hue is the per-dot base (set in JS); --dot-phase keeps drifting over
-         the dot's life so the color keeps cycling after placement */
-      background: oklch(0.87 0.2 calc(var(--dot-hue) + var(--dot-phase)));
-      /* a wide soft glow + screen blend so each dot lights up the marble behind it
-         with its color, rather than sitting flatly on top */
-      box-shadow: 0 0 22px oklch(0.85 0.2 calc(var(--dot-hue) + var(--dot-phase)) / 0.5),
-                  0 0 9px oklch(0.87 0.2 calc(var(--dot-hue) + var(--dot-phase)) / 0.8),
-                  0 0 3px oklch(0.94 0.15 calc(var(--dot-hue) + var(--dot-phase)) / 0.95);
       mix-blend-mode: screen;
+    }
+    .cursor-dot {
+      position: absolute;
+      top: 0; left: 0;
+      width: 8px; height: 8px;
+      margin: -4px 0 0 -4px;
+      border-radius: 1px;                    /* always square now */
+      pointer-events: none;
+      background: oklch(0.87 0.2 calc(var(--dot-hue) + var(--dot-phase)));
+      /* simplified single-layer glow — cheaper, still lights up the marble */
+      box-shadow: 0 0 10px oklch(0.85 0.2 calc(var(--dot-hue) + var(--dot-phase)) / 0.7);
       animation: dot-life 2.4s ease-out forwards, dot-cycle 2.4s linear forwards;
       will-change: transform, opacity;
-    }
-    /* quantized square variant, mixed into the trail */
-    .cursor-dot.square {
-      border-radius: 1px;
-      width: 8px; height: 8px; margin: -4px 0 0 -4px;
     }
     @keyframes dot-life {
       0%   { opacity: 0;    transform: translate(var(--dot-x), var(--dot-y)) scale(0.2); }
@@ -772,29 +773,67 @@
     (function () {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       if (matchMedia('(pointer: coarse)').matches) return;
-      var lastCell = '', hue = 0, GRID = 26;          // quantized to a grid; one square per cell
-      var live = [];                                  // live dots, capped to avoid lag
+      // single container with the blend mode — one compositing layer for all dots
+      var trail = document.createElement('div');
+      trail.id = 'trail';
+      document.body.appendChild(trail);
+
+      var lastCell = '', hue = 0, GRID = 26;
+      var live = [];
       function spawnDot(x, y) {
-        hue = (hue + 22) % 360;                       // quicker walk across the spectrum
+        hue = (hue + 22) % 360;
         var d = document.createElement('div');
-        d.className = 'cursor-dot square';
+        d.className = 'cursor-dot';
         d.style.setProperty('--dot-x', (x + window.scrollX) + 'px');
         d.style.setProperty('--dot-y', (y + window.scrollY) + 'px');
         d.style.setProperty('--dot-hue', hue + 'deg');
-        d.style.animationDuration = (1.7 + Math.random() * 1.0).toFixed(2) + 's';  // vary life
+        d.style.animationDuration = (1.7 + Math.random() * 1.0).toFixed(2) + 's';
         d.addEventListener('animationend', function () { d.remove(); var i = live.indexOf(d); if (i >= 0) live.splice(i, 1); });
-        document.body.appendChild(d);
+        trail.appendChild(d);
         live.push(d);
-        while (live.length > 48) live.shift().remove();   // cap concurrent dots
+        while (live.length > 48) live.shift().remove();
       }
-      window.addEventListener('pointermove', function (e) {
-        if (e.pointerType && e.pointerType !== 'mouse') return;
-        var gx = Math.round(e.clientX / GRID) * GRID, gy = Math.round(e.clientY / GRID) * GRID;
-        var cell = gx + ',' + gy;
-        if (cell === lastCell) return;                // one square per grid cell
-        lastCell = cell;
-        spawnDot(gx, gy);
-      }, { passive: true });
+
+      // mouse trail (desktop only)
+      if (!matchMedia('(pointer: coarse)').matches) {
+        window.addEventListener('pointermove', function (e) {
+          if (e.pointerType && e.pointerType !== 'mouse') return;
+          var gx = Math.round(e.clientX / GRID) * GRID, gy = Math.round(e.clientY / GRID) * GRID;
+          var cell = gx + ',' + gy;
+          if (cell === lastCell) return;
+          lastCell = cell;
+          spawnDot(gx, gy);
+        }, { passive: true });
+      }
+
+      // mobile ambient trail — a stray walk that occasionally wanders across the page
+      if (matchMedia('(pointer: coarse)').matches) {
+        var ax = window.innerWidth / 2, ay = window.innerHeight * 0.35;
+        var avx = 0, avy = 0;
+        var lastAuto = 0;
+        function autoStep(now) {
+          // drift with brown-noise-ish momentum: small random nudges + gentle centering pull
+          avx += (Math.random() - 0.5) * 18 - avx * 0.06;
+          avy += (Math.random() - 0.5) * 12 - avy * 0.06;
+          ax = Math.max(GRID, Math.min(window.innerWidth - GRID, ax + avx));
+          ay = Math.max(GRID, Math.min(window.innerHeight - GRID + window.scrollY, ay + avy));
+          var gx = Math.round(ax / GRID) * GRID, gy = Math.round(ay / GRID) * GRID;
+          var cell = gx + ',' + gy;
+          if (cell !== lastCell) { lastCell = cell; spawnDot(gx, gy + window.scrollY); }
+        }
+        function scheduleAuto() {
+          // burst of ~18 steps, then sleep 4–9 seconds before the next wander
+          var steps = 0, maxSteps = 18;
+          var iv = setInterval(function () {
+            autoStep();
+            if (++steps >= maxSteps) {
+              clearInterval(iv);
+              setTimeout(scheduleAuto, 4000 + Math.random() * 5000);
+            }
+          }, 60);
+        }
+        setTimeout(scheduleAuto, 2500);   // first wander after page settles
+      }
     })();
   </script>
 
