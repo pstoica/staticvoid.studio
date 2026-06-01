@@ -89,6 +89,8 @@
       letter-spacing: 0.02em;
       position: relative;
       /* same soft oklch rainbow band as the section headers, slowly drifting */
+      /* flat vivid color bands — one lightness across all stops keeps it from
+         reading as a beveled/lit surface */
       background: linear-gradient(95deg,
         oklch(0.88 0.19 calc(var(--title-hue))),
         oklch(0.88 0.19 calc(var(--title-hue) + 70deg)),
@@ -267,6 +269,8 @@
       font-size: 1.5rem;
       font-weight: 700;
       text-align: center;
+      /* flat vivid color bands — one lightness across all stops keeps it from
+         reading as a beveled/lit surface */
       background: linear-gradient(95deg,
         oklch(0.88 0.19 calc(var(--title-hue))),
         oklch(0.88 0.19 calc(var(--title-hue) + 70deg)),
