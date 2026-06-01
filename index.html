@@ -213,7 +213,7 @@
     }
 
     .tagline {
-      margin: 0 0 1.25rem;
+      margin: -0.85rem 0 1.5rem;   /* sit right under the marquee */
       font-size: 0.95rem;
       letter-spacing: 0.03em;
       color: rgba(204, 204, 204, 0.6);
@@ -484,7 +484,7 @@
         <a href="https://senseweave.xyz" style="text-decoration: none;"><span>✨ </span><span style="text-decoration: underline;">senseweave</span></a>
       </div>
       <div>
-        <a href="/tictactoe/" style="text-decoration: none;"><span>⭕ </span><span style="text-decoration: underline;">tic-tac-toe</span></a>
+        <a href="/tictactoe/" style="text-decoration: none;"><span>⭕ </span><span style="text-decoration: underline;">tic•tac•toe</span></a>
       </div>
       <div>
         <span>📹 </span><a class="wip-app" href="https://www.tiktok.com/@patrick_stoica/video/7640289175979248910">video granulator</a> <span class="wip-tag">🚧 wip</span>
@@ -655,7 +655,7 @@
         a._chRaf = requestAnimationFrame(step);
       }
       document.querySelectorAll('.links a').forEach(function (a) {
-        a.addEventListener('pointerenter', function () { ease(a, 0.2, 0.72, 130); });
+        a.addEventListener('pointerenter', function () { ease(a, 0.2, 0.72, 55); });
         a.addEventListener('pointerleave', function () { ease(a, 0, 0.82, 2600); });
       });
     })();
