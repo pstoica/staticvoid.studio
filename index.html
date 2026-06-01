@@ -326,6 +326,13 @@
       -webkit-overflow-scrolling: touch;
       padding-bottom: 0.5rem;                /* room for scroll bar if any */
       scrollbar-width: none;                 /* Firefox */
+      /* scroll-shadow: fade left/right based on --fl/--fr set by JS */
+      -webkit-mask-image: linear-gradient(to right,
+        transparent 0px, black var(--fl, 0px),
+        black calc(100% - var(--fr, 48px)), transparent 100%);
+      mask-image: linear-gradient(to right,
+        transparent 0px, black var(--fl, 0px),
+        black calc(100% - var(--fr, 48px)), transparent 100%);
     }
     .shorts::-webkit-scrollbar { display: none; }  /* Chrome/Safari */
     .shorts > * {
@@ -340,6 +347,8 @@
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         overflow-x: visible;
+        mask-image: none;
+        -webkit-mask-image: none;
       }
       .shorts > * {
         flex: unset;
@@ -741,6 +750,21 @@
           f.setAttribute('allowfullscreen', '');
           el.replaceWith(f);
         });
+      });
+    })();
+
+    // faded edges on horizontal scroll rows — update mask when scrolled
+    (function () {
+      var FADE = '48px';
+      function update(el) {
+        var atLeft  = el.scrollLeft < 4;
+        var atRight = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4;
+        el.style.setProperty('--fl', atLeft  ? '0px' : FADE);
+        el.style.setProperty('--fr', atRight ? '0px' : FADE);
+      }
+      document.querySelectorAll('.shorts').forEach(function (el) {
+        update(el);
+        el.addEventListener('scroll', function () { update(el); }, { passive: true });
       });
     })();
 
