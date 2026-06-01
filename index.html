@@ -170,17 +170,10 @@
     .links a {
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
       color: oklch(var(--ll) var(--chroma) calc(var(--link-cycle) + var(--lh, 0)));
-      --chroma: 0; --ll: 0.82;                           /* light gray at rest */
-      transition: --chroma 2.6s ease, --ll 2.6s ease, filter 0.2s ease;  /* linger, then fade to gray */
+      --chroma: 0; --ll: 0.82;                           /* gray at rest; JS eases these on hover */
+      transition: filter 0.2s ease;
     }
-    /* .lit is toggled by JS on pointerenter/leave — more reliable than :hover for
-       these registered-custom-property transitions. transition:none = instant
-       colorize; removing .lit falls back to the base 2.6s transition (slow fade) */
-    .links a:hover, .links a.lit {
-      --chroma: 0.2; --ll: 0.72;                         /* vivid + dark enough that pale hues don't read white */
-      filter: none;                                      /* drop the global brightness(1.2) that whitened it */
-      transition: none;
-    }
+    .links a:hover { filter: none; }                     /* drop the global brightness(1.2) wash */
     @media (prefers-reduced-motion: reduce) {
       .links { animation: none; }                        /* hover = static per-link hue */
     }
@@ -628,12 +621,28 @@
   </div>
 
   <script>
-    // light up nav links on real pointer hover (reliable where :hover + registered
-    // custom-property transitions are flaky, e.g. under DevTools force-state)
+    // light up nav links on hover by easing --chroma/--ll in JS (CSS transitions on
+    // registered custom props are unreliable when the transition value changes
+    // between states). fast colorize in, slow fade-out for the linger.
     (function () {
+      function ease(a, toCh, toLl, dur) {
+        cancelAnimationFrame(a._chRaf || 0);
+        var fromCh = parseFloat(getComputedStyle(a).getPropertyValue('--chroma')) || 0;
+        var fromLl = parseFloat(getComputedStyle(a).getPropertyValue('--ll')) || 0.82;
+        var t0 = null;
+        function step(now) {
+          if (t0 === null) t0 = now;
+          var p = Math.min(1, (now - t0) / dur);
+          var k = 1 - (1 - p) * (1 - p);          // ease-out
+          a.style.setProperty('--chroma', (fromCh + (toCh - fromCh) * k).toFixed(3));
+          a.style.setProperty('--ll', (fromLl + (toLl - fromLl) * k).toFixed(3));
+          if (p < 1) a._chRaf = requestAnimationFrame(step);
+        }
+        a._chRaf = requestAnimationFrame(step);
+      }
       document.querySelectorAll('.links a').forEach(function (a) {
-        a.addEventListener('pointerenter', function () { a.classList.add('lit'); });
-        a.addEventListener('pointerleave', function () { a.classList.remove('lit'); });
+        a.addEventListener('pointerenter', function () { ease(a, 0.2, 0.72, 130); });
+        a.addEventListener('pointerleave', function () { ease(a, 0, 0.82, 2600); });
       });
     })();
 
