@@ -447,15 +447,10 @@
       animation: dot-life 2.4s ease-out forwards, dot-cycle 2.4s linear forwards;
       will-change: transform, opacity;
     }
-    /* quantized square variant + outlined (stroke) variant, mixed into the trail */
+    /* quantized square variant, mixed into the trail */
     .cursor-dot.square {
       border-radius: 1px;
       width: 8px; height: 8px; margin: -4px 0 0 -4px;
-    }
-    .cursor-dot.stroke {
-      width: 10px; height: 10px; margin: -5px 0 0 -5px;
-      background: transparent;
-      border: 1.6px solid oklch(0.92 0.18 calc(var(--dot-hue) + var(--dot-phase)));
     }
     @keyframes dot-life {
       0%   { opacity: 0;    transform: translate(var(--dot-x), var(--dot-y)) scale(0.2); }
@@ -743,9 +738,7 @@
       function spawnDot(x, y) {
         hue = (hue + 22) % 360;                       // quicker walk across the spectrum
         var d = document.createElement('div');
-        var square = mode === 'grid';
-        var stroke = Math.random() < 0.4;             // mix filled + outlined dots
-        d.className = 'cursor-dot' + (square ? ' square' : '') + (stroke ? ' stroke' : '');
+        d.className = 'cursor-dot' + (mode === 'grid' ? ' square' : '');
         d.style.setProperty('--dot-x', (x + window.scrollX) + 'px');
         d.style.setProperty('--dot-y', (y + window.scrollY) + 'px');
         d.style.setProperty('--dot-hue', hue + 'deg');
