@@ -447,6 +447,16 @@
       animation: dot-life 2.4s ease-out forwards, dot-cycle 2.4s linear forwards;
       will-change: transform, opacity;
     }
+    /* quantized square variant + outlined (stroke) variant, mixed into the trail */
+    .cursor-dot.square {
+      border-radius: 1px;
+      width: 8px; height: 8px; margin: -4px 0 0 -4px;
+    }
+    .cursor-dot.stroke {
+      width: 10px; height: 10px; margin: -5px 0 0 -5px;
+      background: transparent;
+      border: 1.6px solid oklch(0.92 0.18 calc(var(--dot-hue) + var(--dot-phase)));
+    }
     @keyframes dot-life {
       0%   { opacity: 0;    transform: translate(var(--dot-x), var(--dot-y)) scale(0.2); }
       12%  { opacity: 1;    transform: translate(var(--dot-x), var(--dot-y)) scale(1); }
@@ -728,27 +738,42 @@
       if (matchMedia('(pointer: coarse)').matches) return;
       var px = null, py = null, pt = null;            // previous event (for speed)
       var sx = null, sy = null, hue = 0;              // last spawn point
+      var mode = 'free', lastCell = '', GRID = 26;    // 'free' = freehand circles, 'grid' = quantized squares
+      function spawn(x, y) {
+        hue = (hue + 22) % 360;                       // quicker walk across the spectrum
+        var d = document.createElement('div');
+        var square = mode === 'grid';
+        var stroke = Math.random() < 0.4;             // mix filled + outlined dots
+        d.className = 'cursor-dot' + (square ? ' square' : '') + (stroke ? ' stroke' : '');
+        d.style.setProperty('--dot-x', (x + window.scrollX) + 'px');
+        d.style.setProperty('--dot-y', (y + window.scrollY) + 'px');
+        d.style.setProperty('--dot-hue', hue + 'deg');
+        d.style.animationDuration = (1.7 + Math.random() * 1.0).toFixed(2) + 's';  // vary life
+        d.addEventListener('animationend', function () { d.remove(); });
+        document.body.appendChild(d);
+      }
       window.addEventListener('pointermove', function (e) {
         if (e.pointerType && e.pointerType !== 'mouse') return;
         var now = (window.performance && performance.now) ? performance.now() : Date.now();
         var x = e.clientX, y = e.clientY;
         if (px === null) { px = x; py = y; pt = now; sx = x; sy = y; return; }
-        var speed = Math.hypot(x - px, y - py) / Math.max(1, now - pt);   // px per ms
+        var gap = now - pt;
+        var speed = Math.hypot(x - px, y - py) / Math.max(1, gap);   // px per ms
+        // each new stroke (after a pause) sometimes flips into quantized-square mode
+        if (gap > 350) { mode = Math.random() < 0.32 ? 'grid' : 'free'; lastCell = ''; }
         px = x; py = y; pt = now;
-        var spacing = Math.max(5, 15 - speed * 8);    // faster mouse -> denser dots
-        var sdx = x - sx, sdy = y - sy;
-        if (sdx * sdx + sdy * sdy < spacing * spacing) return;
-        sx = x; sy = y;
-        hue = (hue + 22) % 360;                       // quicker walk across the spectrum
-        var d = document.createElement('div');
-        d.className = 'cursor-dot';
-        d.style.setProperty('--dot-x', (x + window.scrollX) + 'px');
-        d.style.setProperty('--dot-y', (y + window.scrollY) + 'px');
-        d.style.setProperty('--dot-hue', hue + 'deg');
-        // vary life so the dots don't all pulse in lockstep
-        d.style.animationDuration = (1.7 + Math.random() * 1.0).toFixed(2) + 's';
-        d.addEventListener('animationend', function () { d.remove(); });
-        document.body.appendChild(d);
+        if (mode === 'grid') {
+          var gx = Math.round(x / GRID) * GRID, gy = Math.round(y / GRID) * GRID;
+          var cell = gx + ',' + gy;
+          if (cell === lastCell) return;              // one square per grid cell
+          lastCell = cell;
+          spawn(gx, gy);
+        } else {
+          var spacing = Math.max(5, 15 - speed * 8);  // faster mouse -> denser dots
+          if ((x - sx) * (x - sx) + (y - sy) * (y - sy) < spacing * spacing) return;
+          sx = x; sy = y;
+          spawn(x, y);
+        }
       }, { passive: true });
     })();
   </script>
