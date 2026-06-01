@@ -28,7 +28,7 @@
 
   #hud { position:absolute; z-index:3; top:14px; left:14px; right:14px;
     display:flex; flex-direction:column; gap:8px; align-items:flex-start; pointer-events:none; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start; }
   .panel { pointer-events:auto; display:flex; align-items:stretch;
     background:var(--glass); border:1px solid var(--line); border-radius:9px;
     backdrop-filter:blur(14px) saturate(1.2);
@@ -38,17 +38,20 @@
   /* grouped HUD — each section is a labeled card whose controls wrap, so the
      panel reads as deliberate groups (Play / Sound / Shape / FX) instead of one
      sprawling full-width strip */
-  .group { pointer-events:auto; display:flex; flex-direction:column; gap:6px;
-    width:288px; padding:8px 10px 10px;
+  .group { pointer-events:auto; display:flex; flex-direction:column; gap:5px;
+    width:206px; padding:7px 9px 9px;
     background:var(--glass); border:1px solid var(--line); border-radius:11px;
     backdrop-filter:blur(14px) saturate(1.2);
     box-shadow:0 1px 0 rgba(255,255,255,.04) inset; }
   .group-title { font-size:8.5px; font-weight:700; letter-spacing:.22em;
     text-transform:uppercase; color:var(--accent); opacity:.72; padding-left:3px; }
   .group-body { display:flex; flex-wrap:wrap; gap:4px; }
-  .group-body .ctrl { padding:5px 9px; border-radius:8px;
+  .group-body .ctrl { padding:5px 8px; border-radius:8px;
     border-left:none; background:rgba(255,255,255,.035); }
   .group-body .ctrl button { padding:0; }   /* the chip already supplies the box */
+  /* sliders take a full row and stretch to fill it, so no dead space on the right */
+  .group-body .ctrl:has(input[type=range]){ flex:1 1 100%; min-width:0; }
+  .group-body .ctrl:has(input[type=range]) input[type=range]{ flex:1 1 0; width:auto; min-width:0; }
   label { font-size:9.5px; text-transform:uppercase; letter-spacing:.09em;
     color:var(--muted); margin:0; white-space:nowrap; }
   select, button { background:transparent; color:var(--ink); border:none;
@@ -177,8 +180,6 @@
           <div class="ctrl"><label>Vol</label><input id="vol" type="range" min="0" max="1" step="0.01" value="0.5"><span class="val" id="volVal">0.50</span></div>
         </div>
       </div>
-    </div>
-    <div class="row">
       <div class="group">
         <div class="group-title">Shape</div>
         <div class="group-body">
