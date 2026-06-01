@@ -195,7 +195,13 @@
     .links > div:nth-of-type(10) { --lh: 35; }   /* instagram */
     .links > div:nth-of-type(11) { --lh: 5; }    /* youtube */
     /* video granulator (div 8) is WIP — grayed out, no link yet */
-    .wip-app { color: rgba(204, 204, 204, 0.4); }
+    /* video granulator is linked but WIP — stays gray even as a link / on hover */
+    .links a.wip-app,
+    .links a.wip-app:hover,
+    .links a.wip-app.lit {
+      color: rgba(204, 204, 204, 0.4);
+      text-decoration: none;
+    }
     .wip-tag {
       font-size: 0.85rem;
       font-weight: bold;
@@ -474,7 +480,7 @@
         <a href="/tictactoe/" style="text-decoration: none;"><span>⭕ </span><span style="text-decoration: underline;">tic-tac-toe</span></a>
       </div>
       <div>
-        <span>📹 </span><span class="wip-app">video granulator</span> <span class="wip-tag">🚧 wip</span>
+        <span>📹 </span><a class="wip-app" href="https://www.tiktok.com/@patrick_stoica/video/7640289175979248910">video granulator</a> <span class="wip-tag">🚧 wip</span>
       </div>
       <br />
       <div>
