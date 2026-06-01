@@ -35,6 +35,20 @@
     box-shadow:0 1px 0 rgba(255,255,255,.04) inset; }
   .ctrl { display:flex; align-items:center; gap:8px; padding:6px 11px; }
   .ctrl:not(:first-child){ border-left:1px solid var(--line); }
+  /* grouped HUD — each section is a labeled card whose controls wrap, so the
+     panel reads as deliberate groups (Play / Sound / Shape / FX) instead of one
+     sprawling full-width strip */
+  .group { pointer-events:auto; display:flex; flex-direction:column; gap:6px;
+    width:288px; padding:8px 10px 10px;
+    background:var(--glass); border:1px solid var(--line); border-radius:11px;
+    backdrop-filter:blur(14px) saturate(1.2);
+    box-shadow:0 1px 0 rgba(255,255,255,.04) inset; }
+  .group-title { font-size:8.5px; font-weight:700; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--accent); opacity:.72; padding-left:3px; }
+  .group-body { display:flex; flex-wrap:wrap; gap:4px; }
+  .group-body .ctrl { padding:5px 9px; border-radius:8px;
+    border-left:none; background:rgba(255,255,255,.035); }
+  .group-body .ctrl button { padding:0; }   /* the chip already supplies the box */
   label { font-size:9.5px; text-transform:uppercase; letter-spacing:.09em;
     color:var(--muted); margin:0; white-space:nowrap; }
   select, button { background:transparent; color:var(--ink); border:none;
@@ -138,56 +152,64 @@
 
   <div id="hud">
     <div class="row">
-      <div class="panel">
-        <div class="ctrl"><label>Mode</label>
-          <select id="modeSel">
-            <option value="chord" selected>Chord</option>
-            <option value="omni">Omnichord</option>
-            <option value="free">Free scale</option>
-          </select>
+      <div class="group">
+        <div class="group-title">Play</div>
+        <div class="group-body">
+          <div class="ctrl"><label>Mode</label>
+            <select id="modeSel">
+              <option value="chord" selected>Chord</option>
+              <option value="omni">Omnichord</option>
+              <option value="free">Free scale</option>
+            </select>
+          </div>
+          <div class="ctrl"><label>Key</label><select id="keySel"></select></div>
+          <div class="ctrl" id="scalePanel" style="display:none"><label>Scale</label><select id="scaleSel"></select></div>
+          <div class="ctrl"><button id="lockBtn">Lock chord</button></div>
+          <div class="ctrl"><button id="editBtn">Move panels</button></div>
         </div>
-        <div class="ctrl"><button id="lockBtn">Lock chord</button></div>
-        <div class="ctrl"><button id="editBtn">Move panels</button></div>
       </div>
-      <div class="panel">
-        <div class="ctrl"><label>Key</label><select id="keySel"></select></div>
-        <div class="ctrl" id="scalePanel" style="display:none"><label>Scale</label><select id="scaleSel"></select></div>
-      </div>
-      <div class="panel">
-        <div class="ctrl"><label id="voiceALabel">Voice</label><div class="seg" id="voiceA"></div></div>
-        <div class="ctrl" id="voiceBPanel" style="display:none"><label>Right</label><div class="seg" id="voiceB"></div></div>
-        <div class="ctrl"><label>MIDI</label><select id="midiSel"><option value="">Off</option></select></div>
-      </div>
-      <div class="panel">
-        <div class="ctrl"><label>Strum</label>
-          <select id="orientSel">
-            <option value="vertical">Vertical</option>
-            <option value="horizontal" selected>Horizontal</option>
-          </select>
+      <div class="group">
+        <div class="group-title">Sound</div>
+        <div class="group-body">
+          <div class="ctrl"><label id="voiceALabel">Voice</label><div class="seg" id="voiceA"></div></div>
+          <div class="ctrl" id="voiceBPanel" style="display:none"><label>Right</label><div class="seg" id="voiceB"></div></div>
+          <div class="ctrl"><label>MIDI</label><select id="midiSel"><option value="">Off</option></select></div>
+          <div class="ctrl"><label>Vol</label><input id="vol" type="range" min="0" max="1" step="0.01" value="0.5"><span class="val" id="volVal">0.50</span></div>
         </div>
-        <div class="ctrl"><label>Layout</label>
-          <select id="layoutSel">
-            <option value="4th" selected>4th</option>
-            <option value="5th">5th</option>
-            <option value="oct">Octave</option>
-            <option value="cont">Continue</option>
-          </select>
-        </div>
-        <div class="ctrl"><label>Base</label><select id="baseSel"></select></div>
       </div>
     </div>
     <div class="row">
-      <div class="panel">
-        <div class="ctrl"><label>Octaves</label><input id="octSel" type="range" min="1" max="5" step="1" value="3"><span class="val" id="octVal">3</span></div>
-        <div class="ctrl"><label>Lanes</label><input id="colSel" type="range" min="1" max="8" step="1" value="1"><span class="val" id="colVal">1</span></div>
-        <div class="ctrl"><label>Stacks</label><input id="stackSel" type="range" min="1" max="4" step="1" value="4"><span class="val" id="stackVal">4</span></div>
-        <div class="ctrl"><label>Vol</label><input id="vol" type="range" min="0" max="1" step="0.01" value="0.5"><span class="val" id="volVal">0.50</span></div>
+      <div class="group">
+        <div class="group-title">Shape</div>
+        <div class="group-body">
+          <div class="ctrl"><label>Strum</label>
+            <select id="orientSel">
+              <option value="vertical">Vertical</option>
+              <option value="horizontal" selected>Horizontal</option>
+            </select>
+          </div>
+          <div class="ctrl"><label>Layout</label>
+            <select id="layoutSel">
+              <option value="4th" selected>4th</option>
+              <option value="5th">5th</option>
+              <option value="oct">Octave</option>
+              <option value="cont">Continue</option>
+            </select>
+          </div>
+          <div class="ctrl"><label>Base</label><select id="baseSel"></select></div>
+          <div class="ctrl"><label>Octaves</label><input id="octSel" type="range" min="1" max="5" step="1" value="3"><span class="val" id="octVal">3</span></div>
+          <div class="ctrl"><label>Lanes</label><input id="colSel" type="range" min="1" max="8" step="1" value="1"><span class="val" id="colVal">1</span></div>
+          <div class="ctrl"><label>Stacks</label><input id="stackSel" type="range" min="1" max="4" step="1" value="4"><span class="val" id="stackVal">4</span></div>
+        </div>
       </div>
-      <div class="panel">
-        <div class="ctrl"><label>Reverb</label><input id="revSel" type="range" min="0" max="0.5" step="0.01" value="0.10"><span class="val" id="revVal">0.10</span></div>
-        <div class="ctrl"><label>Delay</label><input id="dlySel" type="range" min="0" max="0.5" step="0.01" value="0.14"><span class="val" id="dlyVal">0.14</span></div>
-        <div class="ctrl"><label>Time</label><input id="timeSel" type="range" min="0.05" max="0.8" step="0.01" value="0.28"><span class="val" id="timeVal">0.28</span></div>
-        <div class="ctrl"><label>Echo</label><input id="fbSel" type="range" min="0" max="0.6" step="0.01" value="0.22"><span class="val" id="fbVal">0.22</span></div>
+      <div class="group">
+        <div class="group-title">FX</div>
+        <div class="group-body">
+          <div class="ctrl"><label>Reverb</label><input id="revSel" type="range" min="0" max="0.5" step="0.01" value="0.10"><span class="val" id="revVal">0.10</span></div>
+          <div class="ctrl"><label>Delay</label><input id="dlySel" type="range" min="0" max="0.5" step="0.01" value="0.14"><span class="val" id="dlyVal">0.14</span></div>
+          <div class="ctrl"><label>Time</label><input id="timeSel" type="range" min="0.05" max="0.8" step="0.01" value="0.28"><span class="val" id="timeVal">0.28</span></div>
+          <div class="ctrl"><label>Echo</label><input id="fbSel" type="range" min="0" max="0.6" step="0.01" value="0.22"><span class="val" id="fbVal">0.22</span></div>
+        </div>
       </div>
     </div>
   </div>
