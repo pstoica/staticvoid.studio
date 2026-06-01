@@ -100,11 +100,11 @@
       margin-inline: auto;
       --spread: 26deg;             /* default to the per-letter rainbow wave */
       transition: --spread 0.7s ease;
-      animation: title-hue 10s linear infinite;
+      /* --title-hue is driven by JS (rAF) so hover can ease the cycle speed
+         smoothly; the spread (fan width) eases via the transition above */
     }
     h1.title:hover {
-      --spread: 34deg;             /* hover: fan a touch wider... */
-      animation-duration: 2s;      /* ...and spin the cycle faster */
+      --spread: 34deg;             /* hover: fan a touch wider (eased) */
     }
     h1.title span {
       color: oklch(0.85 0.18 calc(var(--title-hue) + var(--i, 0) * var(--spread)));
@@ -562,6 +562,27 @@
       }
       t.textContent = '';
       t.appendChild(frag);
+    })();
+
+    // drive the title hue from JS so hover can EASE the cycle speed up/down
+    // instead of jumping (an animation-duration change snaps the cycle position)
+    (function () {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      var t = document.querySelector('h1.title');
+      if (!t) return;
+      var SLOW = 36 / 1000, FAST = 170 / 1000;   // deg per ms (10s vs ~2.1s cycle)
+      var hue = 0, speed = SLOW, target = SLOW, last = null;
+      t.addEventListener('pointerenter', function () { target = FAST; });
+      t.addEventListener('pointerleave', function () { target = SLOW; });
+      function tick(now) {
+        if (last === null) last = now;
+        var dt = now - last; last = now;
+        speed += (target - speed) * Math.min(1, dt / 130);   // ease speed toward target
+        hue = (hue + speed * dt) % 360;
+        t.style.setProperty('--title-hue', hue + 'deg');
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
     })();
 
     // gentle rainbow cursor trail (mouse only; skipped for touch + reduced motion)
