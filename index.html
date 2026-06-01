@@ -359,9 +359,20 @@
         overflow-x: visible;
         mask-image: none;
         -webkit-mask-image: none;
+        scroll-snap-type: none;
       }
       .shorts > * {
         flex: unset;
+        scroll-snap-align: none;
+      }
+      /* kill the mobile centering spacers on desktop (display:none removes from flow
+         in both flex and grid, so they won't be ghost items) */
+      .shorts::before, .shorts::after,
+      .shorts--wrap::before, .shorts--wrap::after,
+      .shorts--pair::before, .shorts--pair::after {
+        content: none;
+        display: none;
+        flex: none;
       }
       /* a two-clip row: same column width as the 3-up rows, but centered */
       .shorts--pair {
