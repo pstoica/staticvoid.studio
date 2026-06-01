@@ -174,7 +174,7 @@
       transition: --chroma 2.6s ease, --ll 2.6s ease, filter 0.2s ease;  /* linger, then fade to gray */
     }
     .links a:hover {
-      --chroma: 0.2; --ll: 0.76;                         /* vivid + a touch darker so it isn't washed */
+      --chroma: 0.2; --ll: 0.72;                         /* vivid + dark enough that pale hues don't read white */
       filter: none;                                      /* drop the global brightness(1.2) that whitened it */
       transition: --chroma 0.12s ease, --ll 0.12s ease, filter 0.2s ease;
     }
@@ -326,6 +326,18 @@
     }
     @media (prefers-reduced-motion: reduce) {
       .section-title { animation: none; }
+    }
+    .section-head {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.2rem;
+    }
+    .section-sub {
+      margin: 0;
+      font-size: 0.8rem;
+      color: rgba(204, 204, 204, 0.5);
+      text-align: center;
     }
 
     /* a captioned clip: the player with its app name beneath */
@@ -529,7 +541,10 @@
     </div>
 
     <div class="videos">
-      <h2 class="section-title" style="animation-delay:-3.3s">livecoding</h2>
+      <div class="section-head">
+        <h2 class="section-title" style="animation-delay:-3.3s">livecoding</h2>
+        <p class="section-sub">strudel, tidal, and hydra</p>
+      </div>
       <div class="shorts shorts--wrap">
         <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7562682507280338189?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
           title="TikTok video player" frameborder="0"
