@@ -93,7 +93,12 @@
          multi-hue gradient always shades, regardless of the oklch L value.) */
       color: oklch(0.85 0.18 var(--title-hue));
       -webkit-text-fill-color: oklch(0.85 0.18 var(--title-hue));
+      width: fit-content;          /* so only the text is the hover target */
+      margin-inline: auto;
       animation: title-hue 10s linear infinite;
+    }
+    h1.title:hover {
+      animation-duration: 2s;      /* hover to spin the colors faster */
     }
 
     h1.title::before {
