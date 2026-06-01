@@ -738,7 +738,7 @@
       if (matchMedia('(pointer: coarse)').matches) return;
       var px = null, py = null, pt = null;            // previous event (for speed)
       var sx = null, sy = null, hue = 0;              // last spawn point
-      var mode = 'free', lastCell = '', GRID = 26;    // 'free' = freehand circles, 'grid' = quantized squares
+      var mode = 'free', lastCell = '', lastRoll = 0, GRID = 26;    // 'free' = freehand circles, 'grid' = quantized squares
       function spawn(x, y) {
         hue = (hue + 22) % 360;                       // quicker walk across the spectrum
         var d = document.createElement('div');
@@ -759,8 +759,9 @@
         if (px === null) { px = x; py = y; pt = now; sx = x; sy = y; return; }
         var gap = now - pt;
         var speed = Math.hypot(x - px, y - py) / Math.max(1, gap);   // px per ms
-        // each new stroke (after a pause) sometimes flips into quantized-square mode
-        if (gap > 350) { mode = Math.random() < 0.32 ? 'grid' : 'free'; lastCell = ''; }
+        // flip between freehand circles and quantized squares often (every ~450ms
+        // of movement, or on a pause)
+        if (gap > 350 || now - lastRoll > 450) { mode = Math.random() < 0.45 ? 'grid' : 'free'; lastRoll = now; lastCell = ''; }
         px = x; py = y; pt = now;
         if (mode === 'grid') {
           var gx = Math.round(x / GRID) * GRID, gy = Math.round(y / GRID) * GRID;
