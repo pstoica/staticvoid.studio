@@ -811,14 +811,32 @@
         gridSpawn(e.clientX + window.scrollX, e.clientY + window.scrollY);
       }, { passive: true });
 
-      // tap burst: scatter squares around the tap point (works in device emulator too)
+      // tap: stamp a random symmetrical pixel-sprite at the tap point
+      var SPRITES = [
+        // plus
+        [[0,-1],[0,1],[-1,0],[1,0],[0,0]],
+        // diamond ring
+        [[0,-1],[0,1],[-1,0],[1,0]],
+        // X
+        [[-1,-1],[1,-1],[-1,1],[1,1],[0,0]],
+        // fat plus / small square ring
+        [[0,-1],[0,1],[-1,0],[1,0],[0,-2],[0,2]],
+        // asterisk (+ and X)
+        [[0,-1],[0,1],[-1,0],[1,0],[-1,-1],[1,-1],[-1,1],[1,1]],
+        // arrow up
+        [[0,-2],[-1,-1],[0,-1],[1,-1],[0,0]],
+        // tiny 3-tall pillar
+        [[0,-2],[0,-1],[0,0],[0,1]],
+        // heart-ish
+        [[-1,-1],[1,-1],[-2,0],[-1,0],[0,0],[1,0],[2,0],[-1,1],[0,1],[1,1],[0,2]],
+      ];
       window.addEventListener('pointerdown', function (e) {
         if (e.pointerType === 'mouse') return;
         var cx = e.clientX + window.scrollX, cy = e.clientY + window.scrollY;
-        for (var i = 0; i < 9; i++) {
-          var ang = Math.random() * 6.2832, r = Math.random() * GRID * 2.5;
-          gridSpawn(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r);
-        }
+        var sprite = SPRITES[Math.floor(Math.random() * SPRITES.length)];
+        sprite.forEach(function (off) {
+          gridSpawn(cx + off[0] * GRID, cy + off[1] * GRID);
+        });
       }, { passive: true });
 
       // ambient trail — stray walk that wanders every few seconds (mobile + desktop)
