@@ -161,8 +161,8 @@
       <div class="panel">
         <div class="ctrl"><label>Strum</label>
           <select id="orientSel">
-            <option value="vertical" selected>Vertical</option>
-            <option value="horizontal">Horizontal</option>
+            <option value="vertical">Vertical</option>
+            <option value="horizontal" selected>Horizontal</option>
           </select>
         </div>
         <div class="ctrl"><label>Layout</label>
@@ -287,7 +287,7 @@ NOTE_NAMES.forEach((n,i)=>{ const o=document.createElement("option"); o.value=i;
 Object.keys(SCALES).forEach(s=>{ const o=document.createElement("option"); o.value=s; o.textContent=s; scaleSel.appendChild(o); });
 [1,2,3,4].forEach(o=>{ const e=document.createElement("option"); e.value=o; e.textContent="C"+o; if(o===3)e.selected=true; baseSel.appendChild(e); });
 
-const cfg = { orientation:"vertical", baseOctave:3, octavesChord:3, octavesFree:3, colsChord:1, colsFree:4, layoutChord:"oct", layoutFree:"4th", extRows:3,
+const cfg = { orientation:"horizontal", baseOctave:3, octavesChord:3, octavesFree:3, colsChord:1, colsFree:4, layoutChord:"oct", layoutFree:"4th", extRows:3,
               reverb:0.10, delayWet:0.14, delayTime:0.28, delayFb:0.22,
               voiceChord:"Keys", voiceFreeL:"Keys", voiceFreeR:"Pad" };   // voices are per-mode
 orientSel.addEventListener("change", ()=> cfg.orientation = orientSel.value);
