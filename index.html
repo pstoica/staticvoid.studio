@@ -274,6 +274,47 @@
       border-radius: 0.75rem;
     }
 
+    /* lightweight poster facade — shows the thumbnail; the heavy TikTok iframe is
+       only loaded on tap (huge win on mobile, where 20 iframes load black + slow) */
+    .facade {
+      display: block;
+      border: 0;
+      padding: 0;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      background-color: #0e0e12;
+      background-size: cover;
+      background-position: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .facade-play {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.42);
+      backdrop-filter: blur(2px);
+      transition: background 0.15s ease, transform 0.15s ease;
+    }
+    .facade-play::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-40%, -50%);
+      border-style: solid;
+      border-width: 9px 0 9px 15px;
+      border-color: transparent transparent transparent rgba(255, 255, 255, 0.95);
+    }
+    .facade:hover .facade-play {
+      background: rgba(0, 0, 0, 0.6);
+      transform: translate(-50%, -50%) scale(1.07);
+    }
+
     /* the vertical clips (YouTube short + TikToks) stack on mobile, sit in a
        3-column row on tablet/desktop */
     .shorts {
@@ -513,45 +554,27 @@
       <h2 class="section-title">apps</h2>
       <div class="shorts shorts--wrap">
         <figure class="clip">
-          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7611012088848256269?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-            title="TikTok video player" frameborder="0"
-            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-            allowfullscreen></iframe>
+          <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7611012088848256269?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7611012088848256269.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
           <figcaption class="clip-cap" style="color:oklch(0.8 0.07 30)"><a href="https://orbitalharp.com">orbital harp</a></figcaption>
         </figure>
         <figure class="clip">
-          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7556472061347073294?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-            title="TikTok video player" frameborder="0"
-            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-            allowfullscreen></iframe>
+          <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7556472061347073294?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7556472061347073294.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
           <figcaption class="clip-cap" style="color:oklch(0.8 0.07 155)"><a href="https://senseweave.xyz">senseweave</a><span class="clip-note">♪ music by me</span></figcaption>
         </figure>
         <figure class="clip">
-          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7552765766282513677?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-            title="TikTok video player" frameborder="0"
-            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-            allowfullscreen></iframe>
+          <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7552765766282513677?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7552765766282513677.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
           <figcaption class="clip-cap" style="color:oklch(0.8 0.07 155)"><a href="https://senseweave.xyz">senseweave</a><span class="clip-note">♪ music by me</span></figcaption>
         </figure>
         <figure class="clip">
-          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7640954015458659598?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-            title="TikTok video player" frameborder="0"
-            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-            allowfullscreen></iframe>
+          <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7640954015458659598?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7640954015458659598.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
           <figcaption class="clip-cap" style="color:oklch(0.8 0.07 265)">video granulator</figcaption>
         </figure>
         <figure class="clip">
-          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7641796131873148174?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-            title="TikTok video player" frameborder="0"
-            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-            allowfullscreen></iframe>
+          <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7641796131873148174?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7641796131873148174.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
           <figcaption class="clip-cap" style="color:oklch(0.8 0.07 265)">video granulator</figcaption>
         </figure>
         <figure class="clip">
-          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7645457832401227022?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-            title="TikTok video player" frameborder="0"
-            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-            allowfullscreen></iframe>
+          <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7645457832401227022?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7645457832401227022.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
           <figcaption class="clip-cap" style="color:oklch(0.8 0.07 320)"><a href="/omnichord/">wave omnichord</a></figcaption>
         </figure>
       </div>
@@ -563,74 +586,32 @@
         <p class="section-sub">strudel, tidal, and hydra</p>
       </div>
       <div class="shorts shorts--wrap">
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7562682507280338189?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7567180191869521166?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7553112395581836599?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7551168272708766990?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7547929500118551821?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7547179622337645837?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
+        <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7562682507280338189?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7562682507280338189.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
+        <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7567180191869521166?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7567180191869521166.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
+        <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7553112395581836599?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7553112395581836599.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
+        <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7551168272708766990?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7551168272708766990.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
+        <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7547929500118551821?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7547929500118551821.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
+        <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7547179622337645837?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7547179622337645837.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
       </div>
     </div>
 
     <div class="videos">
       <h2 class="section-title" style="animation-delay:-6.7s">juggling</h2>
       <div class="shorts shorts--pair">
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7625866999666642189?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7626839235735129358?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
+        <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7625866999666642189?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7625866999666642189.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
+        <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7626839235735129358?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7626839235735129358.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
       </div>
     </div>
 
     <div class="videos">
       <h2 class="section-title" style="animation-delay:-1.7s">painting</h2>
       <div class="shorts">
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7523973367901195533?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
-        <iframe class="tiktok-video mute-embed" src="https://www.tiktok.com/player/v1/7491059295061101870?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
-        <iframe class="tiktok-video mute-embed" src="https://www.tiktok.com/player/v1/7448393875313495338?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
-        <iframe class="tiktok-video mute-embed" src="https://www.tiktok.com/player/v1/7517732441625267511?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
-        <iframe class="tiktok-video mute-embed" src="https://www.tiktok.com/player/v1/7528129579429416206?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
-        <iframe class="tiktok-video mute-embed" src="https://www.tiktok.com/player/v1/7465189271180184874?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
-          title="TikTok video player" frameborder="0"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          allowfullscreen></iframe>
+        <button class="tiktok-video facade" type="button" data-src="https://www.tiktok.com/player/v1/7523973367901195533?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7523973367901195533.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
+        <button class="tiktok-video facade mute-embed" type="button" data-src="https://www.tiktok.com/player/v1/7491059295061101870?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7491059295061101870.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
+        <button class="tiktok-video facade mute-embed" type="button" data-src="https://www.tiktok.com/player/v1/7448393875313495338?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7448393875313495338.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
+        <button class="tiktok-video facade mute-embed" type="button" data-src="https://www.tiktok.com/player/v1/7517732441625267511?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7517732441625267511.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
+        <button class="tiktok-video facade mute-embed" type="button" data-src="https://www.tiktok.com/player/v1/7528129579429416206?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7528129579429416206.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
+        <button class="tiktok-video facade mute-embed" type="button" data-src="https://www.tiktok.com/player/v1/7465189271180184874?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0" style="background-image:url(/thumbs/7465189271180184874.jpg)" aria-label="Play TikTok video"><span class="facade-play"></span></button>
       </div>
     </div>
   </div>
@@ -723,6 +704,22 @@
         requestAnimationFrame(tick);
       }
       requestAnimationFrame(tick);
+    })();
+
+    // click a poster facade -> swap in the real TikTok iframe (lazy, on demand)
+    (function () {
+      document.querySelectorAll('.facade').forEach(function (el) {
+        el.addEventListener('click', function () {
+          var f = document.createElement('iframe');
+          f.className = 'tiktok-video' + (el.classList.contains('mute-embed') ? ' mute-embed' : '');
+          f.src = el.getAttribute('data-src');
+          f.title = 'TikTok video player';
+          f.setAttribute('frameborder', '0');
+          f.setAttribute('allow', 'accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen');
+          f.setAttribute('allowfullscreen', '');
+          el.replaceWith(f);
+        });
+      });
     })();
 
     // gentle rainbow cursor trail (mouse only; skipped for touch + reduced motion)
