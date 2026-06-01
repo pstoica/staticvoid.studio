@@ -88,20 +88,11 @@
       font-weight: bold;
       letter-spacing: 0.02em;
       position: relative;
-      /* same soft oklch rainbow band as the section headers, slowly drifting */
-      /* flat vivid color bands — one lightness across all stops keeps it from
-         reading as a beveled/lit surface */
-      background: linear-gradient(95deg,
-        oklch(0.88 0.16 calc(var(--title-hue))),
-        oklch(0.88 0.16 calc(var(--title-hue) + 60deg)),
-        oklch(0.88 0.16 calc(var(--title-hue) + 120deg)),
-        oklch(0.88 0.16 calc(var(--title-hue) + 180deg)),
-        oklch(0.88 0.16 calc(var(--title-hue) + 240deg)),
-        oklch(0.88 0.16 calc(var(--title-hue) + 300deg)));
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-      -webkit-text-fill-color: transparent;
+      /* ONE solid color cycling through the spectrum — no gradient across the
+         letters means no perceived-brightness ramp, so genuinely no bevel. (A
+         multi-hue gradient always shades, regardless of the oklch L value.) */
+      color: oklch(0.85 0.18 var(--title-hue));
+      -webkit-text-fill-color: oklch(0.85 0.18 var(--title-hue));
       animation: title-hue 10s linear infinite;
     }
 
@@ -347,7 +338,7 @@
       100% { opacity: 0;    transform: translate(var(--dot-x), var(--dot-y)) scale(0.5); }
     }
     @keyframes dot-cycle {
-      to { --dot-phase: 260deg; }   /* hue keeps advancing through the dot's life */
+      to { --dot-phase: 340deg; }   /* hue keeps advancing through the dot's life */
     }
     @media (prefers-reduced-motion: reduce) {
       .cursor-dot { display: none; }
@@ -507,22 +498,27 @@
     (function () {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       if (matchMedia('(pointer: coarse)').matches) return;
-      var lastX = null, lastY = null, hue = 0;
-      var MIN_DIST = 11;                              // denser trail
+      var px = null, py = null, pt = null;            // previous event (for speed)
+      var sx = null, sy = null, hue = 0;              // last spawn point
       window.addEventListener('pointermove', function (e) {
         if (e.pointerType && e.pointerType !== 'mouse') return;
-        if (lastX === null) { lastX = e.clientX; lastY = e.clientY; }
-        var dx = e.clientX - lastX, dy = e.clientY - lastY;
-        if (dx * dx + dy * dy < MIN_DIST * MIN_DIST) return;
-        lastX = e.clientX; lastY = e.clientY;
-        hue = (hue + 9) % 360;                        // gentle walk across the spectrum
+        var now = (window.performance && performance.now) ? performance.now() : Date.now();
+        var x = e.clientX, y = e.clientY;
+        if (px === null) { px = x; py = y; pt = now; sx = x; sy = y; return; }
+        var speed = Math.hypot(x - px, y - py) / Math.max(1, now - pt);   // px per ms
+        px = x; py = y; pt = now;
+        var spacing = Math.max(5, 15 - speed * 8);    // faster mouse -> denser dots
+        var sdx = x - sx, sdy = y - sy;
+        if (sdx * sdx + sdy * sdy < spacing * spacing) return;
+        sx = x; sy = y;
+        hue = (hue + 15) % 360;                       // quicker walk across the spectrum
         var d = document.createElement('div');
         d.className = 'cursor-dot';
-        d.style.setProperty('--dot-x', (e.clientX + window.scrollX) + 'px');
-        d.style.setProperty('--dot-y', (e.clientY + window.scrollY) + 'px');
+        d.style.setProperty('--dot-x', (x + window.scrollX) + 'px');
+        d.style.setProperty('--dot-y', (y + window.scrollY) + 'px');
         d.style.setProperty('--dot-hue', hue + 'deg');
         // vary life so the dots don't all pulse in lockstep
-        d.style.animationDuration = (1.9 + Math.random() * 1.1).toFixed(2) + 's';
+        d.style.animationDuration = (1.7 + Math.random() * 1.0).toFixed(2) + 's';
         d.addEventListener('animationend', function () { d.remove(); });
         document.body.appendChild(d);
       }, { passive: true });
