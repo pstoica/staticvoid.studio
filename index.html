@@ -388,8 +388,12 @@
       /* --dot-hue is the per-dot base (set in JS); --dot-phase keeps drifting over
          the dot's life so the color keeps cycling after placement */
       background: oklch(0.87 0.2 calc(var(--dot-hue) + var(--dot-phase)));
-      box-shadow: 0 0 9px oklch(0.87 0.2 calc(var(--dot-hue) + var(--dot-phase)) / 0.85),
-                  0 0 3px oklch(0.92 0.16 calc(var(--dot-hue) + var(--dot-phase)) / 0.9);
+      /* a wide soft glow + screen blend so each dot lights up the marble behind it
+         with its color, rather than sitting flatly on top */
+      box-shadow: 0 0 22px oklch(0.85 0.2 calc(var(--dot-hue) + var(--dot-phase)) / 0.5),
+                  0 0 9px oklch(0.87 0.2 calc(var(--dot-hue) + var(--dot-phase)) / 0.8),
+                  0 0 3px oklch(0.94 0.15 calc(var(--dot-hue) + var(--dot-phase)) / 0.95);
+      mix-blend-mode: screen;
       animation: dot-life 2.4s ease-out forwards, dot-cycle 2.4s linear forwards;
       will-change: transform, opacity;
     }
