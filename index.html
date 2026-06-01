@@ -476,7 +476,7 @@
           <figcaption class="clip-cap" style="color:oklch(0.8 0.07 155)"><a href="https://senseweave.xyz">senseweave</a></figcaption>
         </figure>
         <figure class="clip">
-          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7552765766282513677?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
+          <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7540751292725988663?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
             title="TikTok video player" frameborder="0"
             allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowfullscreen></iframe>
@@ -545,11 +545,11 @@
           title="TikTok video player" frameborder="0"
           allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowfullscreen></iframe>
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7491059295061101870?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
+        <iframe class="tiktok-video mute-embed" src="https://www.tiktok.com/player/v1/7491059295061101870?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
           title="TikTok video player" frameborder="0"
           allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowfullscreen></iframe>
-        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7448393875313495338?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
+        <iframe class="tiktok-video mute-embed" src="https://www.tiktok.com/player/v1/7448393875313495338?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
           title="TikTok video player" frameborder="0"
           allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowfullscreen></iframe>
@@ -576,10 +576,11 @@
       t.appendChild(frag);
     })();
 
-    // mute the TikTok embeds via the Embed Player API — photo-post slideshows
-    // force their audio on load and ignore autoplay=0, so postMessage 'mute' them
-    // on their ready message and keep re-muting for a few seconds as a fallback
+    // mute ONLY the .mute-embed clips (the painting photo posts, which force their
+    // audio on load and ignore autoplay=0). Everything else keeps its audio so it
+    // plays sound when you click it. Mute on the player's message + re-mute briefly.
     (function () {
+      function targets() { return [].slice.call(document.querySelectorAll('iframe.mute-embed')); }
       function mute(win) {
         if (!win) return;
         var msg = { 'x-tiktok-player': true, type: 'mute' };
@@ -589,11 +590,12 @@
       window.addEventListener('message', function (e) {
         var d = e.data;
         if (typeof d === 'string') { try { d = JSON.parse(d); } catch (_) { d = null; } }
-        if (d && d['x-tiktok-player']) mute(e.source);   // it's a player → mute it
+        if (!d || !d['x-tiktok-player']) return;
+        if (targets().some(function (f) { return f.contentWindow === e.source; })) mute(e.source);
       });
       window.addEventListener('load', function () {
         var n = 0, id = setInterval(function () {
-          document.querySelectorAll('iframe.tiktok-video').forEach(function (f) { mute(f.contentWindow); });
+          targets().forEach(function (f) { mute(f.contentWindow); });
           if (++n > 12) clearInterval(id);               // ~7s of fallback re-muting
         }, 600);
       });
