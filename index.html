@@ -564,6 +564,29 @@
       t.appendChild(frag);
     })();
 
+    // mute the TikTok embeds via the Embed Player API — photo-post slideshows
+    // force their audio on load and ignore autoplay=0, so postMessage 'mute' them
+    // on their ready message and keep re-muting for a few seconds as a fallback
+    (function () {
+      function mute(win) {
+        if (!win) return;
+        var msg = { 'x-tiktok-player': true, type: 'mute' };
+        try { win.postMessage(msg, '*'); } catch (_) {}
+        try { win.postMessage(JSON.stringify(msg), '*'); } catch (_) {}
+      }
+      window.addEventListener('message', function (e) {
+        var d = e.data;
+        if (typeof d === 'string') { try { d = JSON.parse(d); } catch (_) { d = null; } }
+        if (d && d['x-tiktok-player']) mute(e.source);   // it's a player → mute it
+      });
+      window.addEventListener('load', function () {
+        var n = 0, id = setInterval(function () {
+          document.querySelectorAll('iframe.tiktok-video').forEach(function (f) { mute(f.contentWindow); });
+          if (++n > 12) clearInterval(id);               // ~7s of fallback re-muting
+        }, 600);
+      });
+    })();
+
     // drive the title hue from JS so hover can EASE the cycle speed up/down
     // instead of jumping (an animation-duration change snaps the cycle position)
     (function () {
