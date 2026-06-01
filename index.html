@@ -98,13 +98,13 @@
       -webkit-text-fill-color: oklch(0.85 0.18 var(--title-hue));
       width: fit-content;          /* so only the text is the hover target */
       margin-inline: auto;
-      --spread: 0deg;
+      --spread: 26deg;             /* default to the per-letter rainbow wave */
       transition: --spread 0.7s ease;
       animation: title-hue 10s linear infinite;
     }
     h1.title:hover {
-      --spread: 26deg;             /* hover: fan each letter to its own hue */
-      animation-duration: 2.5s;    /* and spin the cycle faster */
+      --spread: 34deg;             /* hover: fan a touch wider... */
+      animation-duration: 2s;      /* ...and spin the cycle faster */
     }
     h1.title span {
       color: oklch(0.85 0.18 calc(var(--title-hue) + var(--i, 0) * var(--spread)));
