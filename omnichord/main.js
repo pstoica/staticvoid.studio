@@ -1,0 +1,960 @@
+import { HandLandmarker, FilesetResolver }
+  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+
+// ---------- Music theory ----------
+const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const MAJOR = [0,2,4,5,7,9,11];                  // major scale steps
+// diatonic triad intervals per scale degree (1..7) in a major key
+const TRIAD = {
+  1:[0,4,7],  2:[0,3,7],  3:[0,3,7],  4:[0,4,7],
+  5:[0,4,7],  6:[0,3,7],  7:[0,3,6]
+};
+const SEVENTH = { 1:11, 2:10, 3:10, 4:11, 5:10, 6:10, 7:10 };
+const ROMAN = {1:"I",2:"ii",3:"iii",4:"IV",5:"V",6:"vi",7:"vii°"};
+
+// Chord-palette columns, left→right, walking the diatonic circle of fifths
+// (each step up a perfect fifth): IV I V ii vi iii vii°. Puts the primary triads
+// IV-I-V together and makes ii–V–I / vi–ii–V–I turnarounds adjacent left-sweeps.
+const DEGREE_ORDER = [4, 1, 5, 2, 6, 3, 7];
+const degRoot = deg => (keyRoot + MAJOR[(deg-1)%7]) % 12;   // pitch class of a degree's root
+
+// ---------- Authentic Suzuki OM-108 chord layout ----------
+// 12 absolute roots across the circle of fifths (matches the real faceplate, left→right),
+// crossed with three chord-quality rows (Major / Minor / 7th). Unlike the diatonic palette,
+// these are fixed chords independent of the chosen key.
+const OMNI_ROOT_PC = [1,8,3,10,5,0,7,2,9,4,11,6];          // Db Ab Eb Bb F C G D A E B F#
+const OMNI_QUALITIES = [
+  { tag:"",  tones:[0,4,7] },                              // major
+  { tag:"m", tones:[0,3,7] },                              // minor
+  { tag:"7", tones:[0,4,7,10] },                           // dominant 7th
+];
+const isOmni = () => omniMode;
+function omniTones(){ return OMNI_QUALITIES[omniQual].tones; }
+function omniCellNote(r){                                  // chord tones stacked across octaves
+  const tones = omniTones(), n = tones.length, rootPc = OMNI_ROOT_PC[omniRootIdx];
+  return (cfg.baseOctave+1)*12 + rootPc + tones[((r%n)+n)%n] + 12*Math.floor(r/n);
+}
+
+const SCALES = {
+  "Major":[0,2,4,5,7,9,11],
+  "Minor (natural)":[0,2,3,5,7,8,10],
+  "Major Pentatonic":[0,2,4,7,9],
+  "Minor Pentatonic":[0,3,5,7,10],
+  "Blues":[0,3,5,6,7,10],
+  "Dorian":[0,2,3,5,7,9,10],
+};
+
+const midiToFreq = m => 440 * Math.pow(2, (m - 69) / 12);
+
+// ---------- DOM ----------
+const video   = document.getElementById("cam");
+const canvas  = document.getElementById("overlay");
+const ctx     = canvas.getContext("2d");
+const keySel  = document.getElementById("keySel");
+const scaleSel= document.getElementById("scaleSel");
+const scalePanel = document.getElementById("scalePanel");
+const modeSel = document.getElementById("modeSel");
+const chordNameEl = document.getElementById("chordName");
+const modeEl  = document.getElementById("mode");
+const legendEl= document.getElementById("legend");
+const statusEl= document.getElementById("status");
+const startEl = document.getElementById("start");
+const volEl   = document.getElementById("vol");
+const orientSel = document.getElementById("orientSel");
+const octSel  = document.getElementById("octSel");
+const octVal  = document.getElementById("octVal");
+const colSel  = document.getElementById("colSel");
+const colVal  = document.getElementById("colVal");
+const stackSel = document.getElementById("stackSel");
+const stackVal = document.getElementById("stackVal");
+const layoutSel = document.getElementById("layoutSel");
+const baseSel = document.getElementById("baseSel");
+
+NOTE_NAMES.forEach((n,i)=>{ const o=document.createElement("option"); o.value=i; o.textContent=n; if(i===0)o.selected=true; keySel.appendChild(o); });
+Object.keys(SCALES).forEach(s=>{ const o=document.createElement("option"); o.value=s; o.textContent=s; scaleSel.appendChild(o); });
+[1,2,3,4].forEach(o=>{ const e=document.createElement("option"); e.value=o; e.textContent="C"+o; if(o===3)e.selected=true; baseSel.appendChild(e); });
+
+const cfg = { orientation:"horizontal", baseOctave:3, octavesChord:3, octavesFree:3, colsChord:1, colsFree:4, layoutChord:"oct", layoutFree:"4th", extRows:3,
+              reverb:0.10, delayWet:0.14, delayTime:0.28, delayFb:0.22,
+              voiceChord:"Keys", voiceFreeL:"Keys", voiceFreeR:"Pad" };   // voices are per-mode
+orientSel.addEventListener("change", ()=> cfg.orientation = orientSel.value);
+octSel.addEventListener("input", ()=>{ const v=parseInt(octSel.value); if(freeMode) cfg.octavesFree=v; else cfg.octavesChord=v; octVal.textContent = octSel.value; });
+colSel.addEventListener("input", ()=>{ const v=parseInt(colSel.value); if(freeMode) cfg.colsFree=v; else cfg.colsChord=v; colVal.textContent = colSel.value; });
+stackSel.addEventListener("input", ()=>{ cfg.extRows = parseInt(stackSel.value); stackVal.textContent = stackSel.value; currentExt = Math.min(currentExt, cfg.extRows-1); });
+const revSel = document.getElementById("revSel"), revVal = document.getElementById("revVal");
+const dlySel = document.getElementById("dlySel"), dlyVal = document.getElementById("dlyVal");
+const timeSel= document.getElementById("timeSel"),timeVal= document.getElementById("timeVal");
+const fbSel  = document.getElementById("fbSel"),  fbVal  = document.getElementById("fbVal");
+const volVal = document.getElementById("volVal");
+const fmt2 = v => v.toFixed(2);
+revSel.addEventListener("input", ()=>{ cfg.reverb = parseFloat(revSel.value); revVal.textContent = fmt2(cfg.reverb); if(revWet) revWet.gain.setTargetAtTime(cfg.reverb, actx.currentTime, 0.1); });
+dlySel.addEventListener("input", ()=>{ cfg.delayWet = parseFloat(dlySel.value); dlyVal.textContent = fmt2(cfg.delayWet); if(delayWet) delayWet.gain.setTargetAtTime(cfg.delayWet, actx.currentTime, 0.1); });
+timeSel.addEventListener("input",()=>{ cfg.delayTime = parseFloat(timeSel.value); timeVal.textContent = fmt2(cfg.delayTime); if(delay) delay.delayTime.setTargetAtTime(cfg.delayTime, actx.currentTime, 0.05); });
+fbSel.addEventListener("input",  ()=>{ cfg.delayFb = parseFloat(fbSel.value); fbVal.textContent = fmt2(cfg.delayFb); if(delayFb) delayFb.gain.setTargetAtTime(cfg.delayFb, actx.currentTime, 0.1); });
+layoutSel.addEventListener("change", ()=>{ if(freeMode) cfg.layoutFree = layoutSel.value; else cfg.layoutChord = layoutSel.value; });
+baseSel.addEventListener("change", ()=> cfg.baseOctave = parseInt(baseSel.value));
+
+const FONT = '"Helvetica Neue",Arial,sans-serif';     // concrete: avoids canvas serif fallback
+function noteColor(midi, light, sat, a){
+  const pc = (((midi - keyRoot) % 12) + 12) % 12;       // pitch class relative to key
+  return `hsla(${pc/12*360}, ${sat}%, ${light}%, ${a})`;
+}
+const clampi = (v,lo,hi)=> Math.min(hi, Math.max(lo, v));
+
+// ---------- Scale-locked note model ----------
+// Everything is indexed in *scale degrees*, so all transposition stays in key.
+function activeSteps(){ return freeMode ? SCALES[scaleName] : MAJOR; }
+const curOct  = () => freeMode ? cfg.octavesFree : cfg.octavesChord;   // octaves + columns are per-mode
+const curCols = () => freeMode ? cfg.colsFree    : cfg.colsChord;
+function scaleLen(){ return activeSteps().length; }
+function tonicMidi(){ return (cfg.baseOctave+1)*12 + keyRoot; }
+function scaleNote(step){                                // step = scale degrees above tonic
+  const s = activeSteps(), n = s.length;
+  const oct = Math.floor(step / n), i = ((step % n) + n) % n;
+  return tonicMidi() + s[i] + 12*oct;
+}
+// chord tones as scale-thirds: triad 1-3-5, then 7/9/11
+function chordToneSteps(){
+  const t = [0,2,4];
+  if(currentExt>=1) t.push(6);
+  if(currentExt>=2) t.push(8);
+  if(currentExt>=3) t.push(10);
+  return t;
+}
+// column offset in scale degrees -> 4th=3, 5th=4 are diatonic (stay in key)
+function colSteps(){
+  switch(freeMode ? cfg.layoutFree : cfg.layoutChord){
+    case "4th": return 3;
+    case "5th": return 4;
+    case "oct": return scaleLen();
+    case "cont": return scaleLen()*curOct();
+    default: return 3;
+  }
+}
+function rowsPerCol(){
+  if(isOmni()) return curOct()*omniTones().length + 1;
+  return freeMode ? curOct()*scaleLen() + 1
+                  : curOct()*chordToneSteps().length + 1;
+}
+function cellNote(line, r){
+  if(freeMode) return scaleNote(r + colSteps()*line);
+  if(isOmni()) return omniCellNote(r);
+  const tones = chordToneSteps(), n = tones.length;
+  const rootDeg = currentDegree - 1;                     // 0-based scale degree of chord root
+  const step = rootDeg + tones[((r%n)+n)%n] + scaleLen()*Math.floor(r/n) + colSteps()*line;
+  return scaleNote(step);
+}
+
+legendEl.innerHTML = `
+  <span id="legendClose" title="Hide (H)">×</span>
+  <b>Pinch left</b> to pick a chord · <b>pinch + sweep right</b> to strum<br>
+  sweep faster = louder<br>
+  drag panels to move, edges to resize<br>
+  <span class="kbd"><b>L</b> lock chord</span> · <span class="kbd"><b>F</b> free scale</span> · <span class="kbd"><b>O</b> omnichord</span> · <span class="kbd"><b>M</b> mute</span> · <span class="kbd"><b>E</b> move panels</span> · <span class="kbd"><b>R</b> reset</span> · <span class="kbd"><b>H</b> hide</span>`;
+
+const legendShowEl = document.getElementById("legendShow");
+const setLegend = show => { document.body.classList.toggle("legend-hidden", !show); saveState(); };
+document.getElementById("legendClose").addEventListener("click", ()=> setLegend(false));
+legendShowEl.addEventListener("click", ()=> setLegend(true));
+
+// ---------- Audio ----------
+let actx, master, delay, delayFb, delayWet, revWet;
+// generated impulse response: decaying stereo noise — a small, cheap room
+function makeIR(ctx, seconds, decay){
+  const rate = ctx.sampleRate, len = Math.floor(rate*seconds);
+  const buf = ctx.createBuffer(2, len, rate);
+  for(let ch=0; ch<2; ch++){
+    const d = buf.getChannelData(ch);
+    for(let i=0;i<len;i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, decay);
+  }
+  return buf;
+}
+function initAudio(){
+  actx = new (window.AudioContext||window.webkitAudioContext)();
+  master = actx.createGain(); master.gain.value = parseFloat(volEl.value);
+  // limiter so stacked plucks don't clip/distort
+  const comp = actx.createDynamicsCompressor();
+  comp.threshold.value = -16; comp.knee.value = 24; comp.ratio.value = 6;
+  comp.attack.value = 0.003; comp.release.value = 0.25;
+  delay = actx.createDelay(1.0); delay.delayTime.value = cfg.delayTime;
+  delayFb = actx.createGain(); delayFb.gain.value = cfg.delayFb;   // echo trails
+  delayWet = actx.createGain(); delayWet.gain.value = cfg.delayWet;
+  // light reverb: short generated room, fed off the delay so echoes smear into space
+  const reverb = actx.createConvolver(); reverb.buffer = makeIR(actx, 1.8, 2.6);
+  revWet = actx.createGain(); revWet.gain.value = cfg.reverb;      // ambience
+  master.connect(comp);
+  master.connect(delay); delay.connect(delayFb); delayFb.connect(delay); delay.connect(delayWet); delayWet.connect(comp);
+  master.connect(reverb); delay.connect(reverb); reverb.connect(revWet); revWet.connect(comp);
+  comp.connect(actx.destination);
+}
+volEl.addEventListener("input", ()=>{ volVal.textContent = fmt2(parseFloat(volEl.value)); if(master && !muted) master.gain.value = parseFloat(volEl.value); });
+
+// synth voices — all built from oscillators, no samples.
+// osc: [waveform, freq multiple, detune cents]; g: per-osc level.
+// atk/dec = env ramp times; lp0→lp1 over lpDec = a tone-darkening filter sweep.
+const VOICES = {
+  Pluck: { osc:[["square",1,0],["sine",2,4]],                 g:[0.7,0.16],    atk:0.006, dec:1.3, lp0:4200, lp1:900,  lpDec:0.9, peak:0.9 },
+  Keys:  { osc:[["sine",1,0],["sine",2,3],["triangle",3,0]],   g:[1,0.18,0.06], atk:0.004, dec:1.3, lp0:4200, lp1:900,  lpDec:1.1, peak:1.0 },
+  Bell:  { osc:[["sine",1,0],["sine",2.76,0],["sine",5.4,0]],  g:[1,0.26,0.08], atk:0.002, dec:1.7, lp0:7000, lp1:2200, lpDec:1.5, peak:0.85 },
+  Pad:   { osc:[["sawtooth",1,-7],["sawtooth",1,7],["sine",0.5,0]], g:[0.45,0.45,0.3], atk:0.35, dec:3.0, lp0:1500, lp1:1100, lpDec:2.6, peak:0.7 },
+  Saw:   { osc:[["sawtooth",1,0],["sawtooth",1,-9],["sawtooth",2,6]], g:[0.5,0.5,0.16], atk:0.008, dec:1.5, lp0:5200, lp1:1500, lpDec:1.1, peak:0.82 },
+  Theremin:{ osc:[["sine",1,0],["sine",2,0]], g:[1,0.06], atk:0.09, lp1:3400, peak:0.95, vib:{rate:5.5, depth:11}, mono:true, glide:0.06, rel:0.32 },
+};
+function playNote(freq, vel=0.55, voiceName="Pluck"){
+  if(!actx) return;
+  const V = VOICES[voiceName] || VOICES.Pluck;
+  const t = actx.currentTime, peak = Math.max(0.0001, vel*V.peak);
+  const env = actx.createGain();
+  env.gain.setValueAtTime(0.0001, t);
+  env.gain.exponentialRampToValueAtTime(peak, t + V.atk);
+  env.gain.exponentialRampToValueAtTime(0.0001, t + V.dec);
+  const lp = actx.createBiquadFilter(); lp.type="lowpass";
+  lp.frequency.setValueAtTime(V.lp0, t);
+  lp.frequency.exponentialRampToValueAtTime(V.lp1, t + V.lpDec);
+  const stop = t + V.dec + 0.1;
+  let vibGain = null;                                  // pitch LFO (theremin-style vibrato that swells in)
+  if(V.vib){
+    const lfo = actx.createOscillator(); lfo.type="sine"; lfo.frequency.value = V.vib.rate;
+    vibGain = actx.createGain(); vibGain.gain.setValueAtTime(0, t);
+    vibGain.gain.linearRampToValueAtTime(V.vib.depth, t + Math.min(V.atk + 0.3, V.dec));
+    lfo.connect(vibGain); lfo.start(t); lfo.stop(stop);
+  }
+  V.osc.forEach(([type,mult,det],i)=>{
+    const o = actx.createOscillator(); o.type=type; o.frequency.value=freq*mult; o.detune.value=det||0;
+    if(vibGain) vibGain.connect(o.detune);
+    const g = actx.createGain(); g.gain.value = V.g[i];
+    o.connect(g); g.connect(env); o.start(t); o.stop(stop);
+  });
+  env.connect(lp); lp.connect(master);
+}
+
+// ----- monophonic legato voice (theremin): one persistent oscillator per strum slot that glides between notes -----
+function buildMono(V){
+  const env = actx.createGain(); env.gain.value = 0.0001;
+  const lp = actx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value = V.lp1 || 4000;
+  let vibGain = null;
+  if(V.vib){
+    const lfo = actx.createOscillator(); lfo.type="sine"; lfo.frequency.value = V.vib.rate;
+    vibGain = actx.createGain(); vibGain.gain.value = 0; lfo.connect(vibGain); lfo.start();
+  }
+  const oscs = V.osc.map(([type,mult,det],i)=>{
+    const o = actx.createOscillator(); o.type=type; o.detune.value = det||0;
+    const g = actx.createGain(); g.gain.value = V.g[i] ?? 1;
+    if(vibGain) vibGain.connect(o.detune);
+    o.connect(g); g.connect(env); o.start();
+    return { o, mult };
+  });
+  env.connect(lp); lp.connect(master);
+  return { V, oscs, env, vibGain, active:false, midiNote:null };
+}
+function monoGlide(m, freq, snap){       // snap on (re)engage, portamento while sweeping
+  const t = actx.currentTime;
+  for(const {o,mult} of m.oscs){
+    if(snap) o.frequency.setValueAtTime(freq*mult, t);
+    else     o.frequency.setTargetAtTime(freq*mult, t, m.V.glide || 0.08);
+  }
+}
+function monoOn(m, vel){
+  const t = actx.currentTime, peak = Math.max(0.0001, vel*m.V.peak);
+  m.env.gain.cancelScheduledValues(t); m.env.gain.setValueAtTime(Math.max(0.0001, m.env.gain.value), t);
+  m.env.gain.exponentialRampToValueAtTime(peak, t + m.V.atk);
+  if(m.vibGain){ m.vibGain.gain.cancelScheduledValues(t); m.vibGain.gain.setValueAtTime(m.vibGain.gain.value, t);
+    m.vibGain.gain.linearRampToValueAtTime(m.V.vib.depth, t + 0.3); }
+  m.active = true;
+}
+function monoOff(m){
+  const t = actx.currentTime;
+  m.env.gain.cancelScheduledValues(t); m.env.gain.setValueAtTime(Math.max(0.0001, m.env.gain.value), t);
+  m.env.gain.exponentialRampToValueAtTime(0.0001, t + (m.V.rel || 0.25));
+  if(m.vibGain){ m.vibGain.gain.cancelScheduledValues(t); m.vibGain.gain.setValueAtTime(m.vibGain.gain.value, t);
+    m.vibGain.gain.linearRampToValueAtTime(0, t + 0.2); }
+  m.active = false;
+}
+
+// voice pickers — compact ‹ name › stepper; primary hand always, second hand appears in free-scale mode
+const voiceBPanel = document.getElementById("voiceBPanel");
+const voiceALabel = document.getElementById("voiceALabel");
+const VOICE_NAMES = Object.keys(VOICES);
+function makeStepper(el, get, set){     // returns a reflect() that repaints the shown name from cfg
+  const prev=document.createElement("button"); prev.className="stepbtn"; prev.textContent="‹";
+  const name=document.createElement("span"); name.className="stepname";
+  const next=document.createElement("button"); next.className="stepbtn"; next.textContent="›";
+  const reflect=()=>{ name.textContent=get(); };
+  const step=d=>{ const i=VOICE_NAMES.indexOf(get()); set(VOICE_NAMES[(i+d+VOICE_NAMES.length)%VOICE_NAMES.length]); reflect(); };
+  prev.addEventListener("click", ()=>step(-1)); next.addEventListener("click", ()=>step(1));
+  el.append(prev, name, next);
+  return reflect;
+}
+const reflectVoiceA = makeStepper(document.getElementById("voiceA"),
+  ()=> freeMode ? cfg.voiceFreeL : cfg.voiceChord,
+  v=>{ if(freeMode) cfg.voiceFreeL=v; else cfg.voiceChord=v; });
+const reflectVoiceB = makeStepper(document.getElementById("voiceB"),
+  ()=> cfg.voiceFreeR, v=>{ cfg.voiceFreeR=v; });
+
+// ---------- Web MIDI output (single channel 1) ----------
+let midiAccess = null, midiOut = null;
+const midiSel = document.getElementById("midiSel");
+const midiActive = new Map();      // note number -> pending noteoff timeout id
+function refreshMidiOutputs(){
+  if(!midiAccess) return;
+  const prev = midiSel.value;
+  midiSel.innerHTML = '<option value="">Off</option>';
+  for(const out of midiAccess.outputs.values()){
+    const o = document.createElement("option"); o.value = out.id; o.textContent = out.name; midiSel.appendChild(o);
+  }
+  midiSel.value = [...midiSel.options].some(o=>o.value===prev) ? prev : "";
+  midiOut = midiAccess.outputs.get(midiSel.value) || null;
+}
+midiSel.addEventListener("change", ()=>{ midiOut = midiAccess ? midiAccess.outputs.get(midiSel.value) : null; });
+async function initMidi(){
+  if(midiAccess || !navigator.requestMIDIAccess) return;
+  try{
+    midiAccess = await navigator.requestMIDIAccess();
+    midiAccess.onstatechange = refreshMidiOutputs;
+    refreshMidiOutputs();
+  }catch(e){ /* denied or unsupported — stay silent, audio still works */ }
+}
+function sendMidiNote(note, vel){       // note on now, auto note-off shortly after (plucky)
+  if(!midiOut) return;
+  note = Math.round(note);
+  if(note < 0 || note > 127) return;
+  const v = clampi(Math.round(vel*127), 1, 127);
+  const pending = midiActive.get(note);
+  if(pending){ clearTimeout(pending); midiOut.send([0x80, note, 0]); }   // retrigger: end the old one first
+  midiOut.send([0x90, note, v]);
+  midiActive.set(note, setTimeout(()=>{ if(midiOut) midiOut.send([0x80, note, 0]); midiActive.delete(note); }, 350));
+}
+function midiOn(note, vel){              // sustained note-on for legato/mono voices (no auto-off)
+  if(!midiOut) return; note = Math.round(note); if(note < 0 || note > 127) return;
+  midiOut.send([0x90, note, clampi(Math.round(vel*127), 1, 127)]);
+}
+function midiOff(note){
+  if(!midiOut || note == null) return; note = Math.round(note); if(note < 0 || note > 127) return;
+  midiOut.send([0x80, note, 0]);
+}
+
+// ---------- State ----------
+let freeMode = false;
+let omniMode = false;       // authentic Suzuki OM-108 chord palette (mutually exclusive with freeMode)
+let keyRoot = 0;            // 0..11
+let scaleName = "Major Pentatonic";
+let currentDegree = 1;
+let currentExt = 0;         // 0=triad 1=+7th 2=+9th 3=+11th (picked on the chord palette)
+let omniRootIdx = 5;        // index into OMNI_ROOT_PC — 5 = C (Omnichord layout)
+let omniQual = 0;           // 0=major 1=minor 2=7th
+let lockChord = false;      // freeze chord so the palette ignores pinches
+let muted = false;          // M toggles master to silence without touching the volume slider
+let cPinchOn = false;       // chord-hand hysteretic pinch
+// independent per-hand strum state — slot 0 is the primary (right) hand,
+// slot 1 is the second hand that also plays in free-scale mode
+const strumState = [
+  { smx:null, smy:null, psmx:null, psmy:null, spd:0, pinchOn:false, lastIdx:-1, mono:null, monoVoice:null, monoMidi:null },
+  { smx:null, smy:null, psmx:null, psmy:null, spd:0, pinchOn:false, lastIdx:-1, mono:null, monoVoice:null, monoMidi:null },
+];
+let singleSide = "right";       // which side a lone hand last committed to (hysteretic)
+let editMode = false;           // E / "Move panels": pinch-drag panels instead of playing
+const editState = [             // per-hand pinch + grab state for editing panels
+  { pinchOn:false, prevOn:false, grab:null, lastmx:0, lastmy:0 },
+  { pinchOn:false, prevOn:false, grab:null, lastmx:0, lastmy:0 },
+];
+let twoHandGrab = null;         // pane being resized with both hands (bbox between the pinches)
+let editWasActive = false;      // a grab/resize was live last frame → save on release
+
+keySel.addEventListener("change", ()=> keyRoot = parseInt(keySel.value));
+scaleSel.addEventListener("change", ()=> scaleName = scaleSel.value);
+function setMode(mode){                              // "chord" | "omni" | "free"
+  freeMode = mode === "free";
+  omniMode = mode === "omni";
+  modeSel.value = mode;
+  scalePanel.style.display = freeMode ? "" : "none";
+  voiceBPanel.style.display = freeMode ? "" : "none";   // second-hand voice only matters in free mode
+  voiceALabel.textContent = freeMode ? "Left" : "Voice";
+  reflectVoiceA(); reflectVoiceB();                 // voice is per-mode
+  layoutSel.value = freeMode ? cfg.layoutFree : cfg.layoutChord;   // layout is per-mode
+  octSel.value = curOct();  octVal.textContent = curOct();     // octaves + columns are per-mode
+  colSel.value = curCols(); colVal.textContent = curCols();
+}
+const lockBtn = document.getElementById("lockBtn");
+function setLock(on){ lockChord = on; lockBtn.classList.toggle("active", on); }
+const editBtn = document.getElementById("editBtn");
+function setEdit(on){
+  editMode = on;
+  editBtn.classList.toggle("active", on);
+  if(!on){
+    if(twoHandGrab || editState[0].grab || editState[1].grab) saveState();
+    twoHandGrab = null; editWasActive = false;
+    for(const st of editState){ st.pinchOn=false; st.prevOn=false; st.grab=null; }
+  }
+}
+function setMute(on){
+  muted = on;
+  if(master) master.gain.setTargetAtTime(on ? 0 : parseFloat(volEl.value), actx.currentTime, 0.02);
+}
+modeSel.addEventListener("change", ()=> setMode(modeSel.value));
+lockBtn.addEventListener("click", ()=> setLock(!lockChord));
+editBtn.addEventListener("click", ()=> setEdit(!editMode));
+window.addEventListener("keydown", e=>{
+  if(e.key==="f"||e.key==="F") setMode(freeMode ? "chord" : "free");
+  if(e.key==="o"||e.key==="O") setMode(omniMode ? "chord" : "omni");
+  if(e.key==="l"||e.key==="L") setLock(!lockChord);
+  if(e.key==="m"||e.key==="M") setMute(!muted);
+  if(e.key==="e"||e.key==="E") setEdit(!editMode);
+  if(e.key==="h"||e.key==="H") setLegend(document.body.classList.contains("legend-hidden"));
+  if(e.key==="r"||e.key==="R"){ if(confirm("Reset all settings and panel layout to defaults?")){ localStorage.removeItem(LS_KEY); location.reload(); } }
+});
+
+// mirrored x so screen coords match the selfie view
+const MX = lm => 1 - lm.x;
+// thumb(4)+index(8) pinch distance — the one gesture MediaPipe reads reliably
+const pinchDistOf = lm => Math.hypot(lm[8].x-lm[4].x, lm[8].y-lm[4].y);
+
+// ---------- Regions (fraction of screen) — chord palette + strum plate ----------
+const regions = {
+  chord:     { x0:0.05, x1:0.33, y0:0.16, y1:0.90 },  // left: pinch a chord (chord mode)
+  strum:     { x0:0.55, x1:0.95, y0:0.16, y1:0.90 },  // right: pinch + sweep (chord mode)
+  strumFree: { x0:0.13, x1:0.95, y0:0.16, y1:0.90 },  // right edge matches chord-mode strum so the switch only grows leftward
+};
+const CHORD = regions.chord;                          // chord palette (mutated in place)
+const plate = () => freeMode ? regions.strumFree : regions.strum;   // active strum plate per mode
+const inRect = (r,mx,my)=> mx>=r.x0 && mx<=r.x1 && my>=r.y0 && my<=r.y1;
+function inPlate(mx,my){ return inRect(plate(),mx,my); }
+
+// ---------- Persistence (localStorage) ----------
+const LS_KEY = "omnichord.settings.v1";
+function saveState(){
+  try{
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      cfg, keyRoot, scaleName,
+      vol: parseFloat(volEl.value),
+      regions: { chord:{...CHORD}, strum:{...regions.strum}, strumFree:{...regions.strumFree} },
+      legendHidden: document.body.classList.contains("legend-hidden"),
+    }));
+  }catch(e){ /* private mode / quota — settings just won't persist */ }
+}
+function syncControls(){     // reflect cfg + state into the HUD inputs
+  keySel.value=keyRoot; scaleSel.value=scaleName;
+  orientSel.value=cfg.orientation;
+  octSel.value=curOct();   octVal.textContent=curOct();
+  colSel.value=curCols();  colVal.textContent=curCols();
+  stackSel.value=cfg.extRows; stackVal.textContent=cfg.extRows;
+  layoutSel.value = freeMode ? cfg.layoutFree : cfg.layoutChord; baseSel.value=cfg.baseOctave;
+  reflectVoiceA(); reflectVoiceB();
+  revSel.value=cfg.reverb; revVal.textContent=fmt2(cfg.reverb);
+  dlySel.value=cfg.delayWet; dlyVal.textContent=fmt2(cfg.delayWet);
+  timeSel.value=cfg.delayTime; timeVal.textContent=fmt2(cfg.delayTime);
+  fbSel.value=cfg.delayFb; fbVal.textContent=fmt2(cfg.delayFb);
+  volVal.textContent=fmt2(parseFloat(volEl.value));
+}
+function loadState(){
+  let s; try{ s=JSON.parse(localStorage.getItem(LS_KEY)); }catch(e){ s=null; }
+  if(s){
+    if(s.cfg) Object.assign(cfg, s.cfg);
+    if(typeof s.keyRoot==="number") keyRoot=s.keyRoot;
+    if(typeof s.scaleName==="string" && SCALES[s.scaleName]) scaleName=s.scaleName;
+    if(typeof s.vol==="number") volEl.value=s.vol;
+    if(s.regions?.chord) Object.assign(CHORD, s.regions.chord);
+    if(s.regions?.strum) Object.assign(regions.strum, s.regions.strum);
+    if(s.regions?.strumFree) Object.assign(regions.strumFree, s.regions.strumFree);
+    if(s.legendHidden) document.body.classList.add("legend-hidden");
+  }
+  currentExt=Math.min(currentExt, cfg.extRows-1);
+  syncControls();                                    // always reflect cfg into the HUD, even with no saved state
+}
+const hudEl = document.getElementById("hud");
+hudEl.addEventListener("input", saveState);
+hudEl.addEventListener("change", saveState);
+loadState();
+
+// ---- drag to move / edges to resize either region (mouse only; hands play) ----
+let drag = null, hoverTarget = null, hoverEdge = "";
+const handleFade = new Map();                        // region -> eased 0..1 hover alpha
+const EDGE = 0.018;                                  // edge grab band, in screen-fraction
+function evToFrac(e){                                // client px -> screen-fraction (object-fit:cover aware)
+  const rect = canvas.getBoundingClientRect();
+  const W=canvas.width, H=canvas.height;
+  const scale = Math.max(rect.width/W, rect.height/H);
+  const sW=W*scale, sH=H*scale;
+  const offX=(rect.width-sW)/2, offY=(rect.height-sH)/2;
+  return { fx:(e.clientX-rect.left-offX)/sW, fy:(e.clientY-rect.top-offY)/sH };
+}
+function hitEdge(r,fx,fy){
+  let e="";
+  if(Math.abs(fy-r.y0)<EDGE) e+="n"; else if(Math.abs(fy-r.y1)<EDGE) e+="s";
+  if(Math.abs(fx-r.x0)<EDGE) e+="w"; else if(Math.abs(fx-r.x1)<EDGE) e+="e";
+  return e;                                          // "" = interior (move), else resize handle
+}
+const CURSORS = {n:"ns-resize",s:"ns-resize",e:"ew-resize",w:"ew-resize",
+  ne:"nesw-resize",sw:"nesw-resize",nw:"nwse-resize",se:"nwse-resize"};
+const nearRect = (r,fx,fy)=> fx>=r.x0-EDGE&&fx<=r.x1+EDGE&&fy>=r.y0-EDGE&&fy<=r.y1+EDGE;
+const regionAt = (fx,fy)=> nearRect(plate(),fx,fy) ? plate()
+  : (!freeMode && nearRect(CHORD,fx,fy) ? CHORD : null);   // palette only draggable in chord mode
+canvas.addEventListener("pointermove", e=>{
+  const {fx,fy}=evToFrac(e);
+  if(drag){
+    const dx=fx-drag.fx, dy=fy-drag.fy, s=drag.start;
+    let {x0,x1,y0,y1}=s;
+    if(drag.mode===""){                              // move, keeping size, clamped on-screen
+      const w=x1-x0,h=y1-y0;
+      x0=clampi(x0+dx,0,1-w); x1=x0+w; y0=clampi(y0+dy,0,1-h); y1=y0+h;
+    } else {                                         // resize the grabbed edge(s)
+      if(drag.mode.includes("w")) x0=clampi(Math.min(s.x1-0.06, s.x0+dx),0,1);
+      if(drag.mode.includes("e")) x1=clampi(Math.max(s.x0+0.06, s.x1+dx),0,1);
+      if(drag.mode.includes("n")) y0=clampi(Math.min(s.y1-0.06, s.y0+dy),0,1);
+      if(drag.mode.includes("s")) y1=clampi(Math.max(s.y0+0.06, s.y1+dy),0,1);
+    }
+    Object.assign(drag.target,{x0,x1,y0,y1}); return;
+  }
+  const r = regionAt(fx,fy);
+  hoverTarget = r; hoverEdge = r ? hitEdge(r,fx,fy) : "";
+  canvas.style.cursor = r ? (CURSORS[hoverEdge] || "move") : "";
+});
+canvas.addEventListener("pointerdown", e=>{
+  const {fx,fy}=evToFrac(e);
+  const r = regionAt(fx,fy);
+  if(!r) return;
+  drag = { target:r, mode:hitEdge(r,fx,fy), fx, fy, start:{...r} };
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener("pointerup", ()=>{ if(drag) saveState(); drag=null; });
+
+// ---------- MediaPipe ----------
+let landmarker;
+async function setup(){
+  const fileset = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+  landmarker = await HandLandmarker.createFromOptions(fileset, {
+    baseOptions:{
+      modelAssetPath:"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+      delegate:"GPU"
+    },
+    runningMode:"VIDEO", numHands:2,
+    minHandDetectionConfidence:0.6, minHandPresenceConfidence:0.6, minTrackingConfidence:0.6
+  });
+  const stream = await navigator.mediaDevices.getUserMedia({ video:{ width:1280, height:720 } });
+  video.srcObject = stream;
+  await video.play();
+  resize();
+  statusEl.textContent = "tracking — hold a hand up";
+  requestAnimationFrame(loop);
+}
+function resize(){
+  canvas.width = video.videoWidth || window.innerWidth;
+  canvas.height = video.videoHeight || window.innerHeight;
+}
+window.addEventListener("resize", resize);
+
+// ---------- Main loop ----------
+let lastTs = -1;
+let started = false;     // gate detection/playing until "Enable sound" — no notes firing behind the intro
+function loop(){
+  if(video.readyState >= 2){
+    if(started){
+      const ts = performance.now();
+      if(ts !== lastTs){
+        lastTs = ts;
+        const res = landmarker.detectForVideo(video, ts);
+        draw(res);
+      }
+    } else {
+      const W=canvas.width, H=canvas.height;      // live preview only — skip MediaPipe + interaction
+      ctx.save(); ctx.translate(W,0); ctx.scale(-1,1); ctx.drawImage(video,0,0,W,H); ctx.restore();
+      ctx.fillStyle="rgba(11,13,18,.32)"; ctx.fillRect(0,0,W,H);
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+function draw(res){
+  const W = canvas.width, H = canvas.height;
+  // mirrored video
+  ctx.save(); ctx.translate(W,0); ctx.scale(-1,1);
+  ctx.drawImage(video,0,0,W,H); ctx.restore();
+  ctx.fillStyle = "rgba(11,13,18,.32)"; ctx.fillRect(0,0,W,H);
+
+  const hands = res.landmarks || [];
+  // assign hands by screen position: left-of-frame = chord/Voice 1, right = strum/Voice 2.
+  // A lone hand commits to a side only past a center dead-zone, so it can't flip-flop
+  // frame to frame (which was making the voice "alternate" with one hand up).
+  let chordHand=null, strumHand=null;
+  if(hands.length>=2){
+    const sorted = [...hands].sort((a,b)=> MX(a[0]) - MX(b[0]));
+    chordHand = sorted[0]; strumHand = sorted[sorted.length-1];   // leftmost, rightmost
+  } else if(hands.length===1){
+    const x = MX(hands[0][0]);                                    // wrist screen-x
+    if(x < 0.42) singleSide = "left"; else if(x > 0.58) singleSide = "right";
+    if(singleSide==="left") chordHand = hands[0]; else strumHand = hands[0];
+  }
+
+  // ----- edit mode: pinch-drag panels instead of playing -----
+  if(editMode){
+    chordHover = null; chordPick = null;
+    drawChordPanel(W, H);
+    drawPlate(W, H, rowsPerCol(), curCols());
+    handleEdit(chordHand, strumHand, W, H);
+    updateChordLabel();
+    return;
+  }
+
+  // ----- chord selection: pinch (thumb+index) a cell in the left palette -----
+  // Position + the one reliable pinch — no fragile finger-count/curl classification.
+  // Columns walk the circle of fifths; rows stack triad/+7/+9/+11. The pick latches,
+  // so once chosen both hands are free to strum until the next palette pinch.
+  chordHover = null; chordPick = null;
+  let chordInPalette = false;       // left hand reaching the palette = picking a chord, not strumming
+  if(chordHand && !freeMode){
+    const cmx=(MX(chordHand[8])+MX(chordHand[4]))/2, cmy=(chordHand[8].y+chordHand[4].y)/2;
+    if(!lockChord){
+      const d = pinchDistOf(chordHand);
+      cPinchOn = cPinchOn ? d < 0.088 : d < 0.062;
+      if(inRect(CHORD,cmx,cmy)){
+        chordInPalette = true;
+        const fx=(cmx-CHORD.x0)/(CHORD.x1-CHORD.x0);
+        if(isOmni()){
+          const fyTop=(cmy-CHORD.y0)/(CHORD.y1-CHORD.y0);  // row 0 (Major) at the top, matching the OM-108
+          const col = clampi(Math.floor(fx*12),0,11), row = clampi(Math.floor(fyTop*3),0,2);
+          chordHover = { omniCol:col, omniRow:row };
+          if(cPinchOn){ omniRootIdx = col; omniQual = row; }
+        } else {
+          const fyUp=(CHORD.y1-cmy)/(CHORD.y1-CHORD.y0);
+          const hDeg = DEGREE_ORDER[clampi(Math.floor(fx*7),0,6)];
+          const hExt = clampi(Math.floor(fyUp*cfg.extRows),0,cfg.extRows-1);
+          chordHover = { deg:hDeg, ext:hExt };             // cell the hand is over (highlight even before pinching)
+          if(cPinchOn){ currentDegree = hDeg; currentExt = hExt; }
+        }
+      }
+    } else { cPinchOn = false; }
+    chordPick = { x:cmx*W, y:cmy*H, on:cPinchOn };          // drawn on top of the palette below
+  } else { cPinchOn = false; }
+
+  const runLen = rowsPerCol(), cols = curCols();
+  drawChordPanel(W, H);
+  drawPlate(W, H, runLen, cols);
+
+  // ----- strum: both hands play the plate; chord mode shares one voice, free mode is per-hand -----
+  if(freeMode){
+    strumWith(chordHand, strumState[0], W, H, runLen, cols, "#62e09a", cfg.voiceFreeL);  // left
+    strumWith(strumHand, strumState[1], W, H, runLen, cols, "#56b6ff", cfg.voiceFreeR);  // right
+  } else {
+    strumWith(strumHand, strumState[1], W, H, runLen, cols, "#56b6ff", cfg.voiceChord); // right hand strums
+    if(chordInPalette){                                     // left hand is selecting — show its palette pick, don't strum
+      strumState[0].lastIdx = -1; releaseMono(strumState[0]);
+      if(chordHand) drawHand(chordHand, "#62e09a");
+      if(chordPick) drawPick(chordPick.x, chordPick.y, chordPick.on);
+    } else {
+      strumWith(chordHand, strumState[0], W, H, runLen, cols, "#62e09a", cfg.voiceChord); // left hand strums too
+    }
+  }
+
+  // ----- labels -----
+  updateChordLabel();
+}
+
+// one hand strumming the plate (thumb+index pinch = pick, sweep speed = velocity).
+// `st` holds that hand's own pinch/smoothing/retrigger state so two hands stay independent.
+function releaseMono(st){     // fade the held legato tone + end its MIDI note
+  if(st.mono && st.mono.active) monoOff(st.mono);
+  if(st.monoMidi != null){ midiOff(st.monoMidi); st.monoMidi = null; }
+}
+function strumWith(hand, st, W, H, runLen, cols, color, voice){
+  if(!hand){ st.pinchOn=false; st.smx=null; st.smy=null; st.lastIdx=-1; releaseMono(st); return; }
+  const pinchDist = pinchDistOf(hand);
+  st.pinchOn = st.pinchOn ? pinchDist < 0.088 : pinchDist < 0.062;
+  const th = hand[4], tip = hand[8];
+  let mx = (MX(tip)+MX(th))/2, my = (tip.y+th.y)/2;     // midpoint = pick tip
+  if(st.smx===null || !st.pinchOn){ st.smx=mx; st.smy=my; st.psmx=mx; st.psmy=my; st.spd=0; }   // snap on (re)engage, glide while held
+  else { st.smx += (mx-st.smx)*0.45; st.smy += (my-st.smy)*0.45; }
+  mx=st.smx; my=st.smy;
+  const sweep = Math.hypot(mx-st.psmx, my-st.psmy);          // how far the pick moved this frame
+  st.spd += (sweep - st.spd)*0.5;                            // lightly smoothed sweep speed → strum velocity
+  st.psmx=mx; st.psmy=my;
+  const horiz = cfg.orientation==="horizontal";
+  const inP = inPlate(mx,my);
+  let line=-1, step=-1;
+  if(inP){
+    const P = plate();
+    const fx = (mx - P.x0) / (P.x1 - P.x0);
+    const fyUp = (P.y1 - my) / (P.y1 - P.y0);             // bottom=low, top=high
+    if(horiz){
+      line = clampi(Math.floor(fyUp*cols), 0, cols-1);   // lines stack vertically
+      step = clampi(Math.floor(fx*runLen), 0, runLen-1);
+    } else {
+      line = clampi(Math.floor(fx*cols), 0, cols-1);     // columns spread across
+      step = clampi(Math.floor(fyUp*runLen), 0, runLen-1);
+    }
+  }
+  const V = VOICES[voice] || VOICES.Pluck;
+  if(st.pinchOn && inP){
+    const idx = line*runLen + step;
+    const vel = clampi(0.35 + st.spd*9, 0.35, 0.95);                // faster sweep = louder
+    const note = cellNote(line, step);
+    if(V.mono){                                          // legato glide: one held voice, glissando between notes
+      let fresh = st.lastIdx === -1;                     // (re)engaged → snap pitch + new note-on
+      if(actx){
+        if(!st.mono || st.monoVoice!==voice){ if(st.mono) monoOff(st.mono); st.mono = buildMono(V); st.monoVoice = voice; fresh = true; }
+        monoGlide(st.mono, midiToFreq(note), fresh);
+        if(fresh) monoOn(st.mono, vel);
+      }
+      if(idx !== st.lastIdx){
+        midiOn(note, vel);                               // mono MIDI: sound the new note, then release the old (legato)
+        if(!fresh) midiOff(st.monoMidi);
+        st.monoMidi = note;
+        flash[idx] = performance.now();
+        st.lastIdx = idx;
+      }
+    } else {
+      if(st.mono && st.mono.active) releaseMono(st);      // switched off a mono voice → silence the held tone
+      if(idx !== st.lastIdx){
+        playNote(midiToFreq(note), vel, voice);
+        sendMidiNote(note, vel);
+        st.lastIdx = idx;
+        flash[idx] = performance.now();
+      }
+    }
+    drawPick(mx*W, my*H, true);
+  } else {
+    st.lastIdx = -1;                                     // released = muted, can jump
+    releaseMono(st);
+    if(inP){                                             // hover: outline the cell you'd hit so same-color cells are distinguishable
+      const {sx,sy,sw,sh} = plateCellRect(plate(), line, step, W, H, cols, runLen, horiz);
+      ctx.save();
+      ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.fillRect(sx,sy,sw,sh);
+      ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1; ctx.strokeRect(sx+0.5,sy+0.5,sw-1,sh-1);
+      ctx.restore();
+    }
+    drawPick(mx*W, my*H, false);
+  }
+  drawHand(hand, color);
+}
+
+// ----- edit mode gestures: one hand moves a panel, two hands resize it -----
+// hysteretic thumb+index pinch → midpoint; `just` flags the frame it engaged.
+function editPinch(hand, st){
+  if(!hand){ st.prevOn=st.pinchOn; st.pinchOn=false; return null; }
+  const mx=(MX(hand[8])+MX(hand[4]))/2, my=(hand[8].y+hand[4].y)/2;
+  const d=pinchDistOf(hand);
+  st.prevOn=st.pinchOn;
+  st.pinchOn = st.pinchOn ? d<0.088 : d<0.062;
+  return { on:st.pinchOn, just:st.pinchOn && !st.prevOn, mx, my };
+}
+// single hand: grab the panel under the pinch and translate it, keeping size.
+function editMove(p, st, grabbed){
+  if(!p || !p.on){ st.grab=null; return; }
+  if(p.just){ const r=regionAt(p.mx,p.my); st.grab=(r && !grabbed.has(r))?r:null; st.lastmx=p.mx; st.lastmy=p.my; }
+  if(st.grab){
+    grabbed.add(st.grab);
+    const r=st.grab, w=r.x1-r.x0, h=r.y1-r.y0;
+    const nx0=clampi(r.x0+(p.mx-st.lastmx),0,1-w), ny0=clampi(r.y0+(p.my-st.lastmy),0,1-h);
+    r.x0=nx0; r.x1=nx0+w; r.y0=ny0; r.y1=ny0+h;
+    st.lastmx=p.mx; st.lastmy=p.my;
+  }
+}
+function handleEdit(h1, h2, W, H){
+  const a = editPinch(h1, editState[0]);
+  const b = editPinch(h2, editState[1]);
+  if(a && b && a.on && b.on){                             // two hands → resize: pane spans the two pinches
+    if(!twoHandGrab) twoHandGrab = regionAt((a.mx+b.mx)/2,(a.my+b.my)/2);
+    if(twoHandGrab){
+      const r=twoHandGrab, MIN=0.08;
+      let x0=Math.min(a.mx,b.mx), x1=Math.max(a.mx,b.mx), y0=Math.min(a.my,b.my), y1=Math.max(a.my,b.my);
+      if(x1-x0<MIN){ const c=(x0+x1)/2; x0=c-MIN/2; x1=c+MIN/2; }
+      if(y1-y0<MIN){ const c=(y0+y1)/2; y0=c-MIN/2; y1=c+MIN/2; }
+      r.x0=clampi(x0,0,1); r.x1=clampi(x1,0,1); r.y0=clampi(y0,0,1); r.y1=clampi(y1,0,1);
+    }
+    editState[0].grab=null; editState[1].grab=null;       // suspend single-hand move while resizing
+  } else {
+    twoHandGrab = null;
+    const grabbed=new Set();
+    editMove(a, editState[0], grabbed);
+    editMove(b, editState[1], grabbed);
+  }
+  const active = !!(twoHandGrab || editState[0].grab || editState[1].grab);
+  if(editWasActive && !active) saveState();               // persist on release
+  editWasActive = active;
+  for(const [p,hand] of [[a,h1],[b,h2]]){ if(p){ drawPick(p.mx*W,p.my*H,p.on); drawHand(hand,"#ffd479"); } }
+}
+
+const flash = {};                                    // cell idx -> last trigger time (ms)
+let chordHover = null, chordPick = null;             // chord-palette hover cell + pick cursor, per frame
+// screen rect of one plate cell — shared by the grid render and the hover highlight
+function plateCellRect(P,line,r,W,H,cols,runLen,horiz){
+  const x0=P.x0*W, x1=P.x1*W, y0=P.y0*H, y1=P.y1*H;
+  if(horiz) return { sw:(x1-x0)/runLen, sh:(y1-y0)/cols, sx:x0+r*((x1-x0)/runLen), sy:y1-(line+1)*((y1-y0)/cols) };
+  return { sw:(x1-x0)/cols, sh:(y1-y0)/runLen, sx:x0+line*((x1-x0)/cols), sy:y1-(r+1)*((y1-y0)/runLen) };
+}
+function drawPlate(W,H,runLen,cols){
+  const P=plate();
+  const x0=P.x0*W, x1=P.x1*W, y0=P.y0*H, y1=P.y1*H;
+  const horiz = cfg.orientation==="horizontal";
+  const now = performance.now();
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  for(let line=0; line<cols; line++){
+    for(let r=0; r<runLen; r++){
+      const note = cellNote(line, r);
+      const idx  = line*runLen + r;
+      const tonic = (((note - keyRoot) % 12) + 12) % 12 === 0;
+      const {sx,sy,sw,sh} = plateCellRect(P,line,r,W,H,cols,runLen,horiz);
+      // continuous fade after a trigger: 1 at the hit, eased back to rest over ~650ms
+      const lin = Math.max(0, 1 - (now - (flash[idx] || -1e9)) / 650);
+      const g = lin*lin;
+      // rests sit low and blend into the video; a hit blooms in opacity + saturation
+      ctx.fillStyle = noteColor(note, 58 + g*24, 55 + g*38, (tonic?0.30:0.15) + g*0.62);
+      ctx.fillRect(sx, sy, sw, sh);
+      if(sw>24 && sh>13){
+        ctx.font = (tonic?"600 ":"400 ")+"11px "+FONT;
+        ctx.fillStyle = `rgba(255,255,255,${0.52 + g*0.45})`;
+        ctx.fillText(NOTE_NAMES[note%12], sx+sw/2, sy+sh/2);
+      }
+    }
+  }
+  ctx.textAlign="left"; ctx.textBaseline="alphabetic";
+  drawHandles(P, x0, y0, x1, y1);
+}
+// faint frame + corner handles, fading in/out as you hover/drag this region
+function drawHandles(r, x0, y0, x1, y1){
+  const target = (editMode || hoverTarget===r || drag?.target===r) ? 1 : 0;
+  const a = (handleFade.get(r) ?? 0) + (target - (handleFade.get(r) ?? 0)) * 0.18;
+  handleFade.set(r, a);
+  if(a < 0.01) return;
+  ctx.strokeStyle=`rgba(255,255,255,${0.4*a})`; ctx.lineWidth=1;
+  ctx.strokeRect(x0,y0,x1-x0,y1-y0);
+  ctx.fillStyle=`rgba(255,255,255,${0.9*a})`; const hs=7;
+  for(const [cx,cy] of [[x0,y0],[x1,y0],[x0,y1],[x1,y1]])
+    ctx.fillRect(cx-hs/2,cy-hs/2,hs,hs);
+}
+// ----- chord palette: 7 degree columns (circle of fifths) × 4 extension rows -----
+function drawChordPanel(W,H){
+  if(freeMode) return;                             // palette is meaningless when soloing
+  const x0=CHORD.x0*W, x1=CHORD.x1*W, y0=CHORD.y0*H, y1=CHORD.y1*H;
+  if(isOmni()){ drawOmniPanel(x0,y0,x1,y1); drawHandles(CHORD, x0, y0, x1, y1); return; }
+  const cw=(x1-x0)/7, ch=(y1-y0)/cfg.extRows;
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  for(let c=0;c<7;c++){
+    const deg=DEGREE_ORDER[c], root=degRoot(deg);
+    for(let ext=0;ext<cfg.extRows;ext++){
+      const sx=x0+c*cw, sy=y1-(ext+1)*ch;          // ext0 (triad) at the bottom
+      const sel = (deg===currentDegree && ext===currentExt && !freeMode);
+      const hov = chordHover && chordHover.deg===deg && chordHover.ext===ext && !sel;
+      ctx.fillStyle = noteColor((root+12*5), sel?66:54, sel?92:46, sel?0.92:0.16);
+      ctx.fillRect(sx,sy,cw,ch);
+      if(hov){ ctx.strokeStyle="rgba(255,255,255,.8)"; ctx.lineWidth=2; ctx.strokeRect(sx+1,sy+1,cw-2,ch-2); ctx.lineWidth=1; }
+      if(cw>22 && ch>13){
+        ctx.font=(sel?"600 ":"400 ")+"11px "+FONT;
+        ctx.fillStyle=`rgba(255,255,255,${sel?0.98:0.5})`;
+        ctx.fillText(ROMAN[deg]+["","7","9","11"][ext], sx+cw/2, sy+ch/2);
+      }
+    }
+  }
+  ctx.textAlign="left"; ctx.textBaseline="alphabetic";
+  drawHandles(CHORD, x0, y0, x1, y1);
+}
+const OMNI_ROW_TAG = ["", "m", "7"];                 // row 0 Major, 1 Minor, 2 7th (top→bottom)
+function drawOmniPanel(x0,y0,x1,y1){
+  const cw=(x1-x0)/12, ch=(y1-y0)/3;
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  for(let c=0;c<12;c++){
+    const rootPc = OMNI_ROOT_PC[c];
+    for(let row=0;row<3;row++){
+      const sx=x0+c*cw, sy=y0+row*ch;                // row 0 (Major) at top
+      const sel = (c===omniRootIdx && row===omniQual);
+      const hov = chordHover && chordHover.omniCol===c && chordHover.omniRow===row && !sel;
+      ctx.fillStyle = noteColor((rootPc+12*5), sel?66:54, sel?92:46, sel?0.92:0.16);
+      ctx.fillRect(sx,sy,cw,ch);
+      if(hov){ ctx.strokeStyle="rgba(255,255,255,.8)"; ctx.lineWidth=2; ctx.strokeRect(sx+1,sy+1,cw-2,ch-2); ctx.lineWidth=1; }
+      if(cw>16 && ch>13){
+        ctx.font=(sel?"600 ":"400 ")+"10px "+FONT;
+        ctx.fillStyle=`rgba(255,255,255,${sel?0.98:0.5})`;
+        ctx.fillText(NOTE_NAMES[rootPc]+OMNI_ROW_TAG[row], sx+cw/2, sy+ch/2);
+      }
+    }
+  }
+  ctx.textAlign="left"; ctx.textBaseline="alphabetic";
+}
+function drawPick(px,py,engaged){
+  ctx.beginPath(); ctx.arc(px,py,engaged?13:8,0,Math.PI*2);
+  ctx.fillStyle = engaged ? "rgba(255,255,255,.96)" : "rgba(255,255,255,.3)"; ctx.fill();
+  ctx.beginPath(); ctx.arc(px,py,engaged?24:15,0,Math.PI*2);
+  ctx.strokeStyle = engaged ? "rgba(255,255,255,.55)" : "rgba(255,255,255,.16)";
+  ctx.lineWidth = 1.5; ctx.stroke(); ctx.lineWidth = 1;
+}
+const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+function drawHand(lm,color){
+  const W=canvas.width,H=canvas.height;
+  ctx.save();
+  ctx.globalAlpha=0.4;                               // dim: skeleton is a hint, the pick is the focus
+  ctx.strokeStyle=color; ctx.lineWidth=1.25;
+  for(const [a,b] of BONES){
+    ctx.beginPath(); ctx.moveTo(MX(lm[a])*W,lm[a].y*H);
+    ctx.lineTo(MX(lm[b])*W,lm[b].y*H); ctx.stroke();
+  }
+  ctx.fillStyle=color;
+  for(const p of lm){ ctx.beginPath(); ctx.arc(MX(p)*W,p.y*H,1.5,0,Math.PI*2); ctx.fill(); }
+  ctx.restore();
+}
+
+function updateChordLabel(){
+  if(editMode){
+    chordNameEl.firstChild.textContent = "Move panels";
+    chordNameEl.style.color = "#ffd479";
+    modeEl.textContent = "one hand moves · two hands resize · E to finish";
+    return;
+  }
+  const lock = (muted ? " · muted" : "") + (lockChord ? " · locked" : "");
+  if(freeMode){
+    chordNameEl.firstChild.textContent = `${NOTE_NAMES[keyRoot]} ${scaleName}`;
+    chordNameEl.style.color = noteColor(keyRoot, 72, 85, 1);   // tonic hue
+    modeEl.textContent = `free scale${lock}`;
+    return;
+  }
+  if(isOmni()){
+    const rootPc = OMNI_ROOT_PC[omniRootIdx];
+    chordNameEl.firstChild.textContent = `${NOTE_NAMES[rootPc]}${OMNI_QUALITIES[omniQual].tag}`;
+    chordNameEl.style.color = noteColor(rootPc, 72, 85, 1);
+    modeEl.textContent = `omnichord${lock}`;
+    return;
+  }
+  const degOffset = MAJOR[(currentDegree-1)%7];
+  const rootName = NOTE_NAMES[(keyRoot+degOffset)%12];
+  chordNameEl.style.color = noteColor(keyRoot+degOffset, 72, 85, 1);  // root's scale-degree hue
+  chordNameEl.firstChild.textContent = `${rootName}${chordTag(currentDegree, currentExt)}`;
+  modeEl.textContent = `${ROMAN[currentDegree]}${["","7","9","11"][currentExt]} in ${NOTE_NAMES[keyRoot]} major${lock}`;
+}
+
+// compact chord suffix matching the palette cell labels (m / ° + 7·9·11)
+function chordTag(deg, ext){
+  const minor = TRIAD[deg][1]===3, dim = deg===7;
+  return (dim ? "°" : (minor ? "m" : "")) + ["","7","9","11"][ext];
+}
+
+// ---------- Start ----------
+// the app loads up front: camera + tracking begin on page load and render behind the
+// blurred intro. Audio needs a user gesture, so the button only unlocks sound + dismisses.
+let camStarted = false;
+async function startCamera(){
+  if(camStarted) return;
+  camStarted = true;
+  try{
+    statusEl.textContent = "loading model…";
+    await setup();
+  }catch(err){
+    camStarted = false;
+    statusEl.textContent = "Camera unavailable: " + err.message;
+    console.error(err);
+  }
+}
+if(matchMedia("(pointer:coarse)").matches || window.innerWidth < 760)
+  document.body.classList.add("is-mobile");
+setMode("chord");
+startCamera();
+
+document.getElementById("startBtn").addEventListener("click", async ()=>{
+  try{ if(!actx) initAudio(); await actx.resume(); }
+  catch(err){ console.error(err); }
+  initMidi();                                      // ask for MIDI output (non-blocking; fine if denied)
+  startCamera();                                   // retry if camera was blocked/slow at load
+  started = true;                                  // begin detection + playing now that the intro is dismissed
+  startEl.classList.add("hide");
+});
+startEl.addEventListener("transitionend", ()=>{    // drop from layout once faded
+  if(startEl.classList.contains("hide")) startEl.style.display="none";
+});
