@@ -159,15 +159,27 @@
       color: #ccc;
     }
 
+    /* a hue that continuously cycles + a chroma that fades in on hover, so a
+       hovered link phases through the spectrum (and fades back to gray on leave).
+       fading --chroma rather than the color lets the hue animate freely */
+    @property --link-cycle { syntax: "<number>"; inherits: true; initial-value: 0; }
+    @property --chroma { syntax: "<number>"; inherits: true; initial-value: 0; }
+    @keyframes link-cycle { to { --link-cycle: 360; } }
+    .links { animation: link-cycle 4s linear infinite; }
     .links a {
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-      transition: color 1.6s ease, filter 0.2s ease;   /* slow drift back to gray */
+      color: oklch(0.82 var(--chroma) calc(var(--link-cycle) + var(--lh, 0)));
+      --chroma: 0;                                       /* gray at rest */
+      transition: --chroma 1.6s ease, filter 0.2s ease;  /* slow fade back to gray */
     }
     .links a:hover {
-      color: oklch(0.82 0.17 var(--lh, 320));
-      transition: color 0.12s ease, filter 0.2s ease;  /* quick colorize on hover */
+      --chroma: 0.17;
+      transition: --chroma 0.12s ease, filter 0.2s ease; /* quick colorize, then it phases */
     }
-    /* a distinct hue per link so hovering walks the rainbow */
+    @media (prefers-reduced-motion: reduce) {
+      .links { animation: none; }                        /* hover = static per-link hue */
+    }
+    /* a distinct hue per link so each phases at its own offset (staggered) */
     .links > div:nth-of-type(1) { --lh: 215; }   /* email */
     .links > div:nth-of-type(2) { --lh: 265; }   /* aka patrick */
     .links > div:nth-of-type(4) { --lh: 25; }    /* orbital harp */
