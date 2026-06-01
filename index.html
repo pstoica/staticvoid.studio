@@ -761,7 +761,7 @@
         var speed = Math.hypot(x - px, y - py) / Math.max(1, gap);   // px per ms
         // flip between freehand circles and quantized squares often (every ~450ms
         // of movement, or on a pause)
-        if (gap > 350 || now - lastRoll > 450) { mode = Math.random() < 0.45 ? 'grid' : 'free'; lastRoll = now; lastCell = ''; }
+        if (gap > 350 || now - lastRoll > 450) { mode = Math.random() < 0.62 ? 'grid' : 'free'; lastRoll = now; lastCell = ''; }
         px = x; py = y; pt = now;
         if (mode === 'grid') {
           var gx = Math.round(x / GRID) * GRID, gy = Math.round(y / GRID) * GRID;
