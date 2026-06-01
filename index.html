@@ -86,10 +86,19 @@
     h1.title {
       font-size: clamp(2.5rem, 8vw, 3.5rem);
       font-weight: bold;
-      color: #ddd;
       letter-spacing: 0.02em;
-      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
       position: relative;
+      /* same soft oklch rainbow band as the section headers, slowly drifting */
+      background: linear-gradient(95deg,
+        oklch(0.88 0.19 calc(var(--title-hue))),
+        oklch(0.88 0.19 calc(var(--title-hue) + 70deg)),
+        oklch(0.88 0.19 calc(var(--title-hue) + 140deg)),
+        oklch(0.88 0.19 calc(var(--title-hue) + 210deg)));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      -webkit-text-fill-color: transparent;
+      animation: title-hue 10s linear infinite;
     }
 
     h1.title::before {
@@ -297,6 +306,11 @@
 
     /* gentle rainbow cursor trail — small dots that fade in, pulse a couple of
        times, then fade out; hue walks the spectrum so the trail flows */
+    @property --dot-phase {
+      syntax: "<angle>";
+      inherits: false;
+      initial-value: 0deg;
+    }
     .cursor-dot {
       position: absolute;   /* anchored to the page, so dots scroll with content */
       top: 0;
@@ -307,10 +321,12 @@
       border-radius: 50%;
       pointer-events: none;
       z-index: 9999;
-      background: oklch(0.87 0.2 var(--dot-hue));
-      box-shadow: 0 0 9px oklch(0.87 0.2 var(--dot-hue) / 0.85),
-                  0 0 3px oklch(0.92 0.16 var(--dot-hue) / 0.9);
-      animation: dot-life 2.4s ease-out forwards;   /* duration varied per-dot in JS to desync the pulse */
+      /* --dot-hue is the per-dot base (set in JS); --dot-phase keeps drifting over
+         the dot's life so the color keeps cycling after placement */
+      background: oklch(0.87 0.2 calc(var(--dot-hue) + var(--dot-phase)));
+      box-shadow: 0 0 9px oklch(0.87 0.2 calc(var(--dot-hue) + var(--dot-phase)) / 0.85),
+                  0 0 3px oklch(0.92 0.16 calc(var(--dot-hue) + var(--dot-phase)) / 0.9);
+      animation: dot-life 2.4s ease-out forwards, dot-cycle 2.4s linear forwards;
       will-change: transform, opacity;
     }
     @keyframes dot-life {
@@ -321,6 +337,9 @@
       66%  {                transform: translate(var(--dot-x), var(--dot-y)) scale(0.8); }
       84%  { opacity: 0.45; transform: translate(var(--dot-x), var(--dot-y)) scale(1); }
       100% { opacity: 0;    transform: translate(var(--dot-x), var(--dot-y)) scale(0.5); }
+    }
+    @keyframes dot-cycle {
+      to { --dot-phase: 260deg; }   /* hue keeps advancing through the dot's life */
     }
     @media (prefers-reduced-motion: reduce) {
       .cursor-dot { display: none; }
