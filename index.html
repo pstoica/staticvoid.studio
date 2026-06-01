@@ -176,7 +176,7 @@
     .links a:hover {
       --chroma: 0.2; --ll: 0.72;                         /* vivid + dark enough that pale hues don't read white */
       filter: none;                                      /* drop the global brightness(1.2) that whitened it */
-      transition: --chroma 0.12s ease, --ll 0.12s ease, filter 0.2s ease;
+      transition: none;                                  /* colorize instantly (robust); fade-out uses the base transition */
     }
     @media (prefers-reduced-motion: reduce) {
       .links { animation: none; }                        /* hover = static per-link hue */
@@ -599,6 +599,18 @@
           allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowfullscreen></iframe>
         <iframe class="tiktok-video mute-embed" src="https://www.tiktok.com/player/v1/7448393875313495338?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
+          title="TikTok video player" frameborder="0"
+          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+          allowfullscreen></iframe>
+        <iframe class="tiktok-video mute-embed" src="https://www.tiktok.com/player/v1/7517732441625267511?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
+          title="TikTok video player" frameborder="0"
+          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+          allowfullscreen></iframe>
+        <iframe class="tiktok-video mute-embed" src="https://www.tiktok.com/player/v1/7528129579429416206?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
+          title="TikTok video player" frameborder="0"
+          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+          allowfullscreen></iframe>
+        <iframe class="tiktok-video mute-embed" src="https://www.tiktok.com/player/v1/7465189271180184874?progress_bar=0&volume_control=0&fullscreen_button=0&timestamp=0&closed_caption=0&rel=0&autoplay=0"
           title="TikTok video player" frameborder="0"
           allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowfullscreen></iframe>
