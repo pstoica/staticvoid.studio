@@ -201,6 +201,20 @@
       border-radius: 0.75rem;
     }
 
+    /* the vertical clips (YouTube short + TikToks) stack on mobile, sit in a
+       3-column row on tablet/desktop */
+    .shorts {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+      align-items: start;
+    }
+    @media (min-width: 768px) {
+      .shorts {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
     /* "NEW" badge — one solid color, rotating the oklch hue (constant L+C, so
        every hue is equally bright/saturated — no muddy sRGB hue-rotate greens) */
     @property --new-hue {
@@ -281,14 +295,20 @@
         title="YouTube video player" frameborder="0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowfullscreen></iframe>
-      <iframe class="youtube-short" src="https://www.youtube.com/embed/FvbiWd4Auws?controls=0&modestbranding=1"
-        title="YouTube video player" frameborder="0"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowfullscreen></iframe>
-      <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7556472061347073294"
-        title="TikTok video player" frameborder="0"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-        allowfullscreen></iframe>
+      <div class="shorts">
+        <iframe class="youtube-short" src="https://www.youtube.com/embed/FvbiWd4Auws?controls=0&modestbranding=1"
+          title="YouTube video player" frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen></iframe>
+        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7556472061347073294"
+          title="TikTok video player" frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+          allowfullscreen></iframe>
+        <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7640954015458659598"
+          title="TikTok video player" frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+          allowfullscreen></iframe>
+      </div>
     </div>
   </div>
 
