@@ -220,12 +220,34 @@
       }
     }
 
+    /* section headers — a soft oklch rainbow band that slowly drifts; each header
+       is offset to a different phase (inline animation-delay) so the three differ
+       without clashing. constant L+C keeps every band equally soft */
+    @property --title-hue {
+      syntax: "<angle>";
+      inherits: false;
+      initial-value: 0deg;
+    }
     .section-title {
       margin: 0;
       font-size: 1.5rem;
       font-weight: 700;
-      color: #ddd;
       text-align: center;
+      background: linear-gradient(95deg,
+        oklch(0.82 0.13 calc(var(--title-hue))),
+        oklch(0.82 0.13 calc(var(--title-hue) + 70deg)),
+        oklch(0.82 0.13 calc(var(--title-hue) + 140deg)),
+        oklch(0.82 0.13 calc(var(--title-hue) + 210deg)));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: title-hue 18s linear infinite;
+    }
+    @keyframes title-hue {
+      to { --title-hue: 360deg; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .section-title { animation: none; }
     }
 
     /* a captioned clip: the player with its app name beneath */
@@ -239,8 +261,12 @@
     .clip-cap {
       font-size: 0.95rem;
       font-weight: 700;
-      color: #ccc;
       text-align: center;
+    }
+    .clip-cap a {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      text-decoration-thickness: 1px;
     }
 
     /* "NEW" badge — one solid color, rotating the oklch hue (constant L+C, so
@@ -333,27 +359,27 @@
             title="TikTok video player" frameborder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowfullscreen></iframe>
-          <figcaption class="clip-cap">orbital harp</figcaption>
+          <figcaption class="clip-cap" style="color:oklch(0.8 0.07 30)"><a href="https://orbitalharp.com">orbital harp</a></figcaption>
         </figure>
         <figure class="clip">
           <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7556472061347073294"
             title="TikTok video player" frameborder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowfullscreen></iframe>
-          <figcaption class="clip-cap">senseweave</figcaption>
+          <figcaption class="clip-cap" style="color:oklch(0.8 0.07 155)"><a href="https://senseweave.xyz">senseweave</a></figcaption>
         </figure>
         <figure class="clip">
           <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7640954015458659598"
             title="TikTok video player" frameborder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowfullscreen></iframe>
-          <figcaption class="clip-cap">video granulator</figcaption>
+          <figcaption class="clip-cap" style="color:oklch(0.8 0.07 265)">video granulator</figcaption>
         </figure>
       </div>
     </div>
 
     <div class="videos">
-      <h2 class="section-title">livecoding</h2>
+      <h2 class="section-title" style="animation-delay:-6s">livecoding</h2>
       <div class="shorts">
         <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7562682507280338189"
           title="TikTok video player" frameborder="0"
@@ -371,7 +397,7 @@
     </div>
 
     <div class="videos">
-      <h2 class="section-title">juggling</h2>
+      <h2 class="section-title" style="animation-delay:-12s">juggling</h2>
       <div class="shorts shorts--pair">
         <iframe class="tiktok-video" src="https://www.tiktok.com/player/v1/7625866999666642189"
           title="TikTok video player" frameborder="0"
