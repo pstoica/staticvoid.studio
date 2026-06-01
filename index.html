@@ -593,7 +593,7 @@
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       var t = document.querySelector('h1.title');
       if (!t) return;
-      var SLOW = 36 / 1000, FAST = 170 / 1000;   // deg per ms (10s vs ~2.1s cycle)
+      var SLOW = 170 / 1000, FAST = 360 / 1000;  // deg per ms (~2.1s default, ~1s on hover)
       var hue = 0, speed = SLOW, target = SLOW, last = null;
       t.addEventListener('pointerenter', function () { target = FAST; });
       t.addEventListener('pointerleave', function () { target = SLOW; });
