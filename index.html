@@ -164,17 +164,19 @@
        fading --chroma rather than the color lets the hue animate freely */
     @property --link-cycle { syntax: "<number>"; inherits: true; initial-value: 0; }
     @property --chroma { syntax: "<number>"; inherits: true; initial-value: 0; }
+    @property --ll { syntax: "<number>"; inherits: true; initial-value: 0.82; }
     @keyframes link-cycle { to { --link-cycle: 360; } }
-    .links { animation: link-cycle 4s linear infinite; }
+    .links { animation: link-cycle 2.4s linear infinite; }   /* faster cycle */
     .links a {
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-      color: oklch(0.82 var(--chroma) calc(var(--link-cycle) + var(--lh, 0)));
-      --chroma: 0;                                       /* gray at rest */
-      transition: --chroma 1.6s ease, filter 0.2s ease;  /* slow fade back to gray */
+      color: oklch(var(--ll) var(--chroma) calc(var(--link-cycle) + var(--lh, 0)));
+      --chroma: 0; --ll: 0.82;                           /* light gray at rest */
+      transition: --chroma 2.6s ease, --ll 2.6s ease, filter 0.2s ease;  /* linger, then fade to gray */
     }
     .links a:hover {
-      --chroma: 0.17;
-      transition: --chroma 0.12s ease, filter 0.2s ease; /* quick colorize, then it phases */
+      --chroma: 0.2; --ll: 0.76;                         /* vivid + a touch darker so it isn't washed */
+      filter: none;                                      /* drop the global brightness(1.2) that whitened it */
+      transition: --chroma 0.12s ease, --ll 0.12s ease, filter 0.2s ease;
     }
     @media (prefers-reduced-motion: reduce) {
       .links { animation: none; }                        /* hover = static per-link hue */
