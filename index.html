@@ -227,27 +227,22 @@
 
     .marquee {
       white-space: nowrap;
-      overflow: hidden;
-      display: inline-block;
+      display: flex;                 /* flex eliminates the inter-p whitespace gap */
       animation: marquee 20s linear infinite;
       font-size: 1.25rem;
+      will-change: transform;        /* GPU layer: no paint blip on loop restart */
     }
 
     .marquee p {
-      display: inline-block;
+      flex: 0 0 auto;               /* don't shrink; fill-box width matches sibling */
       margin: 0;
       font-size: 1.25rem;
       opacity: 0.85;
     }
 
     @keyframes marquee {
-      0% {
-        transform: translateX(0);
-      }
-
-      100% {
-        transform: translateX(-50%);
-      }
+      from { transform: translate3d(0, 0, 0); }     /* translate3d = compositor path */
+      to   { transform: translate3d(-50%, 0, 0); }
     }
 
     .videos {
