@@ -1,0 +1,56 @@
+.mark {
+  pointer-events: none;
+}
+
+.mark-primary {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.mark__path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 8;
+  transition:
+    stroke 380ms ease,
+    filter 380ms ease;
+}
+
+.mark--X .mark__path {
+  stroke: oklch(86% 0.18 25);
+  filter: drop-shadow(0 0 10px oklch(86% 0.18 25 / 0.5));
+}
+
+.mark--O .mark__path {
+  stroke: oklch(86% 0.18 235);
+  filter: drop-shadow(0 0 10px oklch(86% 0.18 235 / 0.5));
+}
+
+/* winning trio — CSS transitions the stroke + glow to --win-color;
+   the scale pop animation is driven from anim.ts on the same elements */
+.mark--winning .mark__path {
+  stroke: var(--win-color);
+  filter: drop-shadow(0 0 14px oklch(88% 0.18 145 / 0.7));
+}
+
+/* LERP trail frames — each ghost is a frozen pose, only opacity animates.
+   preserve-3d keeps the 3D context flowing from .board down to the ghost paths
+   so their rotateX/Y renders with real foreshortening. */
+.mark-ghosts {
+  transform-style: preserve-3d;
+}
+
+.mark__ghost {
+  fill: none;
+  stroke: oklch(82% 0.18 var(--ghost-hue, 285));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 5;
+  opacity: 0;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  /* force a dedicated GPU layer so the 3D transforms render as 3D */
+  will-change: transform, opacity;
+}

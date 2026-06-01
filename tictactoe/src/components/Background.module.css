@@ -1,0 +1,130 @@
+/* scattered X/O shapes behind every screen. each axis lives on its own
+   nested layer so the per-layer CSS animation fully owns that element's
+   transform — no JS tween loops, no shared transform string to clobber,
+   so the motion stays steady. hue drifts via a registered custom property. */
+
+@property --shape-hue {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 280;
+}
+
+.bg {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+  /* 3D context so rotateX / rotateY on the nested layers foreshortens */
+  perspective: 900px;
+  transform-style: preserve-3d;
+  transition: opacity 520ms ease;
+}
+
+/* during play the shapes step back so they don't pull focus from the board */
+.bg--dim {
+  opacity: 0.35;
+}
+
+.shapeSlot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  transform-style: preserve-3d;
+  /* per-shape inline custom properties drive every animation below:
+       --hue-from / --hue-period
+       --float-amp / --float-period / --float-delay
+       --rx-amp   / --rx-period   / --rx-delay
+       --ry-amp   / --ry-period   / --ry-delay
+       --rz-amp   / --rz-period   / --rz-delay
+  */
+  color: oklch(74% 0.15 var(--shape-hue, 280));
+  animation: bgHueDrift var(--hue-period, 30000ms) linear infinite;
+}
+
+.shapeLayer {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.shapeFloat {
+  animation: bgFloat var(--float-period, 8000ms) var(--float-delay, 0ms)
+    ease-in-out infinite alternate;
+}
+
+.shapeRotX {
+  animation: bgRotX var(--rx-period, 11000ms) var(--rx-delay, 0ms) ease-in-out
+    infinite alternate;
+}
+
+.shapeRotY {
+  animation: bgRotY var(--ry-period, 13000ms) var(--ry-delay, 0ms) ease-in-out
+    infinite alternate;
+}
+
+.shapeRotZ {
+  animation: bgRotZ var(--rz-period, 14000ms) var(--rz-delay, 0ms) ease-in-out
+    infinite alternate;
+}
+
+.shapeSlot svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes bgHueDrift {
+  from {
+    --shape-hue: var(--hue-from, 0);
+  }
+  to {
+    --shape-hue: calc(var(--hue-from, 0) + 360);
+  }
+}
+
+@keyframes bgFloat {
+  from {
+    transform: translateY(calc(-1 * var(--float-amp, 10px)));
+  }
+  to {
+    transform: translateY(var(--float-amp, 10px));
+  }
+}
+
+@keyframes bgRotX {
+  from {
+    transform: rotateX(calc(-1 * var(--rx-amp, 30deg)));
+  }
+  to {
+    transform: rotateX(var(--rx-amp, 30deg));
+  }
+}
+
+@keyframes bgRotY {
+  from {
+    transform: rotateY(calc(-1 * var(--ry-amp, 30deg)));
+  }
+  to {
+    transform: rotateY(var(--ry-amp, 30deg));
+  }
+}
+
+@keyframes bgRotZ {
+  from {
+    transform: rotate(calc(-1 * var(--rz-amp, 20deg)));
+  }
+  to {
+    transform: rotate(var(--rz-amp, 20deg));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shapeSlot,
+  .shapeFloat,
+  .shapeRotX,
+  .shapeRotY,
+  .shapeRotZ {
+    animation: none;
+  }
+}

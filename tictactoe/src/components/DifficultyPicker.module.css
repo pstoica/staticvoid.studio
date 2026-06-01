@@ -1,0 +1,59 @@
+/* cards-as-buttons: each one always lives in its own hue, no separate CTA */
+
+.picker {
+  width: 100%;
+  display: grid;
+  gap: 22px;
+}
+
+.picker__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--ink-dim)
+}
+
+.picker__options {
+  display: grid;
+  gap: 16px;
+  padding: 6px 4px;
+}
+
+.opt-card {
+  --accent-hue: 285;
+}
+
+.opt-card:hover .opt-card__star--on {
+  color: oklch(100% 0.3 var(--btn-hue));
+  text-shadow: 0 0 12px oklch(98% 0.08 var(--btn-hue) / 0.9);
+}
+
+.opt-card:focus-visible {
+  outline: 3px solid oklch(92% 0.15 var(--accent-hue));
+  outline-offset: 3px;
+}
+
+.opt-card__stars {
+  display: inline-flex;
+  gap: 2px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.opt-card__star--on {
+  line-height: 1;
+  transition: color 150ms ease;
+}
+
+.opt-card__star--on {
+  color: oklch(98% 0.08 var(--accent-hue));
+  text-shadow: 0 0 12px oklch(98% 0.08 var(--accent-hue) / 0.9);
+}
+
+.opt-card__star--off {
+  color: oklch(35% 0.1 var(--accent-hue) / 0.55);
+  display: none;
+}

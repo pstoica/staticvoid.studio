@@ -1,0 +1,135 @@
+/* ============================================================
+   palette — dark base + saturated pastels via oklch
+   no multi-stop gradients; hue shifts happen in motion
+   ============================================================ */
+
+:root {
+  --bg: oklch(12% 0.02 280);
+  --bg-deep: oklch(8% 0.025 280);
+  --surface: oklch(18% 0.03 285);
+  --surface-2: oklch(22% 0.04 285);
+  --border: oklch(32% 0.04 285 / 0.55);
+
+  --ink: oklch(98% 0.01 280);
+  --ink-dim: oklch(76% 0.02 280);
+  --ink-mute: oklch(52% 0.02 280);
+
+  --x-color: oklch(82% 0.16 25);
+  --o-color: oklch(82% 0.16 235);
+  --win-color: oklch(88% 0.18 145);
+
+  --radius: 16px;
+  --radius-lg: 22px;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* use dynamic viewport units everywhere — 100vh is measured against the
+   *largest* viewport (address bar collapsed) on mobile, so anything sized
+   to it is taller than the visible area when the bar is showing and forces
+   a scroll. 100dvh tracks the currently-visible viewport instead. */
+html,
+body,
+#root {
+  min-height: 100dvh;
+}
+
+/* page fade-in. body's gradient stays visible underneath while #root
+   transitions in, so there's no flash of empty viewport on load. */
+#root {
+  animation: app-fade-in 520ms ease both;
+}
+
+@keyframes app-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+body {
+  margin: 0;
+  font-family:
+    'Fredoka',
+    ui-rounded,
+    'SF Pro Rounded',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  background:
+    radial-gradient(1000px 600px at 50% -10%, oklch(22% 0.06 280 / 0.55), transparent 70%),
+    radial-gradient(700px 500px at 50% 110%, oklch(20% 0.06 320 / 0.45), transparent 70%),
+    var(--bg-deep);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+/* ============================================================
+   layout — centered mobile-like stage.
+   header is anchored near the top of the viewport; main content lives in a
+   fixed-height area below the centerfold so swapping picker → board → end
+   never shifts the header.
+   ============================================================ */
+
+.app {
+  min-height: 100dvh;
+  /* trimmed from 7dvh/4dvh so the stage fits on iPhone SE with the
+     address bar visible without forcing vertical scroll */
+  padding: 5dvh 20px 3dvh;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  /* sit above the fixed Background layer */
+  position: relative;
+  z-index: 1;
+}
+
+.stage {
+  width: 100%;
+  max-width: 440px;
+  display: grid;
+  align-content: start;
+  gap: clamp(32px, 6dvh, 56px);
+  justify-items: center;
+}
+
+.stage__top {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+
+.stage__main {
+  width: 100%;
+  display: grid;
+  place-items: center;
+  position: relative;
+  /* reserve room for the board + turn pill so swaps don't shift the header.
+     floor trimmed from 460 → 360 so small viewports don't force a scroll —
+     board still fits (88vmin cap naturally shrinks with viewport). */
+  min-height: clamp(360px, 58dvh, 480px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

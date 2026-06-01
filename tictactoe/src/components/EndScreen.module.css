@@ -1,0 +1,72 @@
+/* transparent pass-through — the endCard itself is the visual focus;
+   no modal backdrop / blur layer needed around it. width: 100% so the
+   card inside still has room to hit its max-width cap instead of
+   collapsing to the intrinsic width of "YOU WIN". */
+.end {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  padding: 8px;
+}
+
+/* no card chrome — title + actions stand on their own against the page,
+   the background X/O shapes show through where the card used to be */
+.end__card {
+  width: 100%;
+  max-width: 420px;
+  display: grid;
+  gap: 20px;
+  padding: 28px 22px;
+  text-align: center;
+}
+
+.end__title {
+  margin: 0;
+  font-size: clamp(38px, 10vw, 56px);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  display: flex;
+  justify-content: center;
+  gap: 0.02em;
+}
+
+.end__char {
+  display: inline-block;
+  will-change: transform, color;
+  text-shadow: 0 4px 0 oklch(28% 0.1 var(--char-hue, 145) / 0.9);
+}
+
+.end--win .end__char {
+  color: oklch(86% 0.18 var(--char-hue, 145));
+}
+
+.end--loss .end__char {
+  color: oklch(80% 0.18 25);
+  text-shadow: 0 4px 0 oklch(30% 0.12 25 / 0.9);
+}
+
+.end--draw .end__char {
+  color: var(--ink-dim);
+  text-shadow: 0 4px 0 oklch(14% 0.02 280 / 0.9);
+}
+
+.end__sub {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.end__actions {
+  display: grid;
+  gap: 10px;
+  /* own compositor layer — without this, the looping translateY/rotate
+     on .end__char (above) triggers a rasterization pass on the whole
+     endCard each frame, which is what makes the buttons flicker.
+     `will-change: transform` is a hint the browser can ignore when
+     there's nothing actually scheduled to transform; translate3d(0,0,0)
+     forces a dedicated layer right away. */
+  transform: translate3d(0, 0, 0);
+}

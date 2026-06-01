@@ -1,0 +1,31 @@
+/* chunky wordmark — per-letter hue wave (no gradients) */
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  font-size: clamp(28px, 6.5vw, 34px);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  user-select: none;
+}
+
+.brand__letter {
+  display: inline-block;
+  color: oklch(84% 0.16 var(--letter-hue, 280));
+  text-shadow: 0 3px 0 oklch(30% 0.09 var(--letter-hue, 280) / 0.9);
+  will-change: color;
+}
+
+.brand__dot {
+  display: inline-block;
+  width: 0.2em;
+  height: 0.2em;
+  margin: 0 0.14em;
+  border-radius: 50%;
+  background: oklch(84% 0.16 var(--letter-hue, 280));
+  /* push down to align with the visual middle of the lowercase letters */
+  transform: translateY(0.08em);
+  will-change: background;
+}

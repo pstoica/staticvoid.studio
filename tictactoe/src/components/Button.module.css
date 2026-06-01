@@ -1,0 +1,80 @@
+/* chunky pressable button — shared across difficulty picker + end screen */
+
+.btn {
+  --btn-hue: 145;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 22px;
+  border-radius: var(--radius);
+  background: oklch(62% 0.19 var(--btn-hue));
+  color: oklch(14% 0.05 var(--btn-hue));
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  font-size: 22px;
+  line-height: 1;
+  box-shadow:
+    0 6px 0 oklch(36% 0.12 var(--btn-hue)),
+    0 14px 24px oklch(0% 0 0 / 0.45),
+    inset 0 1.5px 0 oklch(96% 0.06 var(--btn-hue) / 0.6);
+  transition:
+    color 90ms ease,
+    transform 90ms ease,
+    box-shadow 90ms ease,
+    background-color 200ms ease;
+  /* hard layer promotion via 3D transform — keeps the button on its own
+     compositor layer and stable subpixel AA when sibling animations
+     (e.g. EndScreen's looping title) repaint nearby. `will-change` is a
+     hint the browser can ignore; translateZ(0) is a guarantee. */
+  transform: translateZ(0);
+  user-select: none;
+}
+
+/* no translateY on hover — the 6px bottom shadow isn't part of the hit area,
+   so moving the button up flips the cursor off the button edge and causes
+   flicker. brightness change alone is enough for hover feedback. */
+.btn:hover {
+  background: oklch(70% 0.21 var(--btn-hue));
+  filter: brightness(1.04);
+}
+
+.btn:active {
+  /* keep translateZ(0) so the layer stays put across the transition */
+  transform: translateZ(0) translateY(4px);
+  box-shadow:
+    0 2px 0 oklch(36% 0.12 var(--btn-hue)),
+    0 6px 10px oklch(0% 0 0 / 0.35),
+    inset 0 1.5px 0 oklch(96% 0.06 var(--btn-hue) / 0.4);
+}
+
+.btn:focus-visible {
+  outline: 3px solid oklch(92% 0.15 var(--btn-hue));
+  outline-offset: 3px;
+}
+
+.btn--block {
+  width: 100%;
+}
+
+.btn--ghost {
+  background: oklch(18% 0.03 285);
+  color: var(--ink-dim);
+  box-shadow:
+    0 5px 0 oklch(10% 0.02 285),
+    inset 0 1px 0 oklch(40% 0.04 285);
+}
+
+.btn--ghost:hover {
+  background: oklch(24% 0.05 285);
+  color: var(--ink);
+}
+
+.btn--ghost:active {
+  transform: translateZ(0) translateY(3px);
+  box-shadow:
+    0 2px 0 oklch(10% 0.02 285),
+    inset 0 1px 0 oklch(40% 0.04 285);
+}

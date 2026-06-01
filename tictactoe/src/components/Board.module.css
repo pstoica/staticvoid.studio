@@ -1,0 +1,175 @@
+.board-wrap {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  /* drop shadow is on the wrapper, not the <svg>, because filter on the SVG
+     promotes it to an atomic flattened group and kills the 3D context */
+  filter: drop-shadow(0 22px 50px oklch(0% 0 0 / 0.55));
+}
+
+.board {
+  --size: min(88vmin, 420px);
+  width: var(--size);
+  height: var(--size);
+  display: block;
+  /* establish a 3D rendering context so the ghost trail's rotateX/Y can
+     actually foreshorten instead of collapsing to a 2D squish */
+  perspective: 700px;
+  transform-style: preserve-3d;
+}
+
+/* preserve-3d must hold all the way from the perspective-holder down to the
+   ghost paths, otherwise intermediate groups flatten the space */
+.board g {
+  transform-style: preserve-3d;
+}
+
+/* top-level groups we transform for the mount stagger */
+.board > g {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.board__grid-line {
+  stroke: var(--border);
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  opacity: 0;
+}
+
+/* opaque so the background shapes behind the board don't bleed through
+   the cells — the atmosphere lives *around* the play area, not under it */
+.cell-bg {
+  fill: oklch(14% 0.025 285);
+  stroke: oklch(34% 0.03 285);
+  stroke-width: 0.9;
+  transition:
+    fill 160ms ease,
+    stroke 160ms ease;
+}
+
+.cell-hit {
+  fill: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+.cell-hit:disabled {
+  cursor: default;
+}
+
+/* interactive cells: group-hover/focus/active styles the .cell-bg sibling
+   regardless of DOM order (the adjacent-sibling selector doesn't work here
+   because cell-bg is painted first, cell-hit second — no previous-sibling
+   combinator in CSS). */
+.cell-interactive:hover .cell-bg,
+.cell-interactive:focus-within .cell-bg {
+  /* tinted toward the current player's mark — previews where the piece lands */
+  fill: oklch(28% 0.08 var(--cell-hue, 285));
+  stroke: oklch(78% 0.16 var(--cell-hue, 285));
+}
+
+.cell-interactive:active .cell-bg {
+  fill: oklch(36% 0.1 var(--cell-hue, 285));
+  stroke: oklch(86% 0.18 var(--cell-hue, 285));
+}
+
+/* the cell-wrapping <g> gets scaled by the winning-line highlight, so it
+   needs its own fill-box origin — otherwise the scale falls back to the
+   SVG (0, 0) origin and the mark reads as sliding toward the corner. */
+.mark-cell {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* turn indicator — pill in normal flow above the board. stays mounted when
+   the game ends so the board doesn't shift; fade-in/fade-out are both
+   driven through anime.js in Board's effects. */
+.turn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: oklch(16% 0.03 285 / 0.85);
+  border: 1px solid oklch(35% 0.06 var(--turn-hue, 25) / 0.7);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink);
+  white-space: nowrap;
+  box-shadow: 0 4px 0 oklch(6% 0.01 280 / 0.8);
+}
+
+.turn__token {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: oklch(86% 0.18 var(--turn-hue, 25));
+  color: oklch(16% 0.06 var(--turn-hue, 25));
+  box-shadow: 0 0 12px oklch(86% 0.18 var(--turn-hue, 25) / 0.55);
+  /* optically nest with the pill's left curve instead of floating inside it */
+  margin-left: -6px;
+}
+
+.turn--hidden {
+  pointer-events: none;
+}
+
+.turn__glyph {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  display: block;
+}
+
+.turn__dots {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 4px;
+}
+
+.turn__dots > span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: oklch(86% 0.18 var(--turn-hue, 235));
+  animation: turnDot 1100ms ease-in-out infinite;
+}
+
+.turn__dots > span:nth-child(2) {
+  animation-delay: 140ms;
+}
+.turn__dots > span:nth-child(3) {
+  animation-delay: 280ms;
+}
+
+@keyframes turnDot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: scale(1);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board {
+    filter: none;
+  }
+}
