@@ -91,14 +91,29 @@
       /* ONE solid color cycling through the spectrum — no gradient across the
          letters means no perceived-brightness ramp, so genuinely no bevel. (A
          multi-hue gradient always shades, regardless of the oklch L value.) */
-      color: oklch(0.85 0.18 var(--title-hue));
+      /* base = one solid color cycling. JS splits the title into per-letter
+         spans; on hover --spread fans the letters into a rainbow wave that eases
+         back to uniform on mouse-out (the --spread transition does the easing) */
+      color: oklch(0.85 0.18 var(--title-hue));            /* fallback if JS doesn't split */
       -webkit-text-fill-color: oklch(0.85 0.18 var(--title-hue));
       width: fit-content;          /* so only the text is the hover target */
       margin-inline: auto;
+      --spread: 0deg;
+      transition: --spread 0.7s ease;
       animation: title-hue 10s linear infinite;
     }
     h1.title:hover {
-      animation-duration: 2s;      /* hover to spin the colors faster */
+      --spread: 26deg;             /* hover: fan each letter to its own hue */
+      animation-duration: 2.5s;    /* and spin the cycle faster */
+    }
+    h1.title span {
+      color: oklch(0.85 0.18 calc(var(--title-hue) + var(--i, 0) * var(--spread)));
+      -webkit-text-fill-color: oklch(0.85 0.18 calc(var(--title-hue) + var(--i, 0) * var(--spread)));
+    }
+    @property --spread {
+      syntax: "<angle>";
+      inherits: true;
+      initial-value: 0deg;
     }
 
     h1.title::before {
@@ -259,7 +274,7 @@
        without clashing. constant L+C keeps every band equally soft */
     @property --title-hue {
       syntax: "<angle>";
-      inherits: false;
+      inherits: true;
       initial-value: 0deg;
     }
     .section-title {
@@ -531,6 +546,24 @@
   </div>
 
   <script>
+    // split the title into per-letter spans so hover can fan them into a rainbow
+    // wave (each span carries its letter index --i; CSS does the rest)
+    (function () {
+      var t = document.querySelector('h1.title');
+      if (!t) return;
+      var text = t.textContent, frag = document.createDocumentFragment(), idx = 0;
+      for (var i = 0; i < text.length; i++) {
+        var ch = text[i];
+        if (ch === ' ') { frag.appendChild(document.createTextNode(' ')); continue; }
+        var s = document.createElement('span');
+        s.textContent = ch;
+        s.style.setProperty('--i', idx++);
+        frag.appendChild(s);
+      }
+      t.textContent = '';
+      t.appendChild(frag);
+    })();
+
     // gentle rainbow cursor trail (mouse only; skipped for touch + reduced motion)
     (function () {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
