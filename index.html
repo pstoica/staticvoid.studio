@@ -228,7 +228,6 @@
     .marquee {
       white-space: nowrap;
       display: inline-flex;          /* inline-flex: shrink-wraps like inline-block so -50% is the right distance; also eliminates the inter-p whitespace gap */
-      gap: 0.4em;                    /* space at the seam — HTML collapses leading/trailing text whitespace */
       animation: marquee 20s linear infinite;
       font-size: 1.25rem;
       will-change: transform;        /* GPU layer: no paint blip on loop restart */
@@ -237,6 +236,10 @@
     .marquee p {
       flex: 0 0 auto;               /* don't shrink; fill-box width matches sibling */
       margin: 0;
+      /* padding-right is the separator between tiles. gap breaks the loop because
+         -50% = total/2 = text+gap/2, not a full tile. with padding-right on each p,
+         tile = text+pad, total = 2×tile, and -50% = exactly one tile. ✓ */
+      padding-right: 1em;
       font-size: 1.25rem;
       opacity: 0.85;
     }
