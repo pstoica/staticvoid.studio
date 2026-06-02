@@ -57,10 +57,16 @@ export class CpuPlayer implements Player {
         reject(new DOMException('aborted', 'AbortError'));
         return;
       }
-      const move = pickByDifficulty(board, this.mark, this.difficulty);
       const jitter = (Math.random() * 2 - 1) * this.thinkJitterMs;
       const delay = Math.max(150, this.thinkMs + jitter);
-      const t = window.setTimeout(() => resolve(move), delay);
+      // Compute minimax INSIDE the timeout so the main thread is free during
+      // the board entrance animation. Previously pickByDifficulty ran
+      // synchronously at call-time (blocking a frame mid-animation), and only
+      // the resolve was deferred — the expensive part happened immediately.
+      const t = window.setTimeout(() => {
+        if (signal.aborted) return;
+        resolve(pickByDifficulty(board, this.mark, this.difficulty));
+      }, delay);
       signal.addEventListener(
         'abort',
         () => {
