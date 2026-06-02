@@ -85,10 +85,6 @@ export function Background({ dim = false }: BackgroundProps) {
 
   return (
     <div className={styles.bg} aria-hidden="true">
-      {/* separate overlay for the dim — changing opacity on the shapes' parent
-          forces Safari to recompose all 80 running CSS animations together.
-          the overlay sits on its own layer and fades independently. */}
-      <div className={`${styles.dimOverlay}${dim ? ` ${styles.dimOverlayActive}` : ''}`} />
       {shapes.map((s, i) => (
         <div
           key={i}
@@ -147,6 +143,9 @@ export function Background({ dim = false }: BackgroundProps) {
           </div>
         </div>
       ))}
+      {/* overlay after shapes so it renders on top (stacking by DOM order).
+          fades on its own compositor layer — cheaper than opacity on the parent */}
+      <div className={`${styles.dimOverlay}${dim ? ` ${styles.dimOverlayActive}` : ''}`} />
     </div>
   );
 }
