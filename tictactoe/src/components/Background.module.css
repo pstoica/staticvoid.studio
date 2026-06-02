@@ -18,7 +18,7 @@
   /* 3D context so rotateX / rotateY on the nested layers foreshortens */
   perspective: 900px;
   transform-style: preserve-3d;
-  transition: opacity 520ms ease;
+  transition: opacity 200ms ease;  /* fast: done before board cells start their 720ms entrance */
 }
 
 /* during play the shapes step back so they don't pull focus from the board */
@@ -126,5 +126,19 @@
   .shapeRotY,
   .shapeRotZ {
     animation: none;
+  }
+}
+
+/* on mobile: kill the 3D rotations (rotX/rotY) which are the most expensive
+   GPU ops — keep only float + rotZ for atmosphere. also remove individual
+   will-change so we don't allocate 20+ compositor layers on a small device. */
+@media (max-width: 768px) {
+  .shapeRotX,
+  .shapeRotY {
+    animation: none;
+    transform: none;
+  }
+  .shapeLayer {
+    will-change: auto;
   }
 }

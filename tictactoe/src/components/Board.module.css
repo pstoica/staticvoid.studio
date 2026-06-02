@@ -181,3 +181,11 @@
     filter: none;
   }
 }
+
+/* filter: drop-shadow on an ancestor of preserve-3d elements is very expensive
+   in Safari — forces flattening + full repaint. remove it on mobile. */
+@media (max-width: 768px) {
+  .board-wrap {
+    filter: none;
+  }
+}

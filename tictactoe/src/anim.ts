@@ -40,6 +40,10 @@ export function animateBoardIn(
     duration: 720,
     delay: stagger(55, { from: 'center', grid: [3, 3] }),
     ease: 'outBack(1.6)',
+    onComplete: () => {
+      // release the GPU layers — cells are static after entrance
+      cellEls.forEach(el => { el.style.willChange = 'auto'; });
+    },
   });
 
   animate(gridLineEls, {
