@@ -228,6 +228,7 @@
     .marquee {
       white-space: nowrap;
       display: inline-flex;          /* inline-flex: shrink-wraps like inline-block so -50% is the right distance; also eliminates the inter-p whitespace gap */
+      gap: 0.4em;                    /* space at the seam — HTML collapses leading/trailing text whitespace */
       animation: marquee 20s linear infinite;
       font-size: 1.25rem;
       will-change: transform;        /* GPU layer: no paint blip on loop restart */
@@ -545,10 +546,10 @@
     <div class="marquee-wrapper">
       <div class="marquee">
         <p>
-           software development / creative technology / audiovisual art / consulting /
+          software development / creative technology / audiovisual art / consulting /
         </p>
         <p aria-hidden="true">
-           software development / creative technology / audiovisual art / consulting /
+          software development / creative technology / audiovisual art / consulting /
         </p>
       </div>
     </div>
