@@ -31,6 +31,10 @@
 .board > g {
   transform-box: fill-box;
   transform-origin: center;
+  /* pre-set the initial animation state in CSS so animejs utils.set() doesn't
+     need to touch 9 elements synchronously (saves ~10ms in the INP window) */
+  opacity: 0;
+  transform: scale(0.55) rotate(-10deg);
   /* hint GPU promotion before animateBoardIn runs so the browser doesn't have
      to promote mid-animation (the main cause of the mobile blip) */
   will-change: transform, opacity;

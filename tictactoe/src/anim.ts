@@ -28,10 +28,9 @@ export function animateBoardIn(
     return;
   }
 
-  utils.set(turnBadge, { opacity: 0 });
-  utils.set(cellEls, { opacity: 0, scale: 0.55, rotate: -10 });
-  utils.set(gridLineEls, { opacity: 0 });
-
+  // Initial states are set in CSS (.board > g and .board__grid-line already
+  // have opacity:0 / scale/rotate), so utils.set() is skipped here — that
+  // avoids touching 9+ SVG elements synchronously in the INP window.
   animate(turnBadge, { opacity: [0, 1], delay: 500 });
 
   animate(cellEls, {

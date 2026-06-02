@@ -81,6 +81,7 @@ export function DifficultyPicker({
             className={styles.optCard}
             onClick={() => onSelect(opt.value)}
             onKeyDown={e => onOptionKeyDown(e, i)}
+            onPointerEnter={() => ensureReady()}  /* pre-warm audio before the click lands */
             hue={opt.hue}
           >
             <span className={styles.optCardName}>{opt.name}</span>
