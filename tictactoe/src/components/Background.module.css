@@ -129,15 +129,19 @@
   }
 }
 
-/* on mobile: kill the 3D rotations (rotX/rotY) which are the most expensive
-   GPU ops — keep only float + rotZ for atmosphere. also remove individual
-   will-change so we don't allocate 20+ compositor layers on a small device. */
+/* during board entrance the background is frozen so its 80 CSS animations
+   don't compete with the board's GPU promotion. board-entering is a class
+   on <html> that Board.tsx sets for the ~950ms entrance window. */
+:global(.board-entering) .shapeFloat,
+:global(.board-entering) .shapeRotX,
+:global(.board-entering) .shapeRotY,
+:global(.board-entering) .shapeRotZ {
+  animation-play-state: paused;
+}
+
+/* on mobile: release individual will-change so we don't permanently allocate
+   20+ compositor layers — the animations still run fine without the hint */
 @media (max-width: 768px) {
-  .shapeRotX,
-  .shapeRotY {
-    animation: none;
-    transform: none;
-  }
   .shapeLayer {
     will-change: auto;
   }
