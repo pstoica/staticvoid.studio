@@ -77,22 +77,10 @@ export function Board({ board, outcome, current, busy, onCellClick }: BoardProps
     // commit the new frame before animejs sets initial values on the SVG nodes.
     // useLayoutEffect caused a forced synchronous layout (utils.set reads layout
     // mid-commit) which produced a visible blip on mobile.
-    // Freeze background animations for the entrance window so their 80 CSS
-    // keyframe animations don't compete with the board's GPU promotion.
-    document.documentElement.classList.add('board-entering');
-    const unfreezeT = window.setTimeout(
-      () => document.documentElement.classList.remove('board-entering'),
-      950, // clears after the longest cell animation (720ms + stagger headroom)
-    );
-
     const raf = requestAnimationFrame(() => {
       animateBoardIn(turnBadgeRef.current!, cells, lines);
     });
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(unfreezeT);
-      document.documentElement.classList.remove('board-entering');
-    };
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   const winningSet = outcome.kind === 'win' ? new Set<number>(outcome.line) : null;

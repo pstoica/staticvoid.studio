@@ -84,7 +84,11 @@ export function Background({ dim = false }: BackgroundProps) {
   const shapes = useMemo(() => buildShapes(), []);
 
   return (
-    <div className={`${styles.bg}${dim ? ` ${styles.bgDim}` : ''}`} aria-hidden="true">
+    <div className={styles.bg} aria-hidden="true">
+      {/* separate overlay for the dim — changing opacity on the shapes' parent
+          forces Safari to recompose all 80 running CSS animations together.
+          the overlay sits on its own layer and fades independently. */}
+      <div className={`${styles.dimOverlay}${dim ? ` ${styles.dimOverlayActive}` : ''}`} />
       {shapes.map((s, i) => (
         <div
           key={i}

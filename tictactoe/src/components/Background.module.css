@@ -18,12 +18,23 @@
   /* 3D context so rotateX / rotateY on the nested layers foreshortens */
   perspective: 900px;
   transform-style: preserve-3d;
-  transition: opacity 200ms ease;  /* fast: done before board cells start their 720ms entrance */
 }
 
-/* during play the shapes step back so they don't pull focus from the board */
-.bg--dim {
-  opacity: 0.35;
+/* dim overlay: a separate element so its opacity transition doesn't touch the
+   shapes' parent. changing the parent opacity forces Safari to recompose all
+   80 running CSS animations; this layer fades independently on its own. */
+.dimOverlay {
+  position: absolute;
+  inset: 0;
+  background: oklch(12% 0.02 280);  /* matches --bg */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease;
+  will-change: opacity;
+}
+
+.dimOverlayActive {
+  opacity: 0.65;   /* 100% * (1 - 0.65) ≈ 35% shape visibility, same as before */
 }
 
 .shapeSlot {
@@ -127,16 +138,6 @@
   .shapeRotZ {
     animation: none;
   }
-}
-
-/* during board entrance the background is frozen so its 80 CSS animations
-   don't compete with the board's GPU promotion. board-entering is a class
-   on <html> that Board.tsx sets for the ~950ms entrance window. */
-:global(.board-entering) .shapeFloat,
-:global(.board-entering) .shapeRotX,
-:global(.board-entering) .shapeRotY,
-:global(.board-entering) .shapeRotZ {
-  animation-play-state: paused;
 }
 
 /* on mobile: release individual will-change so we don't permanently allocate
