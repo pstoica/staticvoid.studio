@@ -227,7 +227,7 @@
 
     .marquee {
       white-space: nowrap;
-      display: flex;                 /* flex eliminates the inter-p whitespace gap */
+      display: inline-flex;          /* inline-flex: shrink-wraps like inline-block so -50% is the right distance; also eliminates the inter-p whitespace gap */
       animation: marquee 20s linear infinite;
       font-size: 1.25rem;
       will-change: transform;        /* GPU layer: no paint blip on loop restart */
