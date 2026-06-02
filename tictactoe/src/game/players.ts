@@ -40,8 +40,14 @@ export class HumanPlayer implements Player {
   }
 }
 
+// Board entrance animation (animateBoardIn) runs for ~860ms after mount.
+// The first CPU move must not compute until after that to avoid blocking a
+// frame mid-animation.
+const BOARD_ANIM_MS = 920;
+
 export class CpuPlayer implements Player {
   readonly kind: PlayerKind = 'cpu';
+  private isFirstMove = true;
 
   constructor(
     readonly mark: Mark,
@@ -58,11 +64,13 @@ export class CpuPlayer implements Player {
         return;
       }
       const jitter = (Math.random() * 2 - 1) * this.thinkJitterMs;
-      const delay = Math.max(150, this.thinkMs + jitter);
-      // Compute minimax INSIDE the timeout so the main thread is free during
-      // the board entrance animation. Previously pickByDifficulty ran
-      // synchronously at call-time (blocking a frame mid-animation), and only
-      // the resolve was deferred — the expensive part happened immediately.
+      const naturalDelay = Math.max(150, this.thinkMs + jitter);
+      // First move: wait at least until the board entrance animation finishes
+      // so minimax doesn't block a frame while cells are still animating in.
+      const delay = this.isFirstMove
+        ? Math.max(BOARD_ANIM_MS, naturalDelay)
+        : naturalDelay;
+      this.isFirstMove = false;
       const t = window.setTimeout(() => {
         if (signal.aborted) return;
         resolve(pickByDifficulty(board, this.mark, this.difficulty));
