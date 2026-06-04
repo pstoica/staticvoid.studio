@@ -889,6 +889,61 @@
       }
       setTimeout(scheduleAuto, 2500);
     })();
+
+    // dynamic favicon: a 3x3 grid of big pastel "pixels" with gaps, driven like a little
+    // livecoding patch. Each pixel's brightness is a sum of sine partials at incommensurate
+    // frequencies, each pixel offset to its own spatial phase — so the oscillators drift in
+    // and out of phase (Reich-style phasing) and the lit arrangement permutes forever without
+    // repeating. Color is an alternating warm/cool basketweave whose palette rotates through
+    // the spectrum. A still frame is committed via scripts/gen-favicon.mjs.
+    (function () {
+      var N = 64, M = 3, CELL = N / M;             // 3x3 grid -> 9 big ~21px pixels
+      var WARM = [350, 25, 48], COOL = [150, 200, 275];   // alternating warm / cool pastels
+      function hueFor(x, y, t) {                   // basketweave: warm & cool alternate per pixel
+        return (((x + y) & 1 ? COOL : WARM)[((x - y) % 3 + 3) % 3] + t * 10) % 360;
+      }
+
+      var FREQ = [0.50, 0.61, 0.37];              // incommensurate -> phases never realign
+      function level(x, y, t) {                    // pixel brightness = three detuned partials
+        var p = x * 0.9 + y * 1.6;                 // each pixel sits at its own phase offset
+        var s = Math.sin(t * FREQ[0] + p)
+              + Math.sin(t * FREQ[1] - p * 1.4)    // counter-travelling + detuned -> beats/phasing
+              + Math.sin(t * FREQ[2] + (x - y) * 1.1);
+        var a = 0.5 + s * 0.26;                    // s in [-3,3] -> spans dim..full
+        return a < 0.05 ? 0.05 : a > 1 ? 1 : a;
+      }
+
+      var cv = document.createElement('canvas');
+      cv.width = cv.height = N;
+      var ctx = cv.getContext('2d');
+      var link = document.querySelector('link[rel="icon"]') ||
+                 document.head.appendChild(Object.assign(document.createElement('link'), { rel: 'icon' }));
+
+      function render(t) {
+        ctx.clearRect(0, 0, N, N);
+        ctx.shadowBlur = CELL * 0.18;              // soft glow on the bright pixels
+        for (var y = 0; y < M; y++)
+          for (var x = 0; x < M; x++) {
+            var a = level(x, y, t);
+            var hue = hueFor(x, y, t);
+            var lt = 74 + 5 * Math.sin(t * 0.8 + x * 1.1 + y * 0.7);
+            var col = 'hsl(' + hue.toFixed(1) + ' 85% ' + lt.toFixed(1) + '%)';
+            ctx.fillStyle = col; ctx.shadowColor = col; ctx.globalAlpha = a;
+            var x0 = Math.round(x * CELL), y0 = Math.round(y * CELL);
+            var w = Math.round((x + 1) * CELL) - x0, gap = 3;   // generous gaps between pixels
+            ctx.fillRect(x0 + gap, y0 + gap, w - 2 * gap, w - 2 * gap);
+          }
+        ctx.globalAlpha = 1;
+        link.href = cv.toDataURL('image/png');
+      }
+
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) { render(2); return; }
+      var t0 = null;
+      setInterval(function () {
+        if (t0 === null) t0 = performance.now();
+        render((performance.now() - t0) / 1000);
+      }, 100);                                                   // ~10fps
+    })();
   </script>
 
   <script>
