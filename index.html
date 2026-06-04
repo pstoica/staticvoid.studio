@@ -891,11 +891,11 @@
     })();
 
     // dynamic favicon: a 3x3 grid of big pastel "pixels" with gaps, driven like a little
-    // livecoding patch. Each pixel's brightness is a sum of sine partials at incommensurate
-    // frequencies, each pixel offset to its own spatial phase — so the oscillators drift in
-    // and out of phase (Reich-style phasing) and the lit arrangement permutes forever without
-    // repeating. Color is an alternating warm/cool basketweave whose palette rotates through
-    // the spectrum. A still frame is committed via scripts/gen-favicon.mjs.
+    // livecoding rig. It slowly cycles through a handful of "patches" — phasing sine
+    // oscillators, a snake tracing the grid, sweeping diagonal colour bands, pulsing rings —
+    // crossfading from one to the next so the grid keeps reinventing how it moves. Colour is
+    // an alternating warm/cool basketweave (rotating through the spectrum) that each patch can
+    // tint. A still frame is committed via scripts/gen-favicon.mjs.
     (function () {
       var N = 64, M = 3, CELL = N / M;             // 3x3 grid -> 9 big ~21px pixels
       var WARM = [350, 25, 48], COOL = [150, 200, 275];   // alternating warm / cool pastels
@@ -903,14 +903,35 @@
         return (((x + y) & 1 ? COOL : WARM)[((x - y) % 3 + 3) % 3] + t * 10) % 360;
       }
 
-      var FREQ = [0.50, 0.61, 0.37];              // incommensurate -> phases never realign
-      function level(x, y, t) {                    // pixel brightness = three detuned partials
-        var p = x * 0.9 + y * 1.6;                 // each pixel sits at its own phase offset
-        var s = Math.sin(t * FREQ[0] + p)
-              + Math.sin(t * FREQ[1] - p * 1.4)    // counter-travelling + detuned -> beats/phasing
-              + Math.sin(t * FREQ[2] + (x - y) * 1.1);
-        var a = 0.5 + s * 0.26;                    // s in [-3,3] -> spans dim..full
-        return a < 0.05 ? 0.05 : a > 1 ? 1 : a;
+      // each patch maps a pixel + time to [brightness 0..1, hue shift in degrees]
+      var PATH = [[0, 0], [1, 0], [2, 0], [2, 1], [1, 1], [0, 1], [0, 2], [1, 2], [2, 2]];  // boustrophedon
+      function pathPos(x, y) { for (var i = 0; i < 9; i++) if (PATH[i][0] === x && PATH[i][1] === y) return i; }
+
+      function mPhase(x, y, t) {                    // detuned sine partials beating (Reich phasing)
+        var p = x * 0.9 + y * 1.6;
+        var s = Math.sin(t * 0.50 + p) + Math.sin(t * 0.61 - p * 1.4) + Math.sin(t * 0.37 + (x - y) * 1.1);
+        return [0.5 + s * 0.26, 0];
+      }
+      function mSnake(x, y, t) {                    // a lit head + fading tail walking the path
+        var d = (((t * 1.7) % 9) - pathPos(x, y) + 9) % 9;
+        return [d < 3 ? 1 - d / 3 : 0, pathPos(x, y) * 40];          // tail tinted along its length
+      }
+      function mBands(x, y, t) {                    // diagonal colour bands sweeping across
+        var ph = x - y;                             // -2..2
+        return [0.5 + 0.5 * Math.sin(ph * 1.5 - t * 1.7), ((ph + 2) % 3) * 60];
+      }
+      function mRipple(x, y, t) {                   // rings pulsing out from the centre
+        var r = Math.sqrt((x - 1) * (x - 1) + (y - 1) * (y - 1));
+        return [0.5 + 0.5 * Math.sin(r * 2.4 - t * 2.1), r * 36];
+      }
+      var MODES = [mPhase, mSnake, mBands, mRipple], PERIOD = 7, FADE = 0.2;
+      function sample(x, y, t) {                    // hold each patch, then crossfade to the next
+        var u = t / PERIOD, k = Math.floor(u) % MODES.length, f = u - Math.floor(u);
+        var A = MODES[k](x, y, t);
+        if (f <= 1 - FADE) return A;
+        var B = MODES[(k + 1) % MODES.length](x, y, t);
+        var m = (f - (1 - FADE)) / FADE; m = m * m * (3 - 2 * m);    // smoothstep crossfade
+        return [A[0] + (B[0] - A[0]) * m, A[1] + (B[1] - A[1]) * m];
       }
 
       var cv = document.createElement('canvas');
@@ -924,8 +945,9 @@
         ctx.shadowBlur = CELL * 0.18;              // soft glow on the bright pixels
         for (var y = 0; y < M; y++)
           for (var x = 0; x < M; x++) {
-            var a = level(x, y, t);
-            var hue = hueFor(x, y, t);
+            var s = sample(x, y, t);
+            var a = s[0] < 0.1 ? 0.1 : s[0] > 1 ? 1 : s[0];
+            var hue = (hueFor(x, y, t) + s[1]) % 360;
             var lt = 74 + 5 * Math.sin(t * 0.8 + x * 1.1 + y * 0.7);
             var col = 'hsl(' + hue.toFixed(1) + ' 85% ' + lt.toFixed(1) + '%)';
             ctx.fillStyle = col; ctx.shadowColor = col; ctx.globalAlpha = a;
