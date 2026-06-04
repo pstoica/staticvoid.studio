@@ -182,7 +182,7 @@
       .links { animation: none; }                        /* hover = static per-link hue */
     }
     /* a distinct hue per link so each phases at its own offset (staggered) */
-    .links > div:nth-of-type(1) { --lh: 185; }   /* meet with me */
+    .links > div:nth-of-type(1) { --lh: 185; }   /* connect with us */
     .links > div:nth-of-type(2) { --lh: 215; }   /* email */
     .links > div:nth-of-type(3) { --lh: 265; }   /* aka patrick */
     .links > div:nth-of-type(5) { --lh: 25; }    /* orbital harp */
@@ -558,7 +558,7 @@
 
     <div class="links">
       <div>
-        <a href="https://cal.com/patrick-stoica-mypivj">meet with me</a>
+        <a href="https://cal.com/patrick-stoica-mypivj/30min" id="connect-link">connect with us</a>
       </div>
       <div>
         <a href="mailto:hi@staticvoid.studio">hi@staticvoid.studio</a>
@@ -913,16 +913,16 @@
         return [0.5 + s * 0.26, 0];
       }
       function mSnake(x, y, t) {                    // a lit head + fading tail walking the path
-        var d = (((t * 1.7) % 9) - pathPos(x, y) + 9) % 9;
+        var d = (((t * 1.3) % 9) - pathPos(x, y) + 9) % 9;
         return [d < 3 ? 1 - d / 3 : 0, pathPos(x, y) * 40];          // tail tinted along its length
       }
       function mBands(x, y, t) {                    // diagonal colour bands sweeping across
         var ph = x - y;                             // -2..2
-        return [0.5 + 0.5 * Math.sin(ph * 1.5 - t * 1.7), ((ph + 2) % 3) * 60];
+        return [0.5 + 0.5 * Math.sin(ph * 1.5 - t * 1.25), ((ph + 2) % 3) * 60];
       }
       function mRipple(x, y, t) {                   // rings pulsing out from the centre
         var r = Math.sqrt((x - 1) * (x - 1) + (y - 1) * (y - 1));
-        return [0.5 + 0.5 * Math.sin(r * 2.4 - t * 2.1), r * 36];
+        return [0.5 + 0.5 * Math.sin(r * 2.4 - t * 1.6), r * 36];
       }
       var MODES = [mPhase, mSnake, mBands, mRipple], PERIOD = 7, FADE = 0.2;
       function sample(x, y, t) {                    // hold each patch, then crossfade to the next
@@ -960,11 +960,60 @@
       }
 
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) { render(2); return; }
+      // favicon encode is ~1ms regardless of size, so the old 10fps was the bottleneck, not
+      // cost. Run ~30fps for smooth fades. setInterval (not rAF) keeps ticking in background
+      // tabs — the browser throttles it down on its own — whereas rAF would freeze when hidden.
       var t0 = null;
       setInterval(function () {
         if (t0 === null) t0 = performance.now();
         render((performance.now() - t0) / 1000);
-      }, 100);                                                   // ~10fps
+      }, 33);                                                    // ~30fps
+    })();
+  </script>
+
+  <!-- "connect with us" opens a self-contained modal holding the Cal.com inline embed -->
+  <style>
+    .cal-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+    .cal-modal[hidden] { display: none; }
+    .cal-modal__backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.62); }
+    .cal-modal__box { position: relative; width: min(92vw, 1000px); height: auto; max-height: 86vh; min-height: 360px; overflow: auto; padding: 60px 18px 16px; background: #101012; border-radius: 14px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55); }
+    .cal-modal__close { position: absolute; top: 14px; right: 14px; z-index: 2; width: 32px; height: 32px; border: none; border-radius: 50%; background: rgba(255, 255, 255, 0.12); color: #fff; font-size: 20px; line-height: 1; cursor: pointer; }
+    .cal-modal__close:hover { background: rgba(255, 255, 255, 0.22); }
+    #my-cal-inline-30min { width: 100%; }
+  </style>
+  <div id="cal-modal" class="cal-modal" hidden>
+    <div class="cal-modal__backdrop" data-cal-close></div>
+    <div class="cal-modal__box" role="dialog" aria-modal="true" aria-label="Book a meeting">
+      <button class="cal-modal__close" data-cal-close aria-label="Close">&times;</button>
+      <div id="my-cal-inline-30min"></div>
+    </div>
+  </div>
+  <script type="text/javascript">
+    (function (C, A, L) { let p = function (a, ar) { a.q.push(ar); }; let d = C.document; C.Cal = C.Cal || function () { let cal = C.Cal; let ar = arguments; if (!cal.loaded) { cal.ns = {}; cal.q = cal.q || []; d.head.appendChild(d.createElement("script")).src = A; cal.loaded = true; } if (ar[0] === L) { const api = function () { p(api, arguments); }; const namespace = ar[1]; api.q = api.q || []; if (typeof namespace === "string") { cal.ns[namespace] = cal.ns[namespace] || api; p(cal.ns[namespace], ar); p(cal, ["initNamespace", namespace]); } else p(cal, ar); return; } p(cal, ar); }; })(window, "https://app.cal.com/embed/embed.js", "init");
+    Cal("init", "30min", { origin: "https://app.cal.com" });
+
+    (function () {
+      var link = document.getElementById('connect-link');
+      var modal = document.getElementById('cal-modal');
+      var loaded = false;
+      function open(e) {
+        if (e) e.preventDefault();
+        modal.hidden = false;
+        document.body.style.overflow = 'hidden';
+        if (!loaded) {                            // render the inline calendar on first open
+          loaded = true;
+          Cal.ns["30min"]("inline", {
+            elementOrSelector: "#my-cal-inline-30min",
+            config: { "layout": "month_view", "useSlotsViewOnSmallScreen": "true" },
+            calLink: "patrick-stoica-mypivj/30min"
+          });
+          Cal.ns["30min"]("ui", { "hideEventTypeDetails": false, "layout": "month_view", "theme": "dark" });
+        }
+      }
+      function close() { modal.hidden = true; document.body.style.overflow = ''; }
+      link.addEventListener('click', open);
+      modal.querySelectorAll('[data-cal-close]').forEach(function (el) { el.addEventListener('click', close); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) close(); });
     })();
   </script>
 
