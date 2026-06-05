@@ -959,15 +959,43 @@
         link.href = cv.toDataURL('image/png');
       }
 
-      if (matchMedia('(prefers-reduced-motion: reduce)').matches) { render(2); return; }
-      // favicon encode is ~1ms regardless of size, so the old 10fps was the bottleneck, not
-      // cost. Run ~30fps for smooth fades. setInterval (not rAF) keeps ticking in background
-      // tabs — the browser throttles it down on its own — whereas rAF would freeze when hidden.
-      var t0 = null;
-      setInterval(function () {
-        if (t0 === null) t0 = performance.now();
-        render((performance.now() - t0) / 1000);
-      }, 33);                                                    // ~30fps
+      function drawX() {                           // static "X" shown while the tab is inactive
+        ctx.clearRect(0, 0, N, N);
+        ctx.shadowBlur = CELL * 0.18;
+        for (var y = 0; y < M; y++)
+          for (var x = 0; x < M; x++) {
+            var on = (x === y) || (x + y === M - 1);             // both diagonals -> an X
+            var hue = (x * 80 + y * 150) % 360;                  // spread the 5 lit cells across the spectrum
+            var col = 'hsl(' + hue.toFixed(1) + ' 85% 74%)';
+            ctx.fillStyle = col; ctx.shadowColor = col; ctx.globalAlpha = on ? 1 : 0.08;
+            var x0 = Math.round(x * CELL), y0 = Math.round(y * CELL);
+            var w = Math.round((x + 1) * CELL) - x0, gap = 3;
+            ctx.fillRect(x0 + gap, y0 + gap, w - 2 * gap, w - 2 * gap);
+          }
+        ctx.globalAlpha = 1;
+        link.href = cv.toDataURL('image/png');
+      }
+
+      // animate while the tab is visible; freeze to a static X when it's inactive.
+      // (favicon encode is ~1ms, so the old 10fps interval was the bottleneck, not cost.)
+      var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var t0 = null, timer = null;
+      function active() {
+        if (timer) return;
+        if (reduce) { render(2); return; }                      // static grid, no animation
+        timer = setInterval(function () {
+          if (t0 === null) t0 = performance.now();
+          render((performance.now() - t0) / 1000);
+        }, 33);                                                  // ~30fps
+      }
+      function inactive() {
+        if (timer) { clearInterval(timer); timer = null; }
+        drawX();
+      }
+      document.addEventListener('visibilitychange', function () {
+        document.hidden ? inactive() : active();
+      });
+      document.hidden ? inactive() : active();
     })();
   </script>
 
