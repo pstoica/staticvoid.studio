@@ -60,7 +60,7 @@ scaleSel.addEventListener("change", ()=> state.scaleName = scaleSel.value);
 // ---------- Legend ----------
 legendEl.innerHTML = `
   <span id="legendClose" title="Hide (H)">×</span>
-  <b>Pinch left</b> to pick a chord · <b>pinch + sweep right</b> to strum<br>
+  <b class="c-chord">Pinch left</b> to pick a chord · <b class="c-note">pinch + sweep right</b> to strum<br>
   sweep faster = louder<br>
   drag panels to move, edges to resize<br>
   <span class="kbd"><b>L</b> lock chord</span> · <span class="kbd"><b>F</b> free scale</span> · <span class="kbd"><b>O</b> omnichord</span> · <span class="kbd"><b>M</b> mute</span> · <span class="kbd"><b>E</b> move panels</span> · <span class="kbd"><b>R</b> reset</span> · <span class="kbd"><b>H</b> hide</span>`;
@@ -68,6 +68,21 @@ const legendShowEl = document.getElementById("legendShow");
 const setLegend = show => { document.body.classList.toggle("legend-hidden", !show); saveState(); };
 document.getElementById("legendClose").addEventListener("click", ()=> setLegend(false));
 legendShowEl.addEventListener("click", ()=> setLegend(true));
+
+// ---------- Control sidebar: collapse + side ----------
+const railToggleEl = document.getElementById("railToggle");
+const sideToggleEl = document.getElementById("sideToggle");
+const railIs = cls => document.body.classList.contains(cls);
+function reflectRail(){
+  const collapsed = railIs("rail-collapsed"), left = railIs("rail-left");
+  // chevron points toward the rail's home edge when open, away when collapsed
+  railToggleEl.textContent = (collapsed === left) ? "›" : "‹";
+  railToggleEl.title = collapsed ? "Show controls" : "Hide controls";
+}
+const setRail = collapsed => { document.body.classList.toggle("rail-collapsed", collapsed); reflectRail(); saveState(); };
+const setSide = left => { document.body.classList.toggle("rail-left", left); reflectRail(); saveState(); };
+railToggleEl.addEventListener("click", ()=> setRail(!railIs("rail-collapsed")));
+sideToggleEl.addEventListener("click", ()=> setSide(!railIs("rail-left")));
 
 // ---------- Voice pickers — compact ‹ name › stepper ----------
 // primary hand always, second hand appears in free-scale mode
@@ -103,10 +118,10 @@ export function setMode(mode){                              // "chord" | "omni" 
   octSel.value = curOct();  octVal.textContent = curOct();     // octaves + columns are per-mode
   colSel.value = curCols(); colVal.textContent = curCols();
 }
-function setLock(on){ state.lockChord = on; lockBtn.classList.toggle("active", on); }
+function setLock(on){ state.lockChord = on; lockBtn.classList.toggle("active", on); lockBtn.setAttribute("aria-pressed", on); }
 function setEdit(on){
   state.editMode = on;
-  editBtn.classList.toggle("active", on);
+  editBtn.classList.toggle("active", on); editBtn.setAttribute("aria-pressed", on);
   if(!on){
     if(state.twoHandGrab || editState[0].grab || editState[1].grab) saveState();
     state.twoHandGrab = null; state.editWasActive = false;
@@ -118,7 +133,8 @@ function setMute(on){
   setMuteGain(on ? 0 : parseFloat(volEl.value));
 }
 modeSel.addEventListener("change", ()=> setMode(modeSel.value));
-lockBtn.addEventListener("click", ()=> setLock(!state.lockChord));
+// lock chord is a checkbox row (whole row clicks); move panels is a top util button
+lockBtn.closest(".ctrl").addEventListener("click", ()=> setLock(!state.lockChord));
 editBtn.addEventListener("click", ()=> setEdit(!state.editMode));
 window.addEventListener("keydown", e=>{
   if(e.key==="f"||e.key==="F") setMode(state.freeMode ? "chord" : "free");
@@ -139,6 +155,8 @@ export function saveState(){
       vol: parseFloat(volEl.value),
       regions: { chord:{...CHORD}, strum:{...regions.strum}, strumFree:{...regions.strumFree} },
       legendHidden: document.body.classList.contains("legend-hidden"),
+      railCollapsed: document.body.classList.contains("rail-collapsed"),
+      railLeft: document.body.classList.contains("rail-left"),
     }));
   }catch(e){ /* private mode / quota — settings just won't persist */ }
 }
@@ -167,7 +185,10 @@ function loadState(){
     if(s.regions?.strum) Object.assign(regions.strum, s.regions.strum);
     if(s.regions?.strumFree) Object.assign(regions.strumFree, s.regions.strumFree);
     if(s.legendHidden) document.body.classList.add("legend-hidden");
+    if(s.railLeft) document.body.classList.add("rail-left");
+    if(s.railCollapsed) document.body.classList.add("rail-collapsed");
   }
+  reflectRail();
   state.currentExt=Math.min(state.currentExt, cfg.extRows-1);
   syncControls();                                    // always reflect cfg into the HUD, even with no saved state
 }
@@ -176,10 +197,10 @@ hudEl.addEventListener("change", saveState);
 loadState();
 
 // ---- drag to move / edges to resize either region (mouse only; hands play) ----
-function evToFrac(e){                                // client px -> screen-fraction (object-fit:cover aware)
+function evToFrac(e){                                // client px -> frame-fraction (object-fit:contain aware)
   const rect = canvas.getBoundingClientRect();
   const W=canvas.width, H=canvas.height;
-  const scale = Math.max(rect.width/W, rect.height/H);
+  const scale = Math.min(rect.width/W, rect.height/H);   // contain: fit the whole frame, letterboxed
   const sW=W*scale, sH=H*scale;
   const offX=(rect.width-sW)/2, offY=(rect.height-sH)/2;
   return { fx:(e.clientX-rect.left-offX)/sW, fy:(e.clientY-rect.top-offY)/sH };

@@ -15,57 +15,114 @@
     --glass:rgba(16,18,24,.5); --line:rgba(255,255,255,.07);
     --accent:#9db4ff; --accent-dim:rgba(157,180,255,.16);
     --font: "SF Pro Text","Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+    /* --rail-w is the docked control sidebar's width; --rail is how much room it
+       reserves on the right (0 when collapsed, so the camera reclaims the space) */
+    --rail-w:240px; --rail:var(--rail-w);
+    --play-x:0px;   /* left edge of the play area: 0 when the rail is on the right, --rail when on the left */
+    --ease:cubic-bezier(.4,0,.2,1);
+    --r:0px;        /* fully squared to match the omnichord's hard-edged look */
+    /* the omnichord spectrum, reused for the section headers + on-region tints */
+    --hue-note:#56b6ff;   /* the strum plate (right hand) */
+    --hue-chord:#62e09a;  /* the chord palette (left hand) */
   }
   * { box-sizing: border-box; }
   html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
     font-family:var(--font); -webkit-font-smoothing:antialiased; letter-spacing:.01em; }
+  body.rail-collapsed { --rail:0px; }
+  body.rail-left { --play-x:var(--rail); }   /* rail on the left → play area starts after it */
   #stage { position:relative; width:100vw; height:100vh; overflow:hidden;
     user-select:none; -webkit-user-select:none; }   /* dragging boxes never selects the labels */
-  #cam, #overlay { position:absolute; inset:0; width:100%; height:100%;
-    object-fit:cover; object-position:center; }
-  #cam { visibility:hidden; }
-  #overlay { z-index:2; }
+  /* both fill the play area (left of the sidebar) with an EXPLICIT size — a
+     replaced element with width:auto won't stretch to left/right insets, it
+     collapses to its intrinsic size, which is why the frame pinned to the top */
+  #cam, #overlay { position:absolute; left:var(--play-x); top:0;
+    width:calc(100vw - var(--rail)); height:100vh; object-position:center;
+    transition:width .28s var(--ease), left .28s var(--ease); }
+  /* the live camera, blurred + darkened + mirrored, fills the whole play area
+     (cover) so the letterbox bars read as a soft extension of the video, not dead black */
+  #cam { object-fit:cover; transform:scaleX(-1);
+    filter:blur(34px) saturate(1.2) brightness(.5); z-index:1; }
+  /* the sharp frame + chord lanes, centered and letterboxed at true aspect ratio */
+  #overlay { object-fit:contain; z-index:2; }
 
-  #hud { position:absolute; z-index:3; top:14px; left:14px; right:14px;
-    display:flex; flex-direction:column; gap:8px; align-items:flex-start; pointer-events:none; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start; }
+  /* docked control sidebar: groups stack vertically so each labelled card is
+     unmistakably its own thing (no two-row wrap), and all options stay visible
+     at once. Slides off to the right when collapsed. */
+  #hud { position:absolute; z-index:3; top:0; right:0; bottom:0; width:var(--rail-w);
+    display:flex; flex-direction:column; gap:8px; padding:14px 12px; overflow-y:auto;
+    background:rgba(9,11,15,.5); border-left:1px solid var(--line);
+    backdrop-filter:blur(16px) saturate(1.2); -webkit-backdrop-filter:blur(16px) saturate(1.2);
+    pointer-events:auto; transition:transform .28s var(--ease); }
+  body.rail-left #hud { right:auto; left:0; border-left:none; border-right:1px solid var(--line); }
+  body.rail-collapsed #hud { transform:translateX(100%); }
+  body.rail-collapsed.rail-left #hud { transform:translateX(-100%); }
+  .row { display:flex; flex-direction:column; gap:8px; width:100%; }
   .panel { pointer-events:auto; display:flex; align-items:stretch;
-    background:var(--glass); border:1px solid var(--line); border-radius:9px;
-    backdrop-filter:blur(14px) saturate(1.2);
-    box-shadow:0 1px 0 rgba(255,255,255,.04) inset; }
+    background:var(--glass); border:1px solid var(--line); border-radius:var(--r);
+    backdrop-filter:blur(14px) saturate(1.2); }
   .ctrl { display:flex; align-items:center; gap:8px; padding:6px 11px; }
   .ctrl:not(:first-child){ border-left:1px solid var(--line); }
   /* grouped HUD — each section is a labeled card whose controls wrap, so the
      panel reads as deliberate groups (Play / Sound / Shape / FX) instead of one
      sprawling full-width strip */
   .group { pointer-events:auto; display:flex; flex-direction:column; gap:5px;
-    width:206px; padding:7px 9px 9px;
-    background:var(--glass); border:1px solid var(--line); border-radius:11px;
-    backdrop-filter:blur(14px) saturate(1.2);
-    box-shadow:0 1px 0 rgba(255,255,255,.04) inset; }
-  .group-title { font-size:8.5px; font-weight:700; letter-spacing:.22em;
-    text-transform:uppercase; color:var(--accent); opacity:.72; padding-left:3px; }
+    width:100%; padding:7px 9px 9px;
+    background:var(--glass); border:1px solid var(--line); border-radius:var(--r);
+    backdrop-filter:blur(14px) saturate(1.2); }
+  .group-title { font-size:9px; font-weight:700; letter-spacing:.07em;
+    text-transform:uppercase; color:var(--accent); opacity:.9; padding-left:9px;
+    position:relative; }
+  .group-title::before { content:""; position:absolute; left:0; top:1px; bottom:1px;
+    width:3px; border-radius:1px; background:currentColor; }   /* a little hue flare */
+  /* each section borrows a hue from the omnichord's spectrum instead of a uniform blue */
+  .row .group:nth-of-type(1) .group-title { color:oklch(.78 .16 28); }    /* PLAY  — red   */
+  .row .group:nth-of-type(2) .group-title { color:oklch(.82 .15 132); }   /* SOUND — green */
+  .row .group:nth-of-type(3) .group-title { color:oklch(.8 .13 222); }    /* SHAPE — cyan  */
+  .row .group:nth-of-type(4) .group-title { color:oklch(.74 .15 318); }   /* FX    — violet*/
   .group-body { display:flex; flex-wrap:wrap; gap:4px; }
-  .group-body .ctrl { padding:5px 8px; border-radius:8px;
+  .group-body .ctrl { padding:5px 8px; border-radius:var(--r);
     border-left:none; background:rgba(255,255,255,.035);
     flex:1 1 calc(50% - 2px); min-width:0; }   /* two even chips per row (lone one fills) */
   .group-body .ctrl button { padding:0; }   /* the chip already supplies the box */
-  /* sliders + voice steppers take a full row: the stepper's name is too wide to
-     share a half-width chip without colliding with the control beside it */
+  /* lock chord / move panels are on/off modes — a labelled row with a square
+     checkbox, not a push button (which read as ambiguously "active") */
+  .group-body .ctrl--toggle { flex:1 1 100%; cursor:pointer; }
+  .check { margin-left:auto; flex:0 0 auto; width:15px; height:15px; padding:0;
+    display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--line); background:rgba(255,255,255,.05);
+    color:transparent; font-size:10px; line-height:1; transition:.12s; }
+  .ctrl--toggle:hover .check { border-color:rgba(255,255,255,.25); }
+  .check.active { background:var(--accent-dim); border-color:rgba(157,180,255,.6); color:var(--accent); }
+  /* selects, sliders + voice steppers take a full row: their values (e.g. a long
+     voice name or "Octave") overflow a half-width chip and get clipped */
+  .group-body .ctrl:has(select),
   .group-body .ctrl:has(input[type=range]),
   .group-body .ctrl:has(.seg){ flex:1 1 100%; min-width:0; }
+  /* let the select fill the row and sit its value at the right edge, matching the
+     "label …… value" rhythm of the sliders */
+  .group-body .ctrl select{ flex:1; min-width:0; text-align:right; text-align-last:right; }
+  /* stretch the stepper across its row so the ‹ › arrows pin to the edges and the
+     voice name fills the middle, instead of bunching at the left */
+  .group-body .ctrl:has(.seg) .seg{ flex:1; }
+  .group-body .ctrl:has(.seg) .stepname{ flex:1; }
   .group-body .ctrl:has(input[type=range]) input[type=range]{ flex:1 1 0; width:auto; min-width:0; }
-  /* SHAPE has the most controls — lay it out as two columns (selects | sliders) */
-  .group--split { width:300px; }
-  .group--split .group-body { display:grid; gap:4px; align-items:stretch;
-    grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);
-    grid-auto-flow:column; grid-template-rows:repeat(3,auto); }
-  label { font-size:9.5px; text-transform:uppercase; letter-spacing:.09em;
-    color:var(--muted); margin:0; white-space:nowrap; }
+  /* SHAPE just stacks like the rest in the narrow sidebar — vertical room is
+     plentiful here, horizontal room is the scarce thing */
+  .group--split { width:100%; }
+  /* sub-section labels inside SHAPE: which on-screen box each cluster drives —
+     note grid (the strum plate you sweep) vs chord (the harmony you pinch) */
+  .group-body .subhead { flex:1 1 100%; padding:3px 4px 2px;
+    font-size:8.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--muted); }
+  .group-body .subhead:not(:first-child){ margin-top:4px; padding-top:7px;
+    border-top:1px solid var(--line); }
+  /* fixed label column so every slider starts at the same x and shares one width */
+  label { font-size:9.5px; text-transform:uppercase; letter-spacing:.03em;
+    color:var(--muted); margin:0; white-space:nowrap; min-width:54px; flex:0 0 auto; }
   select, button { background:transparent; color:var(--ink); border:none;
     font-family:var(--font); font-size:12.5px; cursor:pointer; padding:2px 2px; outline:none; }
   select { -webkit-appearance:none; appearance:none; padding-right:12px; }
-  button { padding:3px 8px; border-radius:6px; border:1px solid transparent; transition:.12s; }
+  button { padding:3px 8px; border-radius:var(--r); border:1px solid transparent; transition:.12s; }
   button:hover { background:rgba(255,255,255,.05); }
   button.active { background:var(--accent-dim); border-color:rgba(157,180,255,.4); color:var(--accent); }
   .seg { display:flex; align-items:center; gap:3px; }
@@ -73,32 +130,64 @@
   .stepbtn { padding:1px 6px; font-size:14px; line-height:1; color:var(--muted); }
   .stepbtn:hover { color:var(--accent); }
   input[type=range]{ accent-color:var(--accent); height:3px; width:62px; }
+  /* sliders take their section's hue, reinforcing the rainbow grouping */
+  .row .group:nth-of-type(2) input[type=range]{ accent-color:oklch(.82 .15 132); }  /* SOUND — green  */
+  .row .group:nth-of-type(3) input[type=range]{ accent-color:oklch(.8 .13 222); }   /* SHAPE — cyan   */
+  .row .group:nth-of-type(4) input[type=range]{ accent-color:oklch(.74 .15 318); }  /* FX    — violet */
   .val { font-size:11px; color:var(--muted); min-width:26px; text-align:right;
     font-variant-numeric:tabular-nums; }
 
-  #chordName { position:absolute; z-index:3; left:22px; bottom:20px; pointer-events:none;
+  #chordName { position:absolute; z-index:3; left:calc(var(--play-x) + 22px); bottom:20px; pointer-events:none;
     font-size:52px; font-weight:600; letter-spacing:-1.5px; line-height:1;
-    text-shadow:0 2px 30px rgba(0,0,0,.7); }
+    text-shadow:0 2px 30px rgba(0,0,0,.7); transition:left .28s var(--ease); }
   #mode { font-size:10.5px; font-weight:500; text-transform:uppercase;
     letter-spacing:.14em; color:var(--accent); opacity:.85; margin-top:8px; }
 
-  #legend { position:absolute; z-index:3; right:14px; bottom:14px;
-    background:var(--glass); border:1px solid var(--line); border-radius:10px;
-    padding:11px 13px; font-size:11px; line-height:1.65; max-width:250px;
-    color:rgba(238,241,246,.72); backdrop-filter:blur(14px); text-wrap:balance; }
+  /* instructions live at the bottom of the sidebar (margin-top:auto pins them
+     there) rather than floating over the camera */
+  #legend { position:relative; margin-top:auto; width:100%;
+    background:rgba(255,255,255,.035); border:1px solid var(--line); border-radius:var(--r);
+    padding:10px 11px; font-size:10.5px; line-height:1.6;
+    color:rgba(238,241,246,.7); text-wrap:balance; }
   #legend b { color:var(--accent); font-weight:600; }
+  #legend .c-chord { color:var(--hue-chord); }   /* left-hand / chord palette */
+  #legend .c-note  { color:var(--hue-note); }    /* right-hand / strum plate */
   #legend .kbd { white-space:nowrap; }   /* keep each shortcut's key + label on one line */
   #legendClose { position:absolute; top:4px; right:6px; cursor:pointer;
     font-size:14px; line-height:1; color:rgba(238,241,246,.5);
     padding:2px 4px; border-radius:5px; }
   #legendClose:hover { color:var(--accent); background:rgba(255,255,255,.06); }
-  #legendShow { position:absolute; z-index:3; right:14px; bottom:14px; display:none;
-    width:26px; height:26px; align-items:center; justify-content:center; cursor:pointer;
-    background:var(--glass); border:1px solid var(--line); border-radius:8px;
-    font-size:13px; color:rgba(238,241,246,.72); backdrop-filter:blur(14px); }
+  #legendShow { margin-top:auto; width:100%; display:none;
+    align-items:center; justify-content:center; gap:6px; cursor:pointer;
+    padding:7px; background:rgba(255,255,255,.035); border:1px solid var(--line);
+    border-radius:var(--r); font-size:11px; color:rgba(238,241,246,.7); }
   #legendShow:hover { color:var(--accent); }
   body.legend-hidden #legend { display:none; }
   body.legend-hidden #legendShow { display:flex; }
+
+  /* chevron tab riding the sidebar's inner edge — pulls the rail in/out. It sits
+     on the seam (right:var(--rail)) so it stays reachable when collapsed too. */
+  #railToggle { position:absolute; z-index:4; top:50%; right:var(--rail);
+    transform:translateY(-50%); width:21px; height:56px; display:flex;
+    align-items:center; justify-content:center; cursor:pointer; padding:0;
+    background:var(--glass); border:1px solid var(--line); border-right:none;
+    border-radius:var(--r) 0 0 var(--r); color:rgba(238,241,246,.7); font-size:15px;
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    transition:right .28s var(--ease), left .28s var(--ease), color .15s; }
+  body.rail-left #railToggle { right:auto; left:var(--rail);
+    border-right:1px solid var(--line); border-left:none; border-radius:0 var(--r) var(--r) 0; }
+  #railToggle:hover { color:var(--accent); }
+
+  /* top utility bar — layout/meta toggles (move panels, flip side) sit apart from
+     the musical controls below */
+  #railUtils { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; }
+  .util { display:flex; align-items:center; gap:5px; cursor:pointer; padding:4px 9px;
+    flex:0 0 auto; background:rgba(255,255,255,.04); border:1px solid var(--line);
+    border-radius:var(--r); color:rgba(238,241,246,.55); font-size:9.5px; font-weight:700;
+    letter-spacing:.04em; text-transform:uppercase; line-height:1; transition:.12s; }
+  .util .ico { font-size:13px; }
+  .util:hover { color:rgba(238,241,246,.85); border-color:rgba(255,255,255,.2); }
+  .util.active { background:var(--accent-dim); border-color:rgba(157,180,255,.5); color:var(--accent); }
 
   /* intro sits on top of the live (blurred) interface — the app loads underneath */
   #start { position:absolute; z-index:10; inset:0; display:flex; flex-direction:column;
@@ -152,8 +241,10 @@
     #start h1,#start p,#start button,#start .hint{ animation:none; }
     #start{ transition:none; }
   }
-  #status { position:absolute; z-index:3; bottom:18px; left:50%; transform:translateX(-50%);
-    pointer-events:none; font-size:11px; letter-spacing:.04em; color:var(--muted); }
+  #status { position:absolute; z-index:3; bottom:18px;
+    left:calc(var(--play-x) + (100vw - var(--rail)) / 2); transform:translateX(-50%);
+    pointer-events:none; font-size:11px; letter-spacing:.04em; color:var(--muted);
+    transition:left .28s var(--ease); }
 </style>
 </head>
 <body>
@@ -162,6 +253,10 @@
   <canvas id="overlay"></canvas>
 
   <div id="hud">
+    <div id="railUtils">
+      <button id="editBtn" class="util" aria-pressed="false" title="Move / resize the play panels (E)"><span class="ico">✥</span>move panels</button>
+      <button id="sideToggle" class="util" title="Move controls to the other side"><span class="ico">⇄</span>flip side</button>
+    </div>
     <div class="row">
       <div class="group">
         <div class="group-title">Play</div>
@@ -175,8 +270,7 @@
           </div>
           <div class="ctrl"><label>Key</label><select id="keySel"></select></div>
           <div class="ctrl" id="scalePanel" style="display:none"><label>Scale</label><select id="scaleSel"></select></div>
-          <div class="ctrl"><button id="lockBtn">Lock chord</button></div>
-          <div class="ctrl"><button id="editBtn">Move panels</button></div>
+          <div class="ctrl ctrl--toggle"><label>Lock chord</label><button id="lockBtn" class="check" aria-pressed="false" title="Lock the current chord (L)">✓</button></div>
         </div>
       </div>
       <div class="group">
@@ -191,6 +285,8 @@
       <div class="group group--split">
         <div class="group-title">Shape</div>
         <div class="group-body">
+          <div class="ctrl"><label>Base</label><select id="baseSel"></select></div>
+          <div class="subhead">note grid</div>
           <div class="ctrl"><label>Strum</label>
             <select id="orientSel">
               <option value="vertical">Vertical</option>
@@ -205,9 +301,9 @@
               <option value="cont">Continue</option>
             </select>
           </div>
-          <div class="ctrl"><label>Base</label><select id="baseSel"></select></div>
           <div class="ctrl"><label>Octaves</label><input id="octSel" type="range" min="1" max="5" step="1" value="3"><span class="val" id="octVal">3</span></div>
           <div class="ctrl"><label>Lanes</label><input id="colSel" type="range" min="1" max="8" step="1" value="1"><span class="val" id="colVal">1</span></div>
+          <div class="subhead">chord</div>
           <div class="ctrl"><label>Stacks</label><input id="stackSel" type="range" min="1" max="4" step="1" value="4"><span class="val" id="stackVal">4</span></div>
         </div>
       </div>
@@ -221,12 +317,13 @@
         </div>
       </div>
     </div>
+    <div id="legend"></div>
+    <div id="legendShow" title="Show help (H)">? &nbsp;instructions</div>
   </div>
 
   <div id="chordName">—<div id="mode">chord mode</div></div>
 
-  <div id="legend"></div>
-  <div id="legendShow" title="Show help (H)">?</div>
+  <button id="railToggle" title="Hide controls">›</button>
   <div id="status">starting…</div>
 
   <div id="start">
