@@ -50,8 +50,10 @@
     border-left:none; background:rgba(255,255,255,.035);
     flex:1 1 calc(50% - 2px); min-width:0; }   /* two even chips per row (lone one fills) */
   .group-body .ctrl button { padding:0; }   /* the chip already supplies the box */
-  /* sliders take a full row and stretch to fill it, so no dead space on the right */
-  .group-body .ctrl:has(input[type=range]){ flex:1 1 100%; min-width:0; }
+  /* sliders + voice steppers take a full row: the stepper's name is too wide to
+     share a half-width chip without colliding with the control beside it */
+  .group-body .ctrl:has(input[type=range]),
+  .group-body .ctrl:has(.seg){ flex:1 1 100%; min-width:0; }
   .group-body .ctrl:has(input[type=range]) input[type=range]{ flex:1 1 0; width:auto; min-width:0; }
   /* SHAPE has the most controls — lay it out as two columns (selects | sliders) */
   .group--split { width:300px; }
