@@ -979,13 +979,25 @@
       // animate while the tab is visible; freeze to a static X when it's inactive.
       // (favicon encode is ~1ms, so the old 10fps interval was the bottleneck, not cost.)
       var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      var t0 = null, timer = null;
+      var timer = null, clock = 0, last = null, speed = 1, target = 1;
+      // hovering the title eases the grid to 2x — the clock keeps accumulating, so
+      // only the rate changes and the patch position never jumps
+      var titleEl = document.querySelector('h1.title');
+      if (titleEl) {
+        titleEl.addEventListener('pointerenter', function () { target = 2; });
+        titleEl.addEventListener('pointerleave', function () { target = 1; });
+      }
       function active() {
         if (timer) return;
         if (reduce) { render(2); return; }                      // static grid, no animation
+        last = null;
         timer = setInterval(function () {
-          if (t0 === null) t0 = performance.now();
-          render((performance.now() - t0) / 1000);
+          var now = performance.now();
+          if (last === null) last = now;
+          var dt = now - last; last = now;
+          speed += (target - speed) * Math.min(1, dt / 130);    // ease speed toward 1x / 2x
+          clock += dt / 1000 * speed;
+          render(clock);
         }, 33);                                                  // ~30fps
       }
       function inactive() {
