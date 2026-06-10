@@ -186,6 +186,12 @@
   #legendShow:hover { color:var(--accent); }
   body.legend-hidden #legend { display:none; }
   body.legend-hidden #legendShow { display:flex; }
+  /* small credit pinned to the very bottom of the sidebar, shown regardless of help state */
+  #railFoot { text-align:center; padding-top:9px; font-size:9px; letter-spacing:.07em;
+    text-transform:uppercase; }
+  #railFoot a { color:rgba(238,241,246,.35); text-decoration:none;
+    border-bottom:1px solid rgba(238,241,246,.14); transition:color .15s, border-color .15s; }
+  #railFoot a:hover { color:var(--accent); border-color:var(--accent); }
 
   /* chevron tab riding the sidebar's inner edge — pulls the rail in/out. It sits
      on the seam (right:var(--rail)) so it stays reachable when collapsed too. */
@@ -359,6 +365,7 @@
     </div>
     <div id="legend"></div>
     <div id="legendShow" title="Show help (H)">? &nbsp;instructions</div>
+    <div id="railFoot"><a href="https://staticvoid.studio" target="_blank" rel="noopener">staticvoid.studio</a></div>
   </div>
 
   <div id="chordName">—<div id="mode">chord mode</div></div>
