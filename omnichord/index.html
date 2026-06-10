@@ -79,6 +79,7 @@
   .row .group:nth-of-type(2) .group-title { color:oklch(.82 .15 132); }   /* SOUND — green */
   .row .group:nth-of-type(3) .group-title { color:oklch(.8 .13 222); }    /* SHAPE — cyan  */
   .row .group:nth-of-type(4) .group-title { color:oklch(.74 .15 318); }   /* FX    — violet*/
+  .row .group:nth-of-type(5) .group-title { color:var(--muted); }         /* DISPLAY — meta, gray */
   .group-body { display:flex; flex-wrap:wrap; gap:4px; }
   .group-body .ctrl { padding:5px 8px; border-radius:var(--r);
     border-left:none; background:rgba(255,255,255,.035);
@@ -116,12 +117,17 @@
     color:var(--muted); }
   .group-body .subhead:not(:first-child){ margin-top:4px; padding-top:7px;
     border-top:1px solid var(--line); }
-  /* fixed label column so every slider starts at the same x and shares one width */
+  /* fixed label column so every slider starts at the same x and shares one width
+     (wide enough to hold the octaves/lanes axis arrow without nudging the bars) */
   label { font-size:9.5px; text-transform:uppercase; letter-spacing:.03em;
-    color:var(--muted); margin:0; white-space:nowrap; min-width:54px; flex:0 0 auto; }
+    color:var(--muted); margin:0; white-space:nowrap; min-width:64px; flex:0 0 auto;
+    display:flex; align-items:center; }
+  /* ↔ / ↕ on octaves+lanes: which way each axis runs relative to the strum.
+     margin-left:auto pins it to the column's right edge so the arrows all line up */
+  label .axis { font-size:11px; color:var(--ink); opacity:.5; margin-left:auto; padding-left:4px; }
   select, button { background:transparent; color:var(--ink); border:none;
     font-family:var(--font); font-size:12.5px; cursor:pointer; padding:2px 2px; outline:none; }
-  select { -webkit-appearance:none; appearance:none; padding-right:12px; }
+  select { -webkit-appearance:none; appearance:none; padding-right:0; }   /* flush right, aligning with the .val numbers + checkbox */
   button { padding:3px 8px; border-radius:var(--r); border:1px solid transparent; transition:.12s; }
   button:hover { background:rgba(255,255,255,.05); }
   button.active { background:var(--accent-dim); border-color:rgba(157,180,255,.4); color:var(--accent); }
@@ -129,11 +135,27 @@
   .stepname { font-size:12.5px; color:var(--ink); min-width:62px; text-align:center; }
   .stepbtn { padding:1px 6px; font-size:14px; line-height:1; color:var(--muted); }
   .stepbtn:hover { color:var(--accent); }
-  input[type=range]{ accent-color:var(--accent); height:3px; width:62px; }
-  /* sliders take their section's hue, reinforcing the rainbow grouping */
-  .row .group:nth-of-type(2) input[type=range]{ accent-color:oklch(.82 .15 132); }  /* SOUND — green  */
-  .row .group:nth-of-type(3) input[type=range]{ accent-color:oklch(.8 .13 222); }   /* SHAPE — cyan   */
-  .row .group:nth-of-type(4) input[type=range]{ accent-color:oklch(.74 .15 318); }  /* FX    — violet */
+  /* slider reads as a fill BAR, not a track + knob: a flat rectangle that fills
+     left-to-right in the section hue (--fill is set by JS for every browser).
+     The input is taller than the bar and pulled out with negative margins, so the
+     whole padded area is grabbable without growing the row; the visible 10px bar is
+     drawn centred inside the 22px track via two background layers. */
+  input[type=range]{ --sec:var(--accent); -webkit-appearance:none; appearance:none;
+    height:22px; margin:-6px -4px; width:62px; background:transparent; cursor:pointer; }
+  input[type=range]::-webkit-slider-runnable-track{ height:22px;
+    background:linear-gradient(var(--sec),var(--sec)) left center/var(--fill,50%) 10px no-repeat,
+      linear-gradient(rgba(255,255,255,.09),rgba(255,255,255,.09)) left center/100% 10px no-repeat; }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none;
+    width:8px; height:22px; border:none; background:transparent; }
+  input[type=range]::-moz-range-track{ height:22px;
+    background:linear-gradient(var(--sec),var(--sec)) left center/var(--fill,50%) 10px no-repeat,
+      linear-gradient(rgba(255,255,255,.09),rgba(255,255,255,.09)) left center/100% 10px no-repeat; }
+  input[type=range]::-moz-range-thumb{ width:6px; height:22px; border:none; background:transparent; }
+  /* each section tints its sliders, reinforcing the rainbow grouping */
+  .row .group:nth-of-type(2) input[type=range]{ --sec:oklch(.82 .15 132); }  /* SOUND — green  */
+  .row .group:nth-of-type(3) input[type=range]{ --sec:oklch(.8 .13 222); }   /* SHAPE — cyan   */
+  .row .group:nth-of-type(4) input[type=range]{ --sec:oklch(.74 .15 318); }  /* FX    — violet */
+  .row .group:nth-of-type(5) input[type=range]{ --sec:rgba(238,241,246,.5); } /* DISPLAY — gray  */
   .val { font-size:11px; color:var(--muted); min-width:26px; text-align:right;
     font-variant-numeric:tabular-nums; }
 
@@ -241,10 +263,23 @@
     #start h1,#start p,#start button,#start .hint{ animation:none; }
     #start{ transition:none; }
   }
-  #status { position:absolute; z-index:3; bottom:18px;
+  #status { position:absolute; z-index:3; bottom:52px;
     left:calc(var(--play-x) + (100vw - var(--rail)) / 2); transform:translateX(-50%);
     pointer-events:none; font-size:11px; letter-spacing:.04em; color:var(--muted);
     transition:left .28s var(--ease); }
+  /* move-panels edits the play panels, so it lives in the play area as an obvious
+     mode button centered along the bottom — not buried in the sidebar */
+  #editBtn { position:absolute; z-index:3; bottom:16px;
+    left:calc(var(--play-x) + (100vw - var(--rail)) / 2); transform:translateX(-50%);
+    display:flex; align-items:center; gap:6px; cursor:pointer; padding:7px 14px;
+    background:var(--glass); border:1px solid var(--line); border-radius:var(--r);
+    color:rgba(238,241,246,.72); font-size:10px; font-weight:700; letter-spacing:.08em;
+    text-transform:uppercase; line-height:1;
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    transition:left .28s var(--ease), background .15s, color .15s, border-color .15s; }
+  #editBtn .ico { font-size:13px; }
+  #editBtn:hover { color:#fff; border-color:rgba(255,255,255,.22); }
+  #editBtn.active { background:var(--accent-dim); border-color:rgba(157,180,255,.5); color:var(--accent); }
 </style>
 </head>
 <body>
@@ -254,7 +289,6 @@
 
   <div id="hud">
     <div id="railUtils">
-      <button id="editBtn" class="util" aria-pressed="false" title="Move / resize the play panels (E)"><span class="ico">✥</span>move panels</button>
       <button id="sideToggle" class="util" title="Move controls to the other side"><span class="ico">⇄</span>flip side</button>
     </div>
     <div class="row">
@@ -289,8 +323,8 @@
           <div class="subhead">note grid</div>
           <div class="ctrl"><label>Strum</label>
             <select id="orientSel">
-              <option value="vertical">Vertical</option>
-              <option value="horizontal" selected>Horizontal</option>
+              <option value="vertical">Vertical ↕</option>
+              <option value="horizontal" selected>Horizontal ↔</option>
             </select>
           </div>
           <div class="ctrl"><label>Layout</label>
@@ -301,8 +335,8 @@
               <option value="cont">Continue</option>
             </select>
           </div>
-          <div class="ctrl"><label>Octaves</label><input id="octSel" type="range" min="1" max="5" step="1" value="3"><span class="val" id="octVal">3</span></div>
-          <div class="ctrl"><label>Lanes</label><input id="colSel" type="range" min="1" max="8" step="1" value="1"><span class="val" id="colVal">1</span></div>
+          <div class="ctrl"><label>Octaves <span class="axis" id="octAxis"></span></label><input id="octSel" type="range" min="1" max="5" step="1" value="3"><span class="val" id="octVal">3</span></div>
+          <div class="ctrl"><label>Lanes <span class="axis" id="colAxis"></span></label><input id="colSel" type="range" min="1" max="8" step="1" value="1"><span class="val" id="colVal">1</span></div>
           <div class="subhead">chord</div>
           <div class="ctrl"><label>Stacks</label><input id="stackSel" type="range" min="1" max="4" step="1" value="4"><span class="val" id="stackVal">4</span></div>
         </div>
@@ -316,6 +350,12 @@
           <div class="ctrl"><label>Echo</label><input id="fbSel" type="range" min="0" max="0.6" step="0.01" value="0.22"><span class="val" id="fbVal">0.22</span></div>
         </div>
       </div>
+      <div class="group">
+        <div class="group-title">Display</div>
+        <div class="group-body">
+          <div class="ctrl"><label>Opacity</label><input id="opacitySel" type="range" min="0.2" max="1" step="0.01" value="1"><span class="val" id="opacityVal">100%</span></div>
+        </div>
+      </div>
     </div>
     <div id="legend"></div>
     <div id="legendShow" title="Show help (H)">? &nbsp;instructions</div>
@@ -324,6 +364,7 @@
   <div id="chordName">—<div id="mode">chord mode</div></div>
 
   <button id="railToggle" title="Hide controls">›</button>
+  <button id="editBtn" aria-pressed="false" title="Move / resize the play panels (E)"><span class="ico">✥</span><span class="lbl">move panels</span></button>
   <div id="status">starting…</div>
 
   <div id="start">

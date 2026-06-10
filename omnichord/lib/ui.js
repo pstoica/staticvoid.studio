@@ -23,6 +23,8 @@ const octSel  = document.getElementById("octSel");
 const octVal  = document.getElementById("octVal");
 const colSel  = document.getElementById("colSel");
 const colVal  = document.getElementById("colVal");
+const octAxis = document.getElementById("octAxis");
+const colAxis = document.getElementById("colAxis");
 const stackSel = document.getElementById("stackSel");
 const stackVal = document.getElementById("stackVal");
 const layoutSel = document.getElementById("layoutSel");
@@ -35,6 +37,13 @@ const volVal = document.getElementById("volVal");
 const lockBtn = document.getElementById("lockBtn");
 const editBtn = document.getElementById("editBtn");
 const hudEl = document.getElementById("hud");
+const opacitySel = document.getElementById("opacitySel");
+const opacityVal = document.getElementById("opacityVal");
+function applyHudOpacity(){
+  hudEl.style.opacity = opacitySel.value;
+  opacityVal.textContent = Math.round(parseFloat(opacitySel.value) * 100) + "%";
+}
+opacitySel.addEventListener("input", applyHudOpacity);
 
 NOTE_NAMES.forEach((n,i)=>{ const o=document.createElement("option"); o.value=i; o.textContent=n; if(i===0)o.selected=true; keySel.appendChild(o); });
 Object.keys(SCALES).forEach(s=>{ const o=document.createElement("option"); o.value=s; o.textContent=s; scaleSel.appendChild(o); });
@@ -43,7 +52,13 @@ Object.keys(SCALES).forEach(s=>{ const o=document.createElement("option"); o.val
 const fmt2 = v => v.toFixed(2);
 export const getVolume = () => parseFloat(volEl.value);
 
-orientSel.addEventListener("change", ()=> cfg.orientation = orientSel.value);
+// the note run (octaves) goes along the strum axis, lanes run perpendicular
+function reflectAxes(){
+  const h = cfg.orientation === "horizontal";
+  octAxis.textContent = h ? "↔" : "↕";
+  colAxis.textContent = h ? "↕" : "↔";
+}
+orientSel.addEventListener("change", ()=>{ cfg.orientation = orientSel.value; reflectAxes(); });
 octSel.addEventListener("input", ()=>{ const v=parseInt(octSel.value); if(state.freeMode) cfg.octavesFree=v; else cfg.octavesChord=v; octVal.textContent = octSel.value; });
 colSel.addEventListener("input", ()=>{ const v=parseInt(colSel.value); if(state.freeMode) cfg.colsFree=v; else cfg.colsChord=v; colVal.textContent = colSel.value; });
 stackSel.addEventListener("input", ()=>{ cfg.extRows = parseInt(stackSel.value); stackVal.textContent = stackSel.value; state.currentExt = Math.min(state.currentExt, cfg.extRows-1); });
@@ -117,11 +132,14 @@ export function setMode(mode){                              // "chord" | "omni" 
   layoutSel.value = state.freeMode ? cfg.layoutFree : cfg.layoutChord;   // layout is per-mode
   octSel.value = curOct();  octVal.textContent = curOct();     // octaves + columns are per-mode
   colSel.value = curCols(); colVal.textContent = curCols();
+  paintRanges();                                   // repaint slider fills for the per-mode values
 }
 function setLock(on){ state.lockChord = on; lockBtn.classList.toggle("active", on); lockBtn.setAttribute("aria-pressed", on); }
 function setEdit(on){
   state.editMode = on;
   editBtn.classList.toggle("active", on); editBtn.setAttribute("aria-pressed", on);
+  editBtn.querySelector(".ico").textContent = on ? "✓" : "✥";
+  editBtn.querySelector(".lbl").textContent = on ? "done" : "move panels";
   if(!on){
     if(state.twoHandGrab || editState[0].grab || editState[1].grab) saveState();
     state.twoHandGrab = null; state.editWasActive = false;
@@ -157,6 +175,7 @@ export function saveState(){
       legendHidden: document.body.classList.contains("legend-hidden"),
       railCollapsed: document.body.classList.contains("rail-collapsed"),
       railLeft: document.body.classList.contains("rail-left"),
+      hudOpacity: parseFloat(opacitySel.value),
     }));
   }catch(e){ /* private mode / quota — settings just won't persist */ }
 }
@@ -173,7 +192,17 @@ function syncControls(){     // reflect cfg + state into the HUD inputs
   timeSel.value=cfg.delayTime; timeVal.textContent=fmt2(cfg.delayTime);
   fbSel.value=cfg.delayFb; fbVal.textContent=fmt2(cfg.delayFb);
   volVal.textContent=fmt2(parseFloat(volEl.value));
+  paintRanges();
+  reflectAxes();
+  applyHudOpacity();
 }
+// webkit can't auto-fill a custom range track, so paint the left fill % ourselves
+function paintRange(el){
+  const min=+el.min||0, max=el.max?+el.max:100;
+  el.style.setProperty("--fill", (el.value-min)/(max-min)*100 + "%");
+}
+function paintRanges(){ hudEl.querySelectorAll("input[type=range]").forEach(paintRange); }
+hudEl.addEventListener("input", e=>{ if(e.target.type==="range") paintRange(e.target); });
 function loadState(){
   let s; try{ s=JSON.parse(localStorage.getItem(LS_KEY)); }catch(e){ s=null; }
   if(s){
@@ -181,6 +210,7 @@ function loadState(){
     if(typeof s.keyRoot==="number") state.keyRoot=s.keyRoot;
     if(typeof s.scaleName==="string" && SCALES[s.scaleName]) state.scaleName=s.scaleName;
     if(typeof s.vol==="number") volEl.value=s.vol;
+    if(typeof s.hudOpacity==="number") opacitySel.value=s.hudOpacity;
     if(s.regions?.chord) Object.assign(CHORD, s.regions.chord);
     if(s.regions?.strum) Object.assign(regions.strum, s.regions.strum);
     if(s.regions?.strumFree) Object.assign(regions.strumFree, s.regions.strumFree);
