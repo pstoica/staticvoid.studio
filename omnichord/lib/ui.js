@@ -203,8 +203,16 @@ function paintRange(el){
 }
 function paintRanges(){ hudEl.querySelectorAll("input[type=range]").forEach(paintRange); }
 hudEl.addEventListener("input", e=>{ if(e.target.type==="range") paintRange(e.target); });
+const isMobile = matchMedia("(max-width: 640px)").matches || matchMedia("(pointer: coarse)").matches;
 function loadState(){
   let s; try{ s=JSON.parse(localStorage.getItem(LS_KEY)); }catch(e){ s=null; }
+  // portrait phones get a stacked default — chord palette across the top, strum
+  // across the bottom — since the landscape left/right split is unusably narrow
+  if(isMobile && !s?.regions){
+    Object.assign(CHORD,             { x0:0.05, x1:0.95, y0:0.07, y1:0.40 });
+    Object.assign(regions.strum,     { x0:0.05, x1:0.95, y0:0.54, y1:0.93 });
+    Object.assign(regions.strumFree, { x0:0.05, x1:0.95, y0:0.54, y1:0.93 });
+  }
   if(s){
     if(s.cfg) Object.assign(cfg, s.cfg);
     if(typeof s.keyRoot==="number") state.keyRoot=s.keyRoot;
@@ -215,9 +223,10 @@ function loadState(){
     if(s.regions?.strum) Object.assign(regions.strum, s.regions.strum);
     if(s.regions?.strumFree) Object.assign(regions.strumFree, s.regions.strumFree);
     if(s.legendHidden) document.body.classList.add("legend-hidden");
-    if(s.railLeft) document.body.classList.add("rail-left");
-    if(s.railCollapsed) document.body.classList.add("rail-collapsed");
+    if(s.railLeft && !isMobile) document.body.classList.add("rail-left");          // no left/right for a bottom sheet
+    if(s.railCollapsed && !isMobile) document.body.classList.add("rail-collapsed");
   }
+  if(isMobile) document.body.classList.add("rail-collapsed");   // a phone always starts with the sheet down, camera showing
   reflectRail();
   state.currentExt=Math.min(state.currentExt, cfg.extRows-1);
   syncControls();                                    // always reflect cfg into the HUD, even with no saved state
