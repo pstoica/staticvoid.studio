@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Loom — a pattern language for drawing</title>
+<meta name="description" content="Live-code Tidal/Strudel-style patterns that bloom into particle drawings. Rhythm becomes geometry, in your browser." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg:#06070a; --ink:#eef1f6; --muted:rgba(238,241,246,.46);
+    --glass:rgba(12,14,19,.5); --line:rgba(255,255,255,.08);
+    --accent:#9db4ff; --accent-dim:rgba(157,180,255,.16);
+    --ok:#6df0c2;
+    --font:"SF Pro Text","Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --rail-w:580px;
+    --ease:cubic-bezier(.4,0,.2,1);
+    /* syntax-highlight palette */
+    --t-com:rgba(238,241,246,.32); --t-str:#ffd166; --t-num:#6df0c2;
+    --t-fn:#9db4ff; --t-sig:#b58cff; --t-ctrl:#56b6ff; --t-method:rgba(238,241,246,.82);
+    --t-punct:rgba(238,241,246,.4);
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font-family:var(--font); -webkit-font-smoothing:antialiased; overflow:hidden; }
+
+  /* fullscreen canvas behind everything */
+  #stage { position:fixed; inset:0; width:100vw; height:100vh; display:block; z-index:0; }
+
+  /* ── Hydra-style code overlay: text floats directly over the fullscreen
+     visuals (no panel). A soft left-edge gradient keeps it legible; the bare
+     gradient area lets pointer events fall through to the canvas. ── */
+  #rail { position:fixed; top:0; left:0; bottom:0; width:var(--rail-w); z-index:2;
+    display:flex; flex-direction:column; min-height:0; pointer-events:none;
+    background:linear-gradient(102deg, rgba(3,4,7,.6) 0%, rgba(3,4,7,.22) 48%, transparent 92%);
+    transition:opacity .55s var(--ease); }
+  #rail > * { pointer-events:auto; }     /* but the controls/editor stay interactive */
+  #rail.idle { opacity:.05; }            /* mousemove / typing brings it back */
+  #rail.idle:hover { opacity:1; }
+
+  #brand { display:flex; align-items:baseline; gap:10px; padding:18px 22px 12px; }
+  #brand h1 { font-family:"Audiowide",var(--font); font-size:22px; margin:0; letter-spacing:.04em;
+    background:linear-gradient(92deg,#ff5d73,#ffd166,#6df0c2,#56b6ff,#b58cff);
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  #brand .sub { font-size:11px; color:var(--muted); letter-spacing:.02em; }
+  #helpbtn { width:20px; height:20px; flex:none; border-radius:999px;
+    border:1px solid var(--line); background:rgba(255,255,255,.03); color:var(--muted);
+    font:600 11px/1 var(--mono); cursor:pointer; transition:.16s var(--ease); opacity:.6; }
+  #helpbtn:hover { color:var(--ink); border-color:var(--accent-dim); background:var(--accent-dim); opacity:1; }
+
+  #presets { display:flex; flex-wrap:wrap; gap:6px; padding:0 22px 12px; }
+  #presets button { font:500 11px/1 var(--mono); color:var(--muted);
+    background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:999px;
+    padding:6px 11px; cursor:pointer; transition:.16s var(--ease); letter-spacing:.02em; }
+  #presets button:hover { color:var(--ink); border-color:var(--accent-dim); background:var(--accent-dim); }
+
+  /* highlighted editor: a transparent <textarea> sits exactly over a <pre> that
+     renders the coloured code, floating directly on the visuals (no box). */
+  #editwrap { flex:1; min-height:0; position:relative; margin:2px 22px 0; }
+  #hl, #code { position:absolute; inset:0; margin:0; border:0; background:transparent;
+    font:500 15px/1.65 var(--mono); padding:4px 16px; letter-spacing:.01em; tab-size:2;
+    white-space:pre-wrap; overflow-wrap:break-word; overflow:auto; }
+  #hl { color:var(--ink); pointer-events:none; z-index:0;
+    text-shadow:0 0 9px rgba(0,0,0,.92), 0 1px 3px rgba(0,0,0,.96); } /* legible over busy art */
+  #code { color:transparent; -webkit-text-fill-color:transparent; caret-color:var(--accent);
+    resize:none; outline:none; z-index:1; }
+  #code::selection { background:rgba(157,180,255,.3); }
+  /* token colours */
+  .t-com{color:var(--t-com);font-style:italic} .t-str{color:var(--t-str)} .t-num{color:var(--t-num)}
+  .t-fn{color:var(--t-fn)} .t-sig{color:var(--t-sig)} .t-ctrl{color:var(--t-ctrl)}
+  .t-method{color:var(--t-method)} .t-op,.t-punct{color:var(--t-punct)}
+
+  #err { font:500 12px/1.4 var(--mono); color:#ff8a9b; margin:0 22px; max-height:0;
+    overflow:hidden; opacity:0; transition:.18s var(--ease); }
+  #err.show { max-height:64px; opacity:1; padding:8px 0 0; }
+
+  #transport { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:14px 22px 14px; margin-top:12px; }
+  .btn { font:500 12px/1 var(--mono); color:var(--ink); background:rgba(255,255,255,.05);
+    border:1px solid var(--line); border-radius:8px; padding:9px 13px; cursor:pointer;
+    transition:.16s var(--ease); letter-spacing:.02em; }
+  .btn:hover { background:var(--accent-dim); border-color:var(--accent-dim); }
+  .btn.on { color:var(--accent); border-color:var(--accent-dim); background:var(--accent-dim); }
+  .btn.off { color:var(--muted); }
+  #runbtn { color:var(--ok); border-color:rgba(109,240,194,.25); }
+  #runbtn.lit { background:var(--ok); color:#04130d; box-shadow:0 0 18px rgba(109,240,194,.5); }
+  #runbtn kbd { font:inherit; opacity:.6; }
+
+  .slider { display:flex; align-items:center; gap:8px; font:500 11px/1 var(--mono); color:var(--muted); }
+  .slider input[type=range] { width:84px; accent-color:var(--accent); }
+  .slider b { color:var(--ink); font-weight:500; min-width:30px; }
+
+  #meta { padding:0 22px 16px; font:400 11px/1.5 var(--mono); color:var(--muted);
+    display:flex; justify-content:space-between; }
+  #meta a { color:var(--muted); text-decoration:none; border-bottom:1px solid var(--line); }
+  #meta a:hover { color:var(--ink); }
+
+  #hint { position:fixed; left:calc(var(--rail-w) + (100vw - var(--rail-w)) / 2); bottom:22px;
+    transform:translateX(-50%); z-index:1;
+    font:400 11px/1 var(--mono); color:var(--muted); pointer-events:none;
+    background:rgba(0,0,0,.35); padding:7px 12px; border-radius:999px; border:1px solid var(--line);
+    letter-spacing:.03em; transition:opacity .55s var(--ease); }
+  #hint.idle { opacity:0; }
+
+  /* cheatsheet — docked right rail */
+  #help { position:fixed; top:0; right:0; bottom:0; width:380px; max-width:92vw; z-index:6;
+    overflow:auto; background:rgba(6,7,10,.94); backdrop-filter:blur(12px);
+    border-left:1px solid var(--line); box-shadow:-22px 0 60px rgba(0,0,0,.5); padding:0 24px 40px; }
+  #help[hidden] { display:none; }
+  #help header { display:flex; align-items:center; justify-content:space-between;
+    position:sticky; top:0; z-index:1; margin:0 -24px 16px; padding:20px 24px 14px;
+    background:var(--bg); border-bottom:1px solid var(--line); }
+  #help h2 { font-family:"Audiowide",var(--font); font-size:17px; margin:0; letter-spacing:.03em; }
+  #helpclose { width:28px; height:28px; border-radius:8px; border:1px solid var(--line);
+    background:rgba(255,255,255,.05); color:var(--ink); cursor:pointer; font-size:13px; }
+  #helpclose:hover { background:var(--accent-dim); border-color:var(--accent-dim); }
+  .helpbody { max-width:none; }
+  #help section { margin:0 0 20px; }
+  #help h3 { font:600 12px/1 var(--mono); color:var(--accent); letter-spacing:.04em;
+    text-transform:uppercase; margin:0 0 10px; }
+  #help h3 span { color:var(--muted); text-transform:none; font-weight:400; }
+  #help code { font:500 12px/1.5 var(--mono); color:var(--ink);
+    background:rgba(255,255,255,.045); border:1px solid var(--line); border-radius:6px;
+    padding:1px 6px; white-space:pre-wrap; }
+  #help section > code { display:block; padding:5px 9px; margin:6px 0 2px; }
+  #help p code { background:rgba(255,255,255,.08); }
+  #help p { font:400 11.5px/1.45 var(--font); color:var(--muted); margin:0 0 6px 2px; }
+  #help p.shapes { font-family:var(--mono); color:rgba(238,241,246,.7); margin-top:8px; }
+  #help em { color:var(--ok); font-style:normal; }
+
+  @media (max-width:760px) {
+    :root { --rail-w:100vw; }
+    #rail { top:auto; right:0; bottom:0; width:100vw; height:auto; max-height:56vh;
+      border-right:0; border-top:1px solid var(--line); }
+    #editwrap { min-height:120px; }
+    #hint { left:50%; bottom:calc(56vh + 14px); }
+  }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+
+  <aside id="rail">
+    <div id="brand">
+      <h1>Loom</h1>
+      <span class="sub">a pattern language for drawing</span>
+      <button id="helpbtn" title="cheatsheet">?</button>
+    </div>
+
+    <div id="presets">
+      <button data-preset="threads">threads</button>
+      <button data-preset="orbit">orbit</button>
+      <button data-preset="lattice">lattice</button>
+      <button data-preset="swarm">swarm</button>
+      <button data-preset="bloom">bloom</button>
+      <button data-preset="ribbon">ribbon</button>
+    </div>
+
+    <div id="editwrap">
+      <pre id="hl" aria-hidden="true"></pre>
+      <textarea id="code" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" wrap="soft"></textarea>
+    </div>
+    <div id="err"></div>
+
+    <div id="transport">
+      <button class="btn" id="runbtn" title="Cmd/Ctrl + Enter">run <kbd>⌘⏎</kbd></button>
+      <button class="btn" id="playbtn">❚❚ pause</button>
+      <button class="btn" id="clearbtn">clear</button>
+      <button class="btn" id="clockbtn" title="toggle the cycle playhead">◷ clock</button>
+      <button class="btn" id="tracebtn" title="thread a path through the live points">◇ trace</button>
+      <label class="slider">cps <input type="range" id="cps" min="0.1" max="2" step="0.05" value="0.6"><b id="cpsval">0.60</b></label>
+      <label class="slider">decay <input type="range" id="persist" min="0.25" max="6" step="0.05" value="1.5"></label>
+    </div>
+
+    <div id="meta">
+      <span>cycle <b id="cycle">0</b></span>
+      <a href="/">staticvoid.studio</a>
+    </div>
+  </aside>
+
+  <div id="hint">edit the pattern · ⌘⏎ to run</div>
+
+  <div id="help" hidden>
+    <header>
+      <h2>Loom cheatsheet</h2>
+      <button id="helpclose">✕</button>
+    </header>
+    <div class="helpbody">
+      <section>
+        <h3>mini-notation <span>(inside "…")</span></h3>
+        <code>"a b c d"</code><p>sequence — splits the cycle evenly</p>
+        <code>"a [b c]"</code><p>subdivide a step</p>
+        <code>"&lt;a b c&gt;"</code><p>one per cycle (alternate)</p>
+        <code>"a*3" "a/2"</code><p>speed up / slow down a step</p>
+        <code>"a!3" "a@3 b"</code><p>replicate · weight (a takes ¾)</p>
+        <code>"a(3,8)" "a(3,8,2)"</code><p>euclid (pulses, steps, rotation)</p>
+        <code>"a , b"</code><p>stack in parallel · <code>~</code> = rest</p>
+        <code>"a | b | c"</code><p>random choice each cycle</p>
+        <code>"{a b c}%4"</code><p>polymeter — n steps/cycle</p>
+      </section>
+      <section>
+        <h3>sources</h3>
+        <code>shape("circle*8")</code><p>emit glyphs (alias <code>s</code>)</p>
+        <code>n("0 1 2")</code><p>numbered dots · <code>run(8)</code> = 0…7</p>
+        <p class="shapes">shapes: dot circle ring arc square box tri pent hex star plus line cross</p>
+      </section>
+      <section>
+        <h3>controls <span>(chain onto a source)</span></h3>
+        <code>.color("#ff5d73" | "red" | 0..1)</code>
+        <code>.size(0.06)</code><p>radius, fraction of min(w,h)</p>
+        <code>.x(0..1) .y(0..1)</code><p>cartesian; overrides the ring layout</p>
+        <code>.radius(0..0.5)</code><p>distance from centre (ring layout)</p>
+        <code>.rotate(turns) .spin(turns/s)</code><p>Z spin · 1 = full turn</p>
+        <code>.rotateX(turns) .rotateY(turns)</code><p>3D tilt (foreshorten)</p>
+        <code>.fill(1|0) .stroke(1|0) .vertex(1|0)</code><p>draw modes — independent &amp; patternable. <code>.fill(0).vertex()</code> = dots only</p>
+        <code>.weight(0..0.1)</code><p>stroke / line / vertex-dot size</p>
+        <code>.cap("round"|"butt"|"square")</code><p>line ends</p>
+        <code>.join("round"|"miter"|"bevel")</code><p>corners</p>
+        <code>.open(0..1)</code><p>arc/ring gap (use shape <code>arc</code>)</p>
+        <code>.alpha(0..1) .pan(0..1) .jitter(0..0.1)</code>
+        <code>.attack(s) .decay(s)</code><p>fade-in / fade-out (s alias <code>.life</code>)</p>
+        <code>.blend("source-over"|"screen"|"lighter"|"multiply")</code>
+      </section>
+      <section>
+        <h3>transforms</h3>
+        <code>.fast(n) .slow(n) .rev()</code>
+        <code>.every(n, p =&gt; …) .iter(n) .palindrome()</code>
+        <code>.jux(p =&gt; p.rev())</code><p>split a transformed copy left/right</p>
+        <code>.off(t, p =&gt; …)</code><p>echo, shifted by t cycles</p>
+        <code>.degrade() .sometimes(p=&gt;…) .often(…) .rarely(…)</code>
+        <code>stack(…) cat(…) seq(…) fastcat(…)</code>
+      </section>
+      <section>
+        <h3>signals &amp; maths <span>(0..1 unless ranged)</span></h3>
+        <code>sine cosine saw isaw tri square</code>
+        <code>rand perlin fbm brown gauss</code><p>noise: white · smooth · fractal · red · bell</p>
+        <code>choose("a","b") irand(8)</code><p>random pick / integer per onset</p>
+        <code>.range(lo, hi)</code><p>remap a 0..1 signal</p>
+        <code>.add(x) .sub(x) .mul(x) .div(x)</code><p>x may be a number <em>or a pattern</em></p>
+        <code>.x( saw.add(sine.range(0, 0.1)) )</code><p>← wobble a ramp by a sine</p>
+      </section>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

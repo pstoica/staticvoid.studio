@@ -1,0 +1,231 @@
+# Loom — language reference
+
+Loom is a Tidal/Strudel-style pattern language for drawing. You write an
+expression that evaluates to a **pattern**; the renderer queries it each frame
+and turns every event onset into a glyph on the canvas. The engine lives in
+[`pattern.js`](pattern.js); the renderer + presets in [`main.js`](main.js).
+
+A *pattern* is a pure function from a stretch of cyclic time to a list of
+events. Time is measured in **cycles** (the `cps` slider sets cycles/second).
+Everything composes: combinators take patterns and return patterns.
+
+In-app: hit **?** in the top-left for a condensed version of this, **⌘/Ctrl+Enter**
+to run.
+
+---
+
+## Mini-notation (inside `"…"` strings)
+
+| Syntax | Meaning |
+| --- | --- |
+| `"a b c d"` | sequence — splits the cycle into equal steps |
+| `"a [b c]"` | subdivide a single step |
+| `"<a b c>"` | one item per cycle (alternation) |
+| `"a*3"` | play a step 3× faster (3 times in its slot) |
+| `"a/2"` | play a step over 2 cycles |
+| `"a!3"` | replicate a into 3 steps |
+| `"a@3 b"` | weighted steps — `a` takes ¾ of the cycle, `b` ¼ |
+| `"a(3,8)"` | euclidean: 3 pulses spread over 8 steps |
+| `"a(3,8,2)"` | …rotated by 2 steps |
+| `"a , b"` | stack in parallel (both at once) |
+| `"~"` | rest (silence) |
+
+Tokens are strings unless they parse as numbers. Numeric controls coerce them
+(`.size("0.1 0.2")` → numbers); `color`/`shape`/`blend` keep them as strings.
+
+---
+
+## Sources
+
+Sources turn tokens into glyph events. They are the start of every chain.
+
+| Function | Result |
+| --- | --- |
+| `shape("circle*8")` | a glyph per token; the token is the shape name. Alias: `s(...)` |
+| `n("0 1 2 3")` | numbered dots (sets `n`, shape `dot`) |
+| `run(8)` | numeric pattern `0 1 2 … 7` in one cycle |
+| `pure(x)` | one event per cycle holding `x` |
+| `silence` | nothing |
+
+**Shape names:** `dot` `circle` `ring` `square` `box` `tri` `pent` `hex`
+`star` `plus` `line` `cross`. (`ring`/`line`/`cross` are always stroked.)
+
+---
+
+## Controls
+
+Chain these onto a source to set per-glyph attributes. Structure comes from the
+left, the value is sampled from the right — so the argument can be a number, a
+mini-notation string, **or a pattern/signal**:
+
+```js
+shape("dot*8").size("0.04 0.08").color(sine.range(0, 1))
+```
+
+### Visual
+
+| Control | Range / units | Notes |
+| --- | --- | --- |
+| `.color(c)` | `"#rrggbb"`, name (`red` `blue` …), or `0..1` hue | default: rainbow by cycle phase |
+| `.size(n)` | `0..1` (fraction of `min(w,h)`) | glyph radius. default `0.06` |
+| `.x(n)` `.y(n)` | `0..1` of width / height | cartesian; **overrides** the ring layout |
+| `.radius(n)` | `0..0.5` typical | distance from centre in the ring layout |
+| `.rotate(t)` | turns (`1` = 360°) | static Z rotation |
+| `.rotateX(t)` `.rotateY(t)` | turns | 3D tilt (foreshortening) around the horizontal / vertical axis |
+| `.spin(t)` | turns/second | continuous Z rotation |
+| `.pan(n)` | `0..1` (0=left, .5=centre, 1=right) | horizontal shift; `jux` uses this |
+| `.jitter(n)` | `0..0.1` typical | random positional scatter |
+| `.alpha(n)` | `0..1` | peak opacity |
+
+### Style
+
+`fill` and `stroke` are **independent, patternable** booleans — a glyph can be
+filled, outlined, or both. All four are patterns, so `.fill("1 0")`,
+`.weight(sine.range(.002,.02))`, `.cap("<round butt>")` all work.
+
+| Control | Notes |
+| --- | --- |
+| `.fill(on)` | fill on/off (default on). `.fill(0)` disables fill |
+| `.stroke(on)` | outline on/off (default off). `.stroke()` = on |
+| `.vertex(on)` | draw a dot at each of the shape's vertices |
+| `.weight(w)` | stroke / line / vertex-dot size (`0..0.1` of `min(w,h)`) |
+| `.cap(s)` | line ends: `"round"` (default) `"butt"` `"square"` |
+| `.join(s)` | corners: `"round"` (default) `"miter"` `"bevel"` |
+
+> Three independent draw modes: fill, stroke, vertex. Outline-only: `.fill(0).stroke()`.
+> Vertices only: `.fill(0).vertex()`. They compose — `.stroke().vertex()` outlines *and* dots.
+> `ring` / `arc` / `line` / `cross` are outlines (no fill); they stroke by default.
+
+### Envelope (per glyph, in seconds)
+
+| Control | Notes |
+| --- | --- |
+| `.attack(s)` | fade-in time. default `0.06` |
+| `.decay(s)` | fade-out time / lifetime. default ≈ one cycle. alias: `.life(s)` |
+
+The **decay** slider in the transport is a master multiplier baked into each
+glyph *at spawn* — moving it only affects glyphs drawn afterward, never ones
+already on screen. The **clock** button toggles the sweeping cycle playhead, and
+**trace** threads a line through the live glyph points (in spawn order) so the
+rhythm reads as a connected path / constellation.
+
+Glyphs are drawn oldest-first, so the most recently spawned always sits on top.
+
+### Compositing
+
+| Control | Notes |
+| --- | --- |
+| `.blend(mode)` | `"source-over"` (default), `"screen"`, `"lighter"`, `"multiply"`, … |
+
+---
+
+## Transforms
+
+Combinators that reshape a pattern. All return a pattern, so they chain.
+
+| Transform | Effect |
+| --- | --- |
+| `.fast(n)` `.slow(n)` | compress / stretch in time (`n` may be a pattern) |
+| `.rev()` | reverse each cycle |
+| `.every(n, p => …)` | apply a function every `n`th cycle |
+| `.iter(n)` | rotate the pattern by `1/n` each cycle |
+| `.palindrome()` | alternate forward / reversed cycles |
+| `.jux(p => …)` | duplicate; transform one copy; pan the two apart |
+| `.off(t, p => …)` | overlay an echo shifted later by `t` cycles |
+| `.degrade()` | drop ~50% of events (seeded by time) |
+| `.degradeBy(p)` | drop a fraction `p` of events |
+| `.sometimes(f)` `.often(f)` `.rarely(f)` | apply `f` to a random share of events |
+| `.early(t)` `.late(t)` | shift earlier / later by `t` cycles |
+
+### Combining patterns (free functions)
+
+| Function | Effect |
+| --- | --- |
+| `stack(a, b, …)` | layer patterns simultaneously |
+| `cat(a, b, …)` | one pattern per cycle (slow concatenation) |
+| `seq(a, b, …)` / `fastcat(a, b, …)` | pack patterns into one cycle |
+| `fast(n, p)` `slow(n, p)` `rev(p)` | function forms of the methods |
+
+---
+
+## Signals & maths
+
+Continuous patterns in `0..1`, sampled at each event's onset. Use them anywhere
+a control takes a value.
+
+`sine` `cosine` `saw` `isaw` `tri` `square` `rand` `perlin`
+
+| Method | Effect |
+| --- | --- |
+| `.range(lo, hi)` | remap a `0..1` signal into `[lo, hi]` |
+| `.add(x)` `.sub(x)` `.mul(x)` `.div(x)` | arithmetic; **`x` may be a number or a pattern** |
+
+Because arithmetic accepts patterns, you can modulate one signal with another:
+
+```js
+shape("dot*16")
+  .x( saw.add(sine.range(0, 0.1)) )   // a ramp wobbled by a sine
+  .color(rand)
+```
+
+> Arithmetic operates on **numeric** patterns (signals, `n(...)`, mini numbers).
+> Compose them *before* handing them to a control, as above — not after, where
+> the values are control objects.
+
+---
+
+## Layout model
+
+- An event's **onset phase** within the cycle places it on a ring around centre
+  (angle = phase, starting at top). So `"a b c d"` lands at 12/3/6/9 o'clock —
+  rhythm becomes geometry.
+- `.radius(n)` moves it in/out along that ring; `.x()/.y()` switch to absolute
+  cartesian placement and ignore the ring.
+- Glyphs are redrawn fresh every frame and fade via their envelope — nothing is
+  baked into the canvas, so there is no smear/ghosting.
+
+---
+
+## Examples
+
+```js
+// euclidean stars + a pulsing stroked ring
+stack(
+  shape("star(3,8)").color("#ffd166").size(0.08).stroke(0.006),
+  shape("ring(5,8)").color("#56b6ff").radius(sine.range(0.18, 0.42))
+).fast(2)
+
+// long-lived spiral, ramp wobbled by a sine
+shape("dot*16")
+  .radius(saw.range(0.05, 0.45).add(sine.range(0, 0.06)))
+  .color(saw.range(0, 1))
+  .size(0.04)
+  .attack(0.02).decay(2)
+
+// mirrored, alternating polygons
+shape("tri square hex <plus star>")
+  .size(0.07)
+  .jux(p => p.rev())
+  .color("<#ff5d73 #6df0c2>")
+```
+
+---
+
+## Testing the engine directly
+
+`pattern.js` exports `DSL`. You can query patterns without the renderer:
+
+```js
+import { DSL } from './pattern.js';
+const { shape, sine, span, hasOnset } = DSL;
+
+// list the onsets in cycle 0
+shape("dot(3,8)").query(span(0, 1)).filter(hasOnset)
+  .map(h => [h.whole.begin, h.value]);
+```
+
+`hasOnset(hap)` is true when the event starts within the queried span (i.e. it's
+a fresh trigger, not a continuation). `span(begin, end)` builds a time window.
+
+In the running app, `window.loom` exposes `{ tick(dt), step(n, dt), particles,
+setDecay(v) }` for poking at the renderer from the console while you test.

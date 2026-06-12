@@ -1,0 +1,452 @@
+// pattern.js — a tiny TidalCycles/Strudel-style pattern engine, retargeted at
+// *drawing* instead of sound. A Pattern is a pure function from a stretch of
+// cyclic time to a list of events (haps). Combinators transform that function;
+// the renderer (main.js) queries the result each frame and turns every event
+// onset into a glyph on the canvas.
+//
+// This is deliberately float-based (Strudel uses exact fractions). For a visual
+// prototype the occasional sub-pixel boundary error is invisible, and the code
+// stays readable.
+
+const EPS = 1e-9;
+
+// ── time spans ───────────────────────────────────────────────────────────────
+const span = (begin, end) => ({ begin, end });
+const mapSpan = (s, f) => span(f(s.begin), f(s.end));
+const sect = (a, b) => span(Math.max(a.begin, b.begin), Math.min(a.end, b.end));
+
+// Split a query span at integer cycle boundaries so each per-cycle generator
+// only ever sees time within a single cycle. Zero-width spans (used to *sample*
+// continuous signals at an instant) pass through untouched.
+function spanCycles(s) {
+  if (s.begin >= s.end) return s.begin === s.end ? [s] : [];
+  const out = [];
+  let b = s.begin;
+  while (b < s.end - EPS) {
+    const next = Math.min(Math.floor(b) + 1, s.end);
+    out.push(span(b, next));
+    b = next;
+  }
+  return out;
+}
+
+const hap = (whole, part, value) => ({ whole, part, value });
+const hasOnset = (h) => h.whole && Math.abs(h.whole.begin - h.part.begin) < EPS;
+
+// ── the Pattern type ──────────────────────────────────────────────────────────
+class Pattern {
+  constructor(query) { this.query = query; } // query: span -> hap[]
+
+  fmap(f) {
+    return new Pattern((s) => this.query(s).map((h) => hap(h.whole, h.part, f(h.value))));
+  }
+  filterValues(f) {
+    return new Pattern((s) => this.query(s).filter((h) => f(h.value)));
+  }
+  withTime(fq, fr) {
+    return new Pattern((s) =>
+      this.query(mapSpan(s, fq)).map((h) =>
+        hap(h.whole && mapSpan(h.whole, fr), mapSpan(h.part, fr), h.value)));
+  }
+
+  // ── speed / direction ──
+  _fast(n) { return n === 0 ? silence : this.withTime((t) => t * n, (t) => t / n); }
+  fast(n)  { return reify(n).fmap((x) => this._fast(x)).innerJoin(); }
+  slow(n)  { return reify(n).fmap((x) => this._fast(1 / x)).innerJoin(); }
+  _late(t) { return this.withTime((x) => x - t, (x) => x + t); }
+  _early(t){ return this.withTime((x) => x + t, (x) => x - t); }
+  late(t)  { return reify(t).fmap((x) => this._late(x)).innerJoin(); }
+  early(t) { return reify(t).fmap((x) => this._early(x)).innerJoin(); }
+
+  rev() {
+    return new Pattern((s) => spanCycles(s).flatMap((sp) => {
+      const cyc = Math.floor(sp.begin), next = cyc + 1;
+      const reflect = (t) => cyc + (next - t);
+      const rspan = (x) => span(reflect(x.end), reflect(x.begin));
+      return this.query(rspan(sp)).map((h) =>
+        hap(h.whole && rspan(h.whole), rspan(h.part), h.value));
+    }));
+  }
+
+  // ── per-cycle structural transforms ──
+  // bind/innerJoin let a pattern of patterns flatten — this is how `fast("2 4")`
+  // (a *pattern* of speeds) works.
+  innerJoin() {
+    return new Pattern((s) =>
+      this.query(s).flatMap((outer) =>
+        outer.value.query(outer.part).map((inner) => {
+          const part = sect(outer.part, inner.part);
+          if (part.begin > part.end + EPS) return null;
+          return hap(inner.whole, part, inner.value);
+        }).filter(Boolean)));
+  }
+
+  every(n, f) {
+    return new Pattern((s) => spanCycles(s).flatMap((sp) => {
+      const cyc = Math.floor(sp.begin);
+      return (((cyc % n) + n) % n === 0 ? f(this) : this).query(sp);
+    }));
+  }
+  iter(n) { return slowcat(...Array.from({ length: n }, (_, i) => this._early(i / n))); }
+  palindrome() { return slowcat(this, this.rev()); }
+
+  off(t, f) { return stack(this, f(this._late(t))); }
+
+  // visual `jux`: clone the pattern, transform one copy, pan the two apart.
+  jux(f) { return stack(this.set('pan', 0), f(this).set('pan', 1)); }
+
+  // ── randomness (deterministic, seeded by event time) ──
+  degradeBy(p) {
+    return new Pattern((s) => this.query(s).filter((h) =>
+      timeRand((h.whole || h.part).begin) >= p));
+  }
+  unDegradeBy(p) {
+    return new Pattern((s) => this.query(s).filter((h) =>
+      timeRand((h.whole || h.part).begin) < p));
+  }
+  degrade() { return this.degradeBy(0.5); }
+  sometimesBy(p, f) { return stack(this.degradeBy(p), f(this.unDegradeBy(p))); }
+  sometimes(f) { return this.sometimesBy(0.5, f); }
+  often(f) { return this.sometimesBy(0.75, f); }
+  rarely(f) { return this.sometimesBy(0.25, f); }
+
+  // ── continuous signal helpers ──
+  range(lo, hi) { return this.fmap((v) => lo + v * (hi - lo)); }
+  // arithmetic — the argument may be a number, a mini-notation string, or any
+  // Pattern (e.g. a signal). Structure comes from the left, value from the
+  // right, so `saw.add(sine.range(0, 0.1))` wobbles a ramp by a sampled sine.
+  add(arg) { return appLeft(this.fmap((l) => (r) => l + r), reify(arg)); }
+  sub(arg) { return appLeft(this.fmap((l) => (r) => l - r), reify(arg)); }
+  mul(arg) { return appLeft(this.fmap((l) => (r) => l * r), reify(arg)); }
+  div(arg) { return appLeft(this.fmap((l) => (r) => l / r), reify(arg)); }
+
+  // ── control setters (structure from the left, value sampled from the right) ──
+  set(name, arg) {
+    const numeric = NUMERIC.has(name);
+    const right = reifyControl(arg, numeric);
+    return appLeft(this.fmap((l) => (r) => Object.assign({}, l, { [name]: r })), right);
+  }
+  color(a) { return this.set('color', a); }
+  size(a)  { return this.set('size', a); }
+  x(a)     { return this.set('x', a); }
+  y(a)     { return this.set('y', a); }
+  radius(a){ return this.set('radius', a); }
+  rotate(a){ return this.set('rotate', a); }
+  spin(a)  { return this.set('spin', a); }
+  blend(a) { return this.set('blend', a); }
+  alpha(a) { return this.set('alpha', a); }
+  pan(a)   { return this.set('pan', a); }
+  jitter(a){ return this.set('jitter', a); }
+  // draw style — fill and stroke are independent, patternable booleans, so you
+  // can `.fill(0)` to disable fill, or `.stroke("1 0")` to alternate.
+  fill(v = 1)   { return this.set('fill', v); }
+  stroke(v = 1) { return this.set('stroke', v); }
+  vertex(v = 1) { return this.set('vertex', v); }  // draw a dot at each vertex
+  weight(a) { return this.set('weight', a); }
+  cap(a)    { return this.set('cap', a); }   // line ends: 'round' | 'butt' | 'square'
+  join(a)   { return this.set('join', a); }  // corners:   'round' | 'miter' | 'bevel'
+  rotateX(a){ return this.set('rotateX', a); }  // tilt around horizontal axis (turns)
+  rotateY(a){ return this.set('rotateY', a); }  // tilt around vertical axis (turns)
+  open(a)   { return this.set('open', a); }     // arc/ring gap, 0..1 (fraction left open)
+  // envelope (seconds): attack = fade-in, decay = fade-out / lifetime
+  attack(a) { return this.set('attack', a); }
+  decay(a)  { return this.set('decay', a); }
+  life(a)   { return this.set('decay', a); } // alias for decay
+}
+
+const NUMERIC = new Set(['size','x','y','radius','rotate','rotateX','rotateY','spin','alpha','pan','jitter','weight','attack','decay','fill','stroke','vertex','open']);
+
+// ── primitives ────────────────────────────────────────────────────────────────
+const silence = new Pattern(() => []);
+
+function pure(value) {
+  return new Pattern((s) => spanCycles(s).map((sp) => {
+    const cyc = Math.floor(sp.begin);
+    return hap(span(cyc, cyc + 1), sp, value);
+  }));
+}
+
+function stack(...pats) {
+  return new Pattern((s) => pats.flatMap((p) => p.query(s)));
+}
+
+// slowcat: one pattern per cycle, in turn.
+function slowcat(...pats) {
+  pats = pats.filter(Boolean);
+  if (!pats.length) return silence;
+  return new Pattern((s) => spanCycles(s).flatMap((sp) => {
+    const cyc = Math.floor(sp.begin);
+    const n = pats.length;
+    const i = ((cyc % n) + n) % n;
+    const off = cyc - Math.floor(cyc / n);
+    return pats[i].withTime((t) => t - off, (t) => t + off).query(sp);
+  }));
+}
+function fastcat(...pats) { return slowcat(...pats)._fast(pats.filter(Boolean).length || 1); }
+
+// timecat: like fastcat but each pattern takes a weighted slice of the cycle.
+function timecat(pairs) {
+  pairs = pairs.filter(([, p]) => p);
+  const total = pairs.reduce((a, [w]) => a + w, 0) || 1;
+  let acc = 0;
+  const parts = pairs.map(([w, p]) => {
+    const b = acc / total, e = (acc + w) / total; acc += w;
+    return compress(b, e, p);
+  });
+  return stack(...parts);
+}
+
+// fastGap squeezes a pattern into the first 1/n of each cycle, leaving a gap.
+function fastGap(factor, pat) {
+  if (factor <= 0) return silence;
+  const munge = (s) => {
+    const c = Math.floor(s.begin);
+    return span(c + Math.min(1, (s.begin - c) * factor), c + Math.min(1, (s.end - c) * factor));
+  };
+  const unmunge = (s) => {
+    const c = Math.floor(s.begin);
+    return span(c + (s.begin - c) / factor, c + (s.end - c) / factor);
+  };
+  // Query one cycle at a time: a span that straddles a cycle boundary would
+  // munge both ends against the same Math.floor reference and collapse to a
+  // point. spanCycles keeps each sub-query inside a single cycle.
+  return new Pattern((s) => spanCycles(s).flatMap((sp) => {
+    const m = munge(sp);
+    if (m.begin >= m.end - EPS && sp.begin < sp.end - EPS) return [];
+    return pat.query(m).map((h) => hap(h.whole && unmunge(h.whole), unmunge(h.part), h.value))
+      .filter((h) => h.part.begin < h.part.end + EPS);
+  }));
+}
+function compress(b, e, pat) {
+  if (b > e || b > 1 || e > 1 || b < 0 || e < 0 || b === e) return silence;
+  return fastGap(1 / (e - b), pat)._late(b);
+}
+
+// ── continuous signals ─────────────────────────────────────────────────────────
+function signal(f) {
+  return new Pattern((s) => [hap(undefined, s, f((s.begin + s.end) / 2))]);
+}
+const TAU = Math.PI * 2;
+const sine   = signal((t) => (Math.sin(TAU * t) + 1) / 2);
+const cosine = signal((t) => (Math.cos(TAU * t) + 1) / 2);
+const saw    = signal((t) => t - Math.floor(t));
+const isaw   = signal((t) => 1 - (t - Math.floor(t)));
+const tri    = signal((t) => { const x = t - Math.floor(t); return x < 0.5 ? x * 2 : 2 - x * 2; });
+const square = signal((t) => ((t - Math.floor(t)) < 0.5 ? 0 : 1));
+function timeRand(x) {
+  const s = Math.sin((x + 0.123) * 12.9898) * 43758.5453;
+  return s - Math.floor(s);
+}
+// ── a small noise family — all in 0..1, sampled at each event's onset ──
+const smoothstep = (t) => t * t * (3 - 2 * t);
+// value noise: hash the integer lattice, smoothstep between neighbours.
+function valueNoise(x) {
+  const i = Math.floor(x), f = x - i, u = smoothstep(f);
+  return timeRand(i) * (1 - u) + timeRand(i + 1) * u;
+}
+// fractal brownian motion: stack octaves of value noise.
+function fbmAt(x, octaves, persist) {
+  let sum = 0, amp = 1, freq = 1, norm = 0;
+  for (let o = 0; o < octaves; o++) { sum += valueNoise(x * freq) * amp; norm += amp; freq *= 2; amp *= persist; }
+  return sum / norm;
+}
+
+const rand   = signal((t) => timeRand(t));                 // white noise — uncorrelated, harsh
+const perlin = signal((t) => valueNoise(t * 4));           // smooth value noise — gentle drift
+const fbm    = signal((t) => fbmAt(t * 2, 5, 0.5));        // fractal noise — organic, cloudy
+const brown  = signal((t) => fbmAt(t * 1.2, 6, 0.72));     // red/brownian — slow, wandering
+const gauss  = signal((t) => {                              // bell curve around 0.5 (central-limit of 4 rands)
+  let s = 0; for (let k = 1; k <= 4; k++) s += timeRand(t + k * 0.137);
+  return s / 4;
+});
+const white = rand;
+
+// random discrete choice, fresh per onset: choose("#fff", "#000") or choose(0, 3, 7)
+function choose(...xs) { return signal((t) => xs[Math.min(xs.length - 1, Math.floor(timeRand(t) * xs.length))]); }
+// random integer in 0..n-1
+function irand(k) { return signal((t) => Math.floor(timeRand(t) * k)); }
+
+// ── combine two patterns: structure from the left, value sampled from right ────
+function appLeft(pf, pv) {
+  return new Pattern((s) => {
+    const out = [];
+    for (const hf of pf.query(s)) {
+      for (const hv of pv.query(hf.part)) {
+        const part = sect(hf.part, hv.part);
+        if (part.begin > part.end + EPS) continue;
+        if (part.begin === part.end && hf.part.begin !== hf.part.end) continue;
+        out.push(hap(hf.whole, part, hf.value(hv.value)));
+      }
+    }
+    return out;
+  });
+}
+
+// ── euclidean rhythms (Bjorklund) ──────────────────────────────────────────────
+function bjorklund(k, n) {
+  if (n <= 0 || k <= 0) return new Array(Math.max(0, n)).fill(false);
+  k = Math.min(k, n);
+  let a = Array.from({ length: k }, () => [true]);
+  let b = Array.from({ length: n - k }, () => [false]);
+  while (b.length > 1) {
+    const m = Math.min(a.length, b.length);
+    const na = [], nb = [];
+    for (let i = 0; i < m; i++) na.push(a[i].concat(b[i]));
+    if (a.length > m) for (let i = m; i < a.length; i++) nb.push(a[i]);
+    else for (let i = m; i < b.length; i++) nb.push(b[i]);
+    a = na; b = nb;
+  }
+  return a.concat(b).flat();
+}
+function euclid(k, n, pat, rot = 0) {
+  let bits = bjorklund(k, n);
+  if (rot) { rot = ((rot % n) + n) % n; bits = bits.slice(rot).concat(bits.slice(0, rot)); }
+  return fastcat(...bits.map((on) => (on ? pat : silence)));
+}
+
+// random choice, one alternative per cycle: "a | b | c"
+function randcat(...pats) {
+  pats = pats.filter(Boolean);
+  if (!pats.length) return silence;
+  return new Pattern((s) => spanCycles(s).flatMap((sp) => {
+    const cyc = Math.floor(sp.begin);
+    const i = Math.floor(timeRand(cyc + 0.5) * pats.length) % pats.length;
+    return pats[i].query(sp);
+  }));
+}
+
+// polymeter: play `steps` items per cycle from a list, wrapping across cycles.
+// "{a b c}%4" → a b c a | b c a b | …  (4 steps/cycle from a 3-item list)
+function polymeter(items, steps) {
+  const k = items.length;
+  if (!k) return silence;
+  steps = steps || k;
+  return new Pattern((s) => spanCycles(s).flatMap((sp) => {
+    const cyc = Math.floor(sp.begin);
+    const seqPats = [];
+    for (let j = 0; j < steps; j++) seqPats.push(items[(((cyc * steps + j) % k) + k) % k]);
+    return fastcat(...seqPats).query(sp);
+  }));
+}
+
+// ── mini-notation parser ───────────────────────────────────────────────────────
+// Supports: sequences "a b c", grouping [a b], alternation <a b>, parallel
+// [a , b], fast a*2, slow a/2, replicate a!3, weight a@3, rests ~, and
+// euclid a(3,8) / a(3,8,1).
+function mini(str) { return parseMiniClean(String(str)); }
+
+function parseMiniClean(str) {
+  let i = 0;
+  const ws = () => { while (i < str.length && /\s/.test(str[i])) i++; };
+
+  function seq(close) {
+    const groups = [[]];
+    let sawPipe = false;
+    ws();
+    while (i < str.length && str[i] !== close) {
+      if (str[i] === ',') { i++; groups.push([]); ws(); continue; }       // parallel
+      if (str[i] === '|') { i++; groups.push([]); sawPipe = true; ws(); continue; } // random
+      const t = term(); if (t) groups[groups.length - 1].push(t); ws();
+    }
+    const layers = groups.map((g) => (g.length ? timecat(g) : silence));
+    if (layers.length <= 1) return layers[0] || silence;
+    return sawPipe ? randcat(...layers) : stack(...layers);
+  }
+  // polymeter {a b c}%n : layers split by comma, each plays `base` steps/cycle.
+  function polyAtom() {
+    const layers = [[]];
+    ws();
+    while (i < str.length && str[i] !== '}') {
+      if (str[i] === ',') { i++; layers.push([]); ws(); continue; }
+      const t = term(); if (t) layers[layers.length - 1].push(t[1]); ws();
+    }
+    if (str[i] === '}') i++;
+    let steps = 0;
+    if (str[i] === '%') { i++; steps = num(); }
+    const base = steps || (layers[0] ? layers[0].length : 1);
+    const pats = layers.map((items) => polymeter(items, base));
+    return pats.length > 1 ? stack(...pats) : (pats[0] || silence);
+  }
+  function altSeq() { // collect top-level items for <...>
+    const items = [];
+    ws();
+    while (i < str.length && str[i] !== '>') {
+      const t = term(); if (t) items.push(t[1]); ws();
+    }
+    return slowcat(...items);
+  }
+  function term() {
+    let pat = atom(); if (!pat) return null;
+    let weight = 1;
+    for (;;) {
+      const c = str[i];
+      if (c === '*') { i++; pat = pat._fast(num()); }
+      else if (c === '/') { i++; pat = pat._fast(1 / num()); }
+      else if (c === '@') { i++; weight = num(); }
+      else if (c === '!') { i++; const n = num(); pat = fastcat(...Array(n).fill(pat)); weight = n; }
+      else if (c === '(') { i++; const k = num(); comma(); const n = num(); let r = 0; if (str[i] === ',') { comma(); r = num(); } ws(); if (str[i] === ')') i++; pat = euclid(k, n, pat, r); }
+      else break;
+    }
+    return [weight, pat];
+  }
+  function atom() {
+    ws();
+    const c = str[i];
+    if (c === '[') { i++; const p = seq(']'); ws(); if (str[i] === ']') i++; return p; }
+    if (c === '<') { i++; const p = altSeq(); ws(); if (str[i] === '>') i++; return p; }
+    if (c === '{') { i++; return polyAtom(); }
+    if (c === '~') { i++; return silence; }
+    return token();
+  }
+  function token() {
+    const s = i;
+    while (i < str.length && !/[\s\[\]<>(){}|,*/!@%]/.test(str[i])) i++;
+    const t = str.slice(s, i);
+    if (t === '') return null;
+    const n = Number(t);
+    return pure(Number.isNaN(n) ? t : n);
+  }
+  function num() { ws(); const s = i; while (i < str.length && /[-0-9.]/.test(str[i])) i++; return Number(str.slice(s, i)); }
+  function comma() { ws(); if (str[i] === ',') i++; ws(); }
+
+  return seq(undefined);
+}
+
+// ── reification: turn a user arg into a Pattern ─────────────────────────────────
+function reify(arg) {
+  if (arg instanceof Pattern) return arg;
+  if (typeof arg === 'string') return mini(arg);
+  return pure(arg);
+}
+function reifyControl(arg, numeric) {
+  if (arg instanceof Pattern) return arg;
+  if (typeof arg === 'number') return pure(arg);
+  if (typeof arg === 'string') {
+    const p = mini(arg);
+    return numeric ? p.fmap((v) => Number(v)) : p;
+  }
+  return pure(arg);
+}
+
+// ── DSL entry points (these produce control-bearing patterns) ──────────────────
+function shape(arg) { return reify(arg).fmap((v) => ({ shape: String(v) })); }
+const s = shape;
+function n(arg) { return reify(arg).fmap((v) => ({ shape: 'dot', n: Number(v) })); }
+function run(k) { return fastcat(...Array.from({ length: k }, (_, i) => pure(i))); }
+function range(pat, lo, hi) { return reify(pat).range(lo, hi); }
+
+// free-function forms used in scripts
+const cat = slowcat;
+const seq = fastcat;
+const sequence = fastcat;
+function fast(n, p) { return reify(p)._fast(n); }
+function slow(n, p) { return reify(p)._fast(1 / n); }
+function rev(p) { return reify(p).rev(); }
+
+export const DSL = {
+  Pattern, pure, silence, stack, slowcat, fastcat, cat, seq, sequence, timecat,
+  fast, slow, rev, run, range, mini, euclid,
+  shape, s, n, choose, irand,
+  sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
+  hasOnset, span,
+};
