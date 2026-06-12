@@ -473,26 +473,49 @@ const DEFAULT_PATCH = `shape("circle*6")
   .size(sine.range(0.04, 0.09).fast(2))
   .radius(0.3)`;
 
-// ── preset menu + CRUD (built-in PRESETS + user presets in localStorage) ──
-const presetSel = $('#presetsel');
+// ── preset list + CRUD (built-in PRESETS + user presets in localStorage) ──
 const USER_KEY = 'loom.presets';
 const loadUser = () => { try { return JSON.parse(localStorage.getItem(USER_KEY)) || {}; } catch { return {}; } };
 const saveUser = (obj) => localStorage.setItem(USER_KEY, JSON.stringify(obj));
 
-function rebuildPresetMenu(selected = '') {
+const presList = $('#preslist');
+const presWrap = $('#presets');
+let activeVal = '';
+function setActive(val) {
+  activeVal = val;
+  presList.querySelectorAll('.presrow').forEach((r) => r.classList.toggle('active', r.dataset.val === val));
+}
+function setPresOpen(open) {
+  presWrap.classList.toggle('closed', !open);
+  $('#prestoggle').setAttribute('aria-expanded', String(open));
+  localStorage.setItem('loom.presopen', open ? '1' : '0');
+}
+function rebuildPresetList() {
   const user = loadUser();
-  presetSel.innerHTML = '';
-  const ph = new Option('presets…', ''); ph.disabled = true; presetSel.appendChild(ph);
-  const builtin = document.createElement('optgroup'); builtin.label = 'built-in';
-  for (const name of Object.keys(PRESETS)) builtin.appendChild(new Option(name, 'b:' + name));
-  presetSel.appendChild(builtin);
+  presList.innerHTML = '';
+  const label = (t) => { const d = document.createElement('div'); d.className = 'preslabel'; d.textContent = t; presList.appendChild(d); };
+  const row = (name, val, deletable) => {
+    const r = document.createElement('div'); r.className = 'presrow'; r.dataset.val = val;
+    const load = document.createElement('button'); load.className = 'load'; load.textContent = name;
+    load.addEventListener('click', () => { applyPreset(val); setActive(val); });
+    r.appendChild(load);
+    if (deletable) {
+      const del = document.createElement('button'); del.className = 'del'; del.textContent = '×'; del.title = 'delete';
+      del.addEventListener('click', () => {
+        if (!confirm(`Delete preset "${name}"?`)) return;
+        const u = loadUser(); delete u[name]; saveUser(u);
+        if (activeVal === val) activeVal = '';
+        rebuildPresetList();
+      });
+      r.appendChild(del);
+    }
+    presList.appendChild(r);
+  };
+  label('built-in');
+  for (const name of Object.keys(PRESETS)) row(name, 'b:' + name, false);
   const names = Object.keys(user);
-  if (names.length) {
-    const saved = document.createElement('optgroup'); saved.label = 'saved';
-    for (const name of names) saved.appendChild(new Option(name, 'u:' + name));
-    presetSel.appendChild(saved);
-  }
-  presetSel.value = selected;
+  if (names.length) { label('saved'); for (const name of names) row(name, 'u:' + name, true); }
+  setActive(activeVal);
 }
 
 function applyPreset(val) {
@@ -547,27 +570,18 @@ traceBtn.addEventListener('click', () => {
   renderTrace();
 });
 renderTrace();
-presetSel.addEventListener('change', (e) => applyPreset(e.target.value));
+$('#prestoggle').addEventListener('click', () => setPresOpen(presWrap.classList.contains('closed')));
 
 $('#newbtn').addEventListener('click', () => {
-  editor.value = DEFAULT_PATCH; refreshHL(); run(); presetSel.value = '';
+  editor.value = DEFAULT_PATCH; refreshHL(); run(); setActive('');
 });
 
 $('#savebtn').addEventListener('click', () => {
-  const cur = presetSel.value.startsWith('u:') ? presetSel.value.slice(2) : '';
+  const cur = activeVal.startsWith('u:') ? activeVal.slice(2) : '';
   const name = (prompt('Save preset as:', cur) || '').trim();
   if (!name) return;
   const user = loadUser(); user[name] = editor.value; saveUser(user);
-  rebuildPresetMenu('u:' + name);
-});
-
-$('#delbtn').addEventListener('click', () => {
-  const val = presetSel.value;
-  if (!val.startsWith('u:')) { alert('Only saved presets can be deleted (built-ins are read-only).'); return; }
-  const name = val.slice(2);
-  if (!confirm(`Delete preset "${name}"?`)) return;
-  const user = loadUser(); delete user[name]; saveUser(user);
-  rebuildPresetMenu('');
+  rebuildPresetList(); setActive('u:' + name); setPresOpen(true);
 });
 
 const help = $('#help');
@@ -597,7 +611,8 @@ document.addEventListener('mouseleave', () => { if (document.activeElement !== e
 resize();
 setCps(cps);
 $('#persist').value = decayScale;
-rebuildPresetMenu();
+rebuildPresetList();
+setPresOpen(localStorage.getItem('loom.presopen') !== '0');
 const saved = localStorage.getItem('loom.code');
 editor.value = saved || DEFAULT_PATCH;
 refreshHL();
