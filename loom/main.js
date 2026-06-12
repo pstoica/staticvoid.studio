@@ -253,12 +253,15 @@ function drawShape3D(g, name, r, rz, rx, ry, o, vertex) {
   const geom = shapeGeom(name, r, o.open);
   const cz = Math.cos(rz), sz = Math.sin(rz), cx = Math.cos(rx), sx = Math.sin(rx), cy = Math.cos(ry), sy = Math.sin(ry);
   const d = 2.6 * Math.max(1, r);                       // camera distance, in units of r
+  // Tilt the flat shape in 3D (X then Y) and project it, THEN spin it in the
+  // picture plane (Z). Keeping Z out of the 3D pipeline means the tilt produces
+  // a clean perspective trapezoid instead of a sheared parallelogram.
   const project = (px, py) => {
-    let x = px * cz - py * sz, y = px * sz + py * cz, z = 0; // Z rotation (incl. spin)
-    let y2 = y * cx - z * sx; z = y * sx + z * cx; y = y2;   // X rotation
-    let x2 = x * cy + z * sy; z = -x * sy + z * cy; x = x2;  // Y rotation
+    let x = px, y = py * cx, z = py * sx;                   // X rotation (world horizontal axis)
+    const x2 = x * cy + z * sy; z = -x * sy + z * cy; x = x2; // Y rotation (world vertical axis)
     const s = d / (d - z);                                  // perspective divide
-    return [x * s, y * s];
+    const X = x * s, Y = y * s;
+    return [X * cz - Y * sz, X * sz + Y * cz];               // Z spin, in screen space
   };
   g.lineWidth = o.lw; g.lineCap = o.cap; g.lineJoin = o.join;
   const vr = Math.max(2, o.lw * 1.5);
