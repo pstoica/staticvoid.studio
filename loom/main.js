@@ -614,7 +614,8 @@ $('#persist').value = decayScale;
 rebuildPresetList();
 setPresOpen(localStorage.getItem('loom.presopen') !== '0');
 const saved = localStorage.getItem('loom.code');
-editor.value = saved || DEFAULT_PATCH;
+editor.value = saved || PRESETS.threads;
+if (!saved) setActive('b:threads');
 refreshHL();
 run();
 activity();   // start the idle countdown
