@@ -207,9 +207,10 @@ hudEl.addEventListener("input", e=>{ if(e.target.type==="range") paintRange(e.ta
 const isMobile = matchMedia("(max-width: 640px)").matches || matchMedia("(pointer: coarse)").matches;
 function loadState(){
   let s; try{ s=JSON.parse(localStorage.getItem(LS_KEY)); }catch(e){ s=null; }
-  // portrait phones get a stacked default — chord palette across the top, strum
-  // across the bottom — since the landscape left/right split is unusably narrow
-  if(isMobile && !s?.regions){
+  // first-run pane defaults differ by phone orientation: a portrait phone stacks
+  // the palette over the strum (the left/right split is unusably narrow), while a
+  // landscape phone keeps the wide left/right split (the state.js defaults)
+  if(isMobile && !s?.regions && matchMedia("(orientation: portrait)").matches){
     Object.assign(CHORD,             { x0:0.05, x1:0.95, y0:0.07, y1:0.40 });
     Object.assign(regions.strum,     { x0:0.05, x1:0.95, y0:0.54, y1:0.93 });
     Object.assign(regions.strumFree, { x0:0.05, x1:0.95, y0:0.54, y1:0.93 });
