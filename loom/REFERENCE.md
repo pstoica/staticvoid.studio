@@ -157,8 +157,37 @@ a control takes a value.
 
 | Method | Effect |
 | --- | --- |
-| `.range(lo, hi)` | remap a `0..1` signal into `[lo, hi]` |
+| `.range(lo, hi)` | remap a `0..1` signal into `[lo, hi]`; **`lo`/`hi` may each be a number, pattern, or osc** |
 | `.add(x)` `.sub(x)` `.mul(x)` `.div(x)` | arithmetic; **`x` may be a number or a pattern** |
+
+### Live oscillators
+
+A signal is sampled **once at a glyph's onset and frozen**. An **`osc`** keeps
+running over the glyph's whole lifetime — the renderer re-evaluates it every
+frame against the glyph's age, like `spin` does for rotation. So a dot can keep
+moving, its colour can cycle, its size can breathe, *after* it's drawn.
+
+```js
+osc(rate, "sine").range(lo, hi)   // rate in cycles/sec; default range 0..1
+```
+
+Shapes: `sine` `saw` `tri` `square` `rand` `perlin` `fbm` (perlin/fbm are the
+smooth, organic, livelier ones). Chainable: `.range(lo, hi)` `.rate(r)`
+`.phase(p)` `.fast(n)` `.slow(n)`. The `lo`/`hi` of an osc's `.range` may
+themselves be oscs, so the range can move: `osc(2).range(0, osc(0.1).range(0.4, 1))`.
+
+Works on any continuous control: `x` `y` `radius` `pan` `size` `weight` `open`
+`alpha` `rotate` `rotateX` `rotateY` `color`. Each glyph runs the osc from its
+own birth, so glyphs born at different times stay out of phase.
+
+```js
+shape("circle*8")
+  .x(osc(0.15, "perlin").range(0.15, 0.85))   // wander horizontally
+  .y(osc(0.19, "perlin").range(0.15, 0.85))   // …and vertically
+  .color(osc(0.25).range(0, 1))               // cycle the hue
+  .size(osc(0.6, "tri").range(0.015, 0.06))   // breathe
+  .decay(5)
+```
 
 Because arithmetic accepts patterns, you can modulate one signal with another:
 

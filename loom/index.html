@@ -197,6 +197,7 @@
       <button class="btn" id="tracebtn" title="thread a path through the live points">◇ trace</button>
       <label class="slider">cps <input type="range" id="cps" min="0.1" max="2" step="0.05" value="0.6"><b id="cpsval">0.60</b></label>
       <label class="slider">decay <input type="range" id="persist" min="0.25" max="6" step="0.05" value="1.5"></label>
+      <label class="slider">opacity <input type="range" id="opacity" min="0" max="1" step="0.02" value="1"></label>
     </div>
 
     <div id="meta">
@@ -262,7 +263,9 @@
         <code>sine cosine saw isaw tri square</code>
         <code>rand perlin fbm brown gauss</code><p>noise: white · smooth · fractal · red · bell</p>
         <code>choose("a","b") irand(8)</code><p>random pick / integer per onset</p>
-        <code>.range(lo, hi)</code><p>remap a 0..1 signal</p>
+        <code>osc(rate, "sine").range(lo, hi)</code><p>live LFO — keeps moving over a glyph's life (vs signals, frozen at spawn). shapes: sine saw tri square rand perlin fbm</p>
+        <code>.x(osc(0.2, "perlin").range(0, 1))</code><p>← a wandering dot</p>
+        <code>.range(lo, hi)</code><p>remap a 0..1 signal — lo/hi may be numbers, patterns, or oscs</p>
         <code>.add(x) .sub(x) .mul(x) .div(x)</code><p>x may be a number <em>or a pattern</em></p>
         <code>.x( saw.add(sine.range(0, 0.1)) )</code><p>← wobble a ramp by a sine</p>
       </section>

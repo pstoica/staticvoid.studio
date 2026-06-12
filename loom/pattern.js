@@ -111,7 +111,11 @@ class Pattern {
   rarely(f) { return this.sometimesBy(0.25, f); }
 
   // ── continuous signal helpers ──
-  range(lo, hi) { return this.fmap((v) => lo + v * (hi - lo)); }
+  // lo/hi may each be a number, a mini-notation string, or a pattern — sampled
+  // (structure from the left) so the range itself can move: `sine.range(0, "1 2")`.
+  range(lo, hi) {
+    return appLeft(appLeft(this.fmap((v) => (l) => (h) => l + v * (h - l)), reify(lo)), reify(hi));
+  }
   // arithmetic — the argument may be a number, a mini-notation string, or any
   // Pattern (e.g. a signal). Structure comes from the left, value from the
   // right, so `saw.add(sine.range(0, 0.1))` wobbles a ramp by a sampled sine.
@@ -265,6 +269,23 @@ const white = rand;
 function choose(...xs) { return signal((t) => xs[Math.min(xs.length - 1, Math.floor(timeRand(t) * xs.length))]); }
 // random integer in 0..n-1
 function irand(k) { return signal((t) => Math.floor(timeRand(t) * k)); }
+
+// ── live oscillator (LFO) ──────────────────────────────────────────────────────
+// Unlike a signal — which is sampled once at a glyph's onset and frozen — an osc
+// keeps running over the glyph's whole lifetime, evaluated each frame against its
+// age. osc(rate, shape).range(lo, hi). Shapes: sine saw tri square rand perlin fbm.
+function osc(rate = 1, shape = 'sine') { return makeOsc({ shape, rate, lo: 0, hi: 1, phase: 0 }); }
+function makeOsc(o) {
+  return {
+    __osc: o,
+    range(lo, hi) { return makeOsc({ ...o, lo, hi }); },
+    rate(r) { return makeOsc({ ...o, rate: r }); },
+    phase(p) { return makeOsc({ ...o, phase: p }); },
+    fast(n) { return makeOsc({ ...o, rate: o.rate * n }); },
+    slow(n) { return makeOsc({ ...o, rate: o.rate / n }); },
+  };
+}
+const isOsc = (a) => a != null && typeof a === 'object' && a.__osc !== undefined;
 
 // ── combine two patterns: structure from the left, value sampled from right ────
 function appLeft(pf, pv) {
@@ -446,7 +467,7 @@ function rev(p) { return reify(p).rev(); }
 export const DSL = {
   Pattern, pure, silence, stack, slowcat, fastcat, cat, seq, sequence, timecat,
   fast, slow, rev, run, range, mini, euclid,
-  shape, s, n, choose, irand,
+  shape, s, n, choose, irand, osc,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
-  hasOnset, span,
+  hasOnset, span, isOsc,
 };

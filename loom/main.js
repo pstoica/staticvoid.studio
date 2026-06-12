@@ -20,7 +20,7 @@ const cpsLabel = $('#cpsval');
 // A transparent <textarea> sits over a <pre>; we re-render coloured HTML into the
 // <pre> on every edit and keep their scroll positions synced.
 const HL_FN = new Set(['shape','s','n','stack','cat','slowcat','fastcat','seq','sequence','timecat',
-  'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand']);
+  'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand','osc']);
 const HL_SIG = new Set(['sine','cosine','saw','isaw','tri','square','rand','perlin','fbm','brown','gauss','white']);
 const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux','off','degrade','degradeBy',
   'unDegradeBy','sometimes','sometimesBy','often','rarely','early','late','range','add','sub','mul','div',
@@ -78,6 +78,7 @@ let cps = 0.6;          // cycles per second
 let cycle = 0;          // current position in cycles (fractional)
 let playing = true;
 let decayScale = 1.5;   // master multiplier on a new glyph's decay (how long it lingers)
+let opacity = 1;        // master opacity multiplier over every glyph
 let showClock = localStorage.getItem('loom.clock') !== '0'; // playhead sweep on/off
 let traceMode = localStorage.getItem('loom.trace') === '1'; // connect live points into a path
 let lastT = performance.now();
@@ -114,55 +115,50 @@ const PALETTE = ['#ff5d73', '#ffd166', '#6df0c2', '#56b6ff', '#b58cff', '#ff9d5c
 function spawn(value, onset) {
   const v = value || {};
   const minDim = Math.min(W, H);
-  const cx = W / 2, cy = H / 2;
-
-  // position: explicit x/y (0..1) win; otherwise lay the event out on a ring by
-  // its onset phase within the cycle — rhythm → mandala.
   const phase = onset - Math.floor(onset);
-  let px, py;
-  if (v.x != null || v.y != null) {
-    px = (v.x != null ? v.x : 0.5) * W;
-    py = (v.y != null ? v.y : 0.5) * H;
-  } else {
-    const ang = phase * Math.PI * 2 - Math.PI / 2;
-    const rad = (v.radius != null ? v.radius : 0.34) * minDim;
-    px = cx + Math.cos(ang) * rad;
-    py = cy + Math.sin(ang) * rad;
-  }
-  // pan (from jux) nudges horizontally so mirrored copies separate.
-  if (v.pan != null) px += (v.pan - 0.5) * W * 0.42;
 
-  if (v.jitter) {
-    px += (Math.random() - 0.5) * v.jitter * minDim;
-    py += (Math.random() - 0.5) * v.jitter * minDim;
-  }
+  // jitter offsets captured once (a control may be an osc; sample it at birth)
+  const jit = numAt(v.jitter || 0, 0);
+  const jx = jit ? (Math.random() - 0.5) * jit : 0;
+  const jy = jit ? (Math.random() - 0.5) * jit : 0;
 
-  const color = resolveColor(v.color, phase);
-  particles.push({
-    x: px, y: py,
+  // position inputs may be numbers or live oscillators — recomputed each frame
+  // only when one is an osc; otherwise the spawn position stands.
+  const pin = { x: v.x, y: v.y, radius: v.radius, pan: v.pan, phase };
+  const posLive = isOsc(v.x) || isOsc(v.y) || isOsc(v.radius) || isOsc(v.pan);
+
+  // scalar/colour controls that are oscillators keep running over the lifetime
+  const mods = [];
+  for (const f of MOD_FIELDS) if (isOsc(v[f])) mods.push({ field: f, osc: v[f].__osc });
+
+  const p = {
+    pin, posLive, jx, jy, phase,
     shape: v.shape || 'dot',
-    color,
-    size: (v.size != null ? v.size : 0.06) * minDim,
-    rot: (v.rotate != null ? v.rotate : 0) * TAU,   // Z rotation, turns → radians
-    rotX: (v.rotateX != null ? v.rotateX : 0) * TAU, // tilt around horizontal axis
-    rotY: (v.rotateY != null ? v.rotateY : 0) * TAU, // tilt around vertical axis
-    spin: (v.spin != null ? v.spin : 0) * TAU,      // turns per second (Z)
-    fill: v.fill != null ? v.fill : 1,               // patternable; default on
-    stroke: v.stroke != null ? v.stroke : 0,         // patternable; default off
-    vertex: v.vertex != null ? v.vertex : 0,         // patternable; draw dots at vertices
-    weight: v.weight != null ? v.weight : 0.006,     // stroke width, fraction of min dimension
-    cap: v.cap || 'round',                           // line ends: round | butt | square
-    join: v.join || 'round',                         // corners: round | miter | bevel
-    open: v.open != null ? v.open : 0,               // arc gap 0..1 (fraction left open)
-    alpha: v.alpha != null ? v.alpha : 1,
-    blend: v.blend || 'source-over',   // normal compositing; opt into 'screen'/'lighter' explicitly
+    color: resolveColor(numAt(v.color, 0), phase),
+    size: numAt(v.size != null ? v.size : 0.06, 0) * minDim,
+    rotTurns: numAt(v.rotate != null ? v.rotate : 0, 0),       // Z, turns
+    rotX: numAt(v.rotateX != null ? v.rotateX : 0, 0) * TAU,   // tilt (radians)
+    rotY: numAt(v.rotateY != null ? v.rotateY : 0, 0) * TAU,
+    spin: (v.spin != null ? v.spin : 0) * TAU,                 // turns/sec (Z), age-driven
+    fill: v.fill != null ? v.fill : 1,
+    stroke: v.stroke != null ? v.stroke : 0,
+    vertex: v.vertex != null ? v.vertex : 0,
+    weight: numAt(v.weight != null ? v.weight : 0.006, 0),
+    cap: v.cap || 'square',
+    join: v.join || 'miter',
+    open: numAt(v.open != null ? v.open : 0, 0),
+    alpha: numAt(v.alpha != null ? v.alpha : 1, 0),
+    blend: v.blend || 'source-over',
     age: 0,
-    attack: v.attack != null ? v.attack : 0.06,      // fade-in seconds (captured now)
+    attack: v.attack != null ? v.attack : 0.06,
     // fade-out seconds; default ~1 cycle. The master slider is baked in HERE so
-    // each glyph keeps the decay it was born with — moving the slider later only
-    // affects future glyphs, never ones already on screen.
+    // each glyph keeps the decay it was born with.
     decay: ((v.decay != null ? v.decay : 1.0) / cps) * decayScale,
-  });
+    mods: mods.length ? mods : null,
+  };
+  const xy = resolvePos(p, minDim, 0);
+  p.x = xy[0]; p.y = xy[1];
+  particles.push(p);
 }
 
 function resolveColor(c, phase) {
@@ -175,9 +171,52 @@ function resolveColor(c, phase) {
     let h = 0; for (let i = 0; i < c.length; i++) h = (h * 31 + c.charCodeAt(i)) % 360;
     return `hsl(${h} 80% 64%)`;
   }
-  if (typeof c === 'number') return `hsl(${(c * 360) % 360} 82% 64%)`;
+  if (typeof c === 'number') return `hsl(${(((c * 360) % 360) + 360) % 360} 82% 64%)`;
   // default: hue follows position in the cycle → a rainbow ring
   return PALETTE[Math.floor(phase * PALETTE.length) % PALETTE.length];
+}
+
+// ── live oscillators (LFOs): evaluated each frame against a glyph's age, so a
+// control keeps moving over the glyph's lifetime instead of freezing at spawn. ──
+const isOsc = DSL.isOsc;
+const MOD_FIELDS = ['size', 'color', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight'];
+const _h1 = (x) => { const s = Math.sin((x + 0.123) * 12.9898) * 43758.5453; return s - Math.floor(s); };
+const _snoise = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return _h1(i) * (1 - u) + _h1(i + 1) * u; };
+const _fbm = (x) => { let s = 0, a = 1, fr = 1, n = 0; for (let o = 0; o < 4; o++) { s += _snoise(x * fr) * a; n += a; fr *= 2; a *= 0.5; } return s / n; };
+function evalOsc(d, age) {
+  const t = age * d.rate + d.phase, f = t - Math.floor(t);
+  let v;
+  switch (d.shape) {
+    case 'saw': v = f; break;
+    case 'isaw': v = 1 - f; break;
+    case 'tri': v = f < 0.5 ? f * 2 : 2 - f * 2; break;
+    case 'square': v = f < 0.5 ? 0 : 1; break;
+    case 'rand': v = _h1(Math.floor(t)); break;          // stepped, per cycle
+    case 'perlin': case 'noise': v = _snoise(t); break;  // smooth, lively
+    case 'fbm': v = _fbm(t); break;                       // organic, multi-octave
+    default: v = (Math.sin(TAU * t) + 1) / 2;             // sine
+  }
+  const lo = numAt(d.lo, age), hi = numAt(d.hi, age);     // lo/hi may be oscs too
+  return lo + v * (hi - lo);
+}
+const numAt = (a, age) => (isOsc(a) ? evalOsc(a.__osc, age) : a);
+
+// place a glyph: explicit x/y (0..1) win, else lay it on a ring by onset phase.
+// Inputs may be live oscillators, so this is re-run each frame for moving glyphs.
+function resolvePos(p, minDim, age) {
+  const { x, y, radius, pan, phase } = p.pin;
+  let px, py;
+  if (x != null || y != null) {
+    px = (x != null ? numAt(x, age) : 0.5) * W;
+    py = (y != null ? numAt(y, age) : 0.5) * H;
+  } else {
+    const ang = phase * TAU - Math.PI / 2;
+    const rad = (radius != null ? numAt(radius, age) : 0.34) * minDim;
+    px = W / 2 + Math.cos(ang) * rad;
+    py = H / 2 + Math.sin(ang) * rad;
+  }
+  if (pan != null) px += (numAt(pan, age) - 0.5) * W * 0.42;
+  return [px + p.jx * minDim, py + p.jy * minDim];
 }
 
 // ── shape drawing ───────────────────────────────────────────────────────────────
@@ -338,7 +377,9 @@ function tick(dt) {
     const env = p.age < p.attack
       ? (p.attack > 0 ? p.age / p.attack : 1)          // attack rise
       : 1 - (p.age - p.attack) / p.decay;              // decay fall
-    p._a = Math.max(0, Math.min(1, p.alpha * env));
+    p._env = Math.max(0, Math.min(1, env));
+    p._a = p._env * p.alpha;                           // for trace mode
+    if (p.posLive) { const r = resolvePos(p, minDim, p.age); p.x = r[0]; p.y = r[1]; }
     particles[w++] = p;
     live.push(p);
   }
@@ -353,7 +394,7 @@ function tick(dt) {
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (let i = 1; i < live.length; i++) {
       const a = live[i - 1], b = live[i];
-      ctx.globalAlpha = Math.min(a._a, b._a) * 0.6;
+      ctx.globalAlpha = Math.min(a._a, b._a) * 0.6 * opacity;
       ctx.strokeStyle = b.color;
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     }
@@ -362,26 +403,42 @@ function tick(dt) {
 
   // draw glyphs (newest on top, since live is oldest→newest)
   for (const p of live) {
+    const age = p.age;
+    // start from the spawn baseline, then let any running oscillators move it
+    let sizePx = p.size, color = p.color, rotTurns = p.rotTurns,
+        rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight;
+    if (p.mods) for (const m of p.mods) {
+      const val = evalOsc(m.osc, age);
+      if (m.field === 'size') sizePx = val * minDim;
+      else if (m.field === 'color') color = resolveColor(val, p.phase);
+      else if (m.field === 'rotate') rotTurns = val;
+      else if (m.field === 'rotateX') rotX = val * TAU;
+      else if (m.field === 'rotateY') rotY = val * TAU;
+      else if (m.field === 'open') open = val;
+      else if (m.field === 'alpha') alpha = val;
+      else if (m.field === 'weight') weight = val;
+    }
+
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.globalCompositeOperation = p.blend;
-    ctx.globalAlpha = p._a;
-    ctx.fillStyle = p.color;
-    ctx.strokeStyle = p.color;
-    const zRot = p.rot + p.spin * p.age;
-    const lw = Math.max(0.75, p.weight * minDim);
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha * p._env * opacity));
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    const zRot = rotTurns * TAU + p.spin * age;
+    const lw = Math.max(0.75, weight * minDim);
     // outlines (ring/arc/line/cross) stroke by default; vertex mode suppresses
     // that auto-stroke unless stroke is explicitly on. closed shapes use fill.
     const outline = OUTLINE_SHAPES.has(p.shape);
     const stroke = outline ? (p.stroke || !p.vertex) : p.stroke;
     const fill = outline ? 0 : p.fill;
-    const o = { fill, stroke, lw, cap: p.cap, join: p.join, open: p.open };
-    if (p.rotX || p.rotY) {
-      drawShape3D(ctx, p.shape, p.size, zRot, p.rotX, p.rotY, o, p.vertex);  // true perspective
+    const o = { fill, stroke, lw, cap: p.cap, join: p.join, open };
+    if (rotX || rotY) {
+      drawShape3D(ctx, p.shape, sizePx, zRot, rotX, rotY, o, p.vertex);       // true perspective
     } else {
       ctx.rotate(zRot);
-      if (fill || stroke) drawShape(ctx, p.shape, p.size, o);                 // fast crisp 2D
-      if (p.vertex) drawVertices(ctx, shapeGeom(p.shape, p.size, p.open), Math.max(2, lw * 1.5));
+      if (fill || stroke) drawShape(ctx, p.shape, sizePx, o);                  // fast crisp 2D
+      if (p.vertex) drawVertices(ctx, shapeGeom(p.shape, sizePx, open), Math.max(2, lw * 1.5));
     }
     ctx.restore();
   }
@@ -454,6 +511,15 @@ const PRESETS = {
   .size(sine.range(0.05, 0.13).slow(2))
   .fill(0).stroke().weight("0.004 0.012")
   .decay(2).fast(2)`,
+
+  // live oscillators (osc) keep each dot moving over its lifetime — wandering
+  // position, cycling hue, breathing size. perlin = a livelier, organic waveform.
+  'drift': `shape("circle*8")
+  .x(osc(0.15, "perlin").range(0.15, 0.85))
+  .y(osc(0.19, "perlin").range(0.15, 0.85))
+  .color(osc(0.25).range(0, 1))
+  .size(osc(0.6, "tri").range(0.015, 0.06))
+  .decay(5)`,
 
   // a spiral of lines unspooling, each clipped + tilted differently
   'ribbon': `shape("line*24")
@@ -552,6 +618,7 @@ $('#clearbtn').addEventListener('click', () => {
 });
 $('#cps').addEventListener('input', (e) => setCps(Number(e.target.value)));
 $('#persist').addEventListener('input', (e) => { decayScale = Number(e.target.value); });
+$('#opacity').addEventListener('input', (e) => { opacity = Number(e.target.value); });
 
 const clockBtn = $('#clockbtn');
 function renderClock() { clockBtn.classList.toggle('on', showClock); clockBtn.classList.toggle('off', !showClock); }
