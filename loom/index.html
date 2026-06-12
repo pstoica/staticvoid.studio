@@ -52,11 +52,14 @@
     font:600 11px/1 var(--mono); cursor:pointer; transition:.16s var(--ease); opacity:.6; }
   #helpbtn:hover { color:var(--ink); border-color:var(--accent-dim); background:var(--accent-dim); opacity:1; }
 
-  #presets { display:flex; flex-wrap:wrap; gap:6px; padding:0 22px 12px; }
-  #presets button { font:500 11px/1 var(--mono); color:var(--muted);
-    background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:999px;
-    padding:6px 11px; cursor:pointer; transition:.16s var(--ease); letter-spacing:.02em; }
-  #presets button:hover { color:var(--ink); border-color:var(--accent-dim); background:var(--accent-dim); }
+  #presets { display:flex; gap:8px; align-items:center; padding:0 22px 12px; }
+  #presetsel { flex:1; min-width:0; height:36px; font:500 12px/1 var(--mono); color:var(--ink);
+    background:rgba(255,255,255,.05); border:1px solid var(--line); border-radius:8px;
+    padding:0 10px; cursor:pointer; letter-spacing:.02em; transition:.16s var(--ease); }
+  #presetsel:hover, #presetsel:focus { border-color:var(--accent-dim); outline:none; }
+  #presets .mini { height:36px; padding:0 11px; font-size:11px; color:var(--muted);
+    display:inline-flex; align-items:center; }
+  #presets .mini:hover { color:var(--ink); }
 
   /* highlighted editor: a transparent <textarea> sits exactly over a <pre> that
      renders the coloured code, floating directly on the visuals (no box). */
@@ -152,12 +155,10 @@
     </div>
 
     <div id="presets">
-      <button data-preset="threads">threads</button>
-      <button data-preset="orbit">orbit</button>
-      <button data-preset="lattice">lattice</button>
-      <button data-preset="swarm">swarm</button>
-      <button data-preset="bloom">bloom</button>
-      <button data-preset="ribbon">ribbon</button>
+      <select id="presetsel" aria-label="load a preset"></select>
+      <button class="btn mini" id="newbtn" title="start a fresh default patch">new</button>
+      <button class="btn mini" id="savebtn" title="save the current code as a preset">save</button>
+      <button class="btn mini" id="delbtn" title="delete the selected saved preset">del</button>
     </div>
 
     <div id="editwrap">

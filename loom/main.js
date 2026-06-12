@@ -467,10 +467,40 @@ const PRESETS = {
   .decay(2.2).fast(1.5)`,
 };
 
-function loadPreset(name) {
-  editor.value = PRESETS[name];
-  refreshHL();
-  run();
+// a gentle starting point — a rainbow ring of pulsing dots
+const DEFAULT_PATCH = `shape("circle*6")
+  .color(saw.range(0, 1))
+  .size(sine.range(0.04, 0.09).fast(2))
+  .radius(0.3)`;
+
+// ── preset menu + CRUD (built-in PRESETS + user presets in localStorage) ──
+const presetSel = $('#presetsel');
+const USER_KEY = 'loom.presets';
+const loadUser = () => { try { return JSON.parse(localStorage.getItem(USER_KEY)) || {}; } catch { return {}; } };
+const saveUser = (obj) => localStorage.setItem(USER_KEY, JSON.stringify(obj));
+
+function rebuildPresetMenu(selected = '') {
+  const user = loadUser();
+  presetSel.innerHTML = '';
+  const ph = new Option('presets…', ''); ph.disabled = true; presetSel.appendChild(ph);
+  const builtin = document.createElement('optgroup'); builtin.label = 'built-in';
+  for (const name of Object.keys(PRESETS)) builtin.appendChild(new Option(name, 'b:' + name));
+  presetSel.appendChild(builtin);
+  const names = Object.keys(user);
+  if (names.length) {
+    const saved = document.createElement('optgroup'); saved.label = 'saved';
+    for (const name of names) saved.appendChild(new Option(name, 'u:' + name));
+    presetSel.appendChild(saved);
+  }
+  presetSel.value = selected;
+}
+
+function applyPreset(val) {
+  if (!val) return;
+  const i = val.indexOf(':'); const kind = val.slice(0, i), name = val.slice(i + 1);
+  const code = kind === 'u' ? loadUser()[name] : PRESETS[name];
+  if (code == null) return;
+  editor.value = code; refreshHL(); run();
 }
 
 // ── wiring ──────────────────────────────────────────────────────────────────────────
@@ -517,8 +547,28 @@ traceBtn.addEventListener('click', () => {
   renderTrace();
 });
 renderTrace();
-document.querySelectorAll('[data-preset]').forEach((b) =>
-  b.addEventListener('click', () => loadPreset(b.dataset.preset)));
+presetSel.addEventListener('change', (e) => applyPreset(e.target.value));
+
+$('#newbtn').addEventListener('click', () => {
+  editor.value = DEFAULT_PATCH; refreshHL(); run(); presetSel.value = '';
+});
+
+$('#savebtn').addEventListener('click', () => {
+  const cur = presetSel.value.startsWith('u:') ? presetSel.value.slice(2) : '';
+  const name = (prompt('Save preset as:', cur) || '').trim();
+  if (!name) return;
+  const user = loadUser(); user[name] = editor.value; saveUser(user);
+  rebuildPresetMenu('u:' + name);
+});
+
+$('#delbtn').addEventListener('click', () => {
+  const val = presetSel.value;
+  if (!val.startsWith('u:')) { alert('Only saved presets can be deleted (built-ins are read-only).'); return; }
+  const name = val.slice(2);
+  if (!confirm(`Delete preset "${name}"?`)) return;
+  const user = loadUser(); delete user[name]; saveUser(user);
+  rebuildPresetMenu('');
+});
 
 const help = $('#help');
 const toggleHelp = (show) => { help.hidden = show != null ? !show : !help.hidden; };
@@ -547,8 +597,9 @@ document.addEventListener('mouseleave', () => { if (document.activeElement !== e
 resize();
 setCps(cps);
 $('#persist').value = decayScale;
+rebuildPresetMenu();
 const saved = localStorage.getItem('loom.code');
-editor.value = saved || PRESETS.threads;
+editor.value = saved || DEFAULT_PATCH;
 refreshHL();
 run();
 activity();   // start the idle countdown
