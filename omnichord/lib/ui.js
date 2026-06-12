@@ -109,7 +109,7 @@ function makeStepper(el, get, set){     // returns a reflect() that repaints the
   const name=document.createElement("span"); name.className="stepname";
   const next=document.createElement("button"); next.className="stepbtn"; next.textContent="›";
   const reflect=()=>{ name.textContent=get(); };
-  const step=d=>{ const i=VOICE_NAMES.indexOf(get()); set(VOICE_NAMES[(i+d+VOICE_NAMES.length)%VOICE_NAMES.length]); reflect(); };
+  const step=d=>{ const i=VOICE_NAMES.indexOf(get()); set(VOICE_NAMES[(i+d+VOICE_NAMES.length)%VOICE_NAMES.length]); reflect(); saveState(); };
   prev.addEventListener("click", ()=>step(-1)); next.addEventListener("click", ()=>step(1));
   el.append(prev, name, next);
   return reflect;
@@ -155,8 +155,8 @@ modeSel.addEventListener("change", ()=> setMode(modeSel.value));
 lockBtn.closest(".ctrl").addEventListener("click", ()=> setLock(!state.lockChord));
 editBtn.addEventListener("click", ()=> setEdit(!state.editMode));
 window.addEventListener("keydown", e=>{
-  if(e.key==="f"||e.key==="F") setMode(state.freeMode ? "chord" : "free");
-  if(e.key==="o"||e.key==="O") setMode(state.omniMode ? "chord" : "omni");
+  if(e.key==="f"||e.key==="F"){ setMode(state.freeMode ? "chord" : "free"); saveState(); }
+  if(e.key==="o"||e.key==="O"){ setMode(state.omniMode ? "chord" : "omni"); saveState(); }
   if(e.key==="l"||e.key==="L") setLock(!state.lockChord);
   if(e.key==="m"||e.key==="M") setMute(!state.muted);
   if(e.key==="e"||e.key==="E") setEdit(!state.editMode);
@@ -170,6 +170,7 @@ export function saveState(){
   try{
     localStorage.setItem(LS_KEY, JSON.stringify({
       cfg, keyRoot: state.keyRoot, scaleName: state.scaleName,
+      mode: state.omniMode ? "omni" : state.freeMode ? "free" : "chord",
       vol: parseFloat(volEl.value),
       regions: { chord:{...CHORD}, strum:{...regions.strum}, strumFree:{...regions.strumFree} },
       legendHidden: document.body.classList.contains("legend-hidden"),
@@ -229,6 +230,7 @@ function loadState(){
   if(isMobile) document.body.classList.add("rail-collapsed");   // a phone always starts with the sheet down, camera showing
   reflectRail();
   state.currentExt=Math.min(state.currentExt, cfg.extRows-1);
+  setMode(["omni","free"].includes(s?.mode) ? s.mode : "chord");   // restore mode so per-mode settings (lanes/octaves/layout/voice) show
   syncControls();                                    // always reflect cfg into the HUD, even with no saved state
 }
 hudEl.addEventListener("input", saveState);

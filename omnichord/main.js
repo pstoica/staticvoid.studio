@@ -135,8 +135,7 @@ async function startCamera(){
 }
 if(matchMedia("(pointer:coarse)").matches || window.innerWidth < 760)
   document.body.classList.add("is-mobile");
-setMode("chord");
-startCamera();
+startCamera();                                       // ui.js loadState() already restored the saved mode
 
 const startEl = document.getElementById("start");
 document.getElementById("startBtn").addEventListener("click", async ()=>{
