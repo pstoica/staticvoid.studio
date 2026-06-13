@@ -135,6 +135,7 @@ class Pattern {
   x(a)     { return this.set('x', a); }
   y(a)     { return this.set('y', a); }
   radius(a){ return this.set('radius', a); }
+  angle(a) { return this.set('angle', a); }  // orbital position on the ring (turns); default = onset phase
   rotate(a){ return this.set('rotate', a); }
   spin(a)  { return this.set('spin', a); }
   blend(a) { return this.set('blend', a); }
@@ -159,7 +160,7 @@ class Pattern {
   life(a)   { return this.set('decay', a); } // alias for decay
 }
 
-const NUMERIC = new Set(['size','x','y','radius','rotate','rotateX','rotateY','spin','alpha','pan','jitter','weight','attack','decay','fill','stroke','vertex','open']);
+const NUMERIC = new Set(['size','x','y','radius','angle','rotate','rotateX','rotateY','spin','alpha','pan','jitter','weight','attack','decay','fill','stroke','vertex','open']);
 
 // ── primitives ────────────────────────────────────────────────────────────────
 const silence = new Pattern(() => []);
@@ -289,11 +290,26 @@ function makeOsc(o) {
 const isOsc = (a) => a != null && typeof a === 'object' && a.__osc !== undefined;
 
 // ── palettes ───────────────────────────────────────────────────────────────────
-// palette("#a", "#b", …).at(x) maps a 0..1 position x — a number, pattern, or osc
-// — to an interpolated colour, for use in .color(). We just package the stops +
-// position here; the renderer does the actual interpolation.
+// Built-in colour ramps, usable by name: palette("sunset"). Interpolated in
+// OKLCH by the renderer.
+const PALETTES = {
+  sunset:  ['#ffd166', '#ff7d5c', '#ff5d8f', '#b5179e', '#3a0ca3'],
+  ember:   ['#03071e', '#6a040f', '#dc2f02', '#f48c06', '#ffd166'],
+  ice:     ['#03045e', '#0077b6', '#00b4d8', '#90e0ef', '#caf0f8'],
+  neon:    ['#ff006e', '#fb5607', '#ffbe0b', '#8338ec', '#3a86ff'],
+  forest:  ['#081c15', '#1b4332', '#2d6a4f', '#52b788', '#b7e4c7'],
+  candy:   ['#ffadad', '#ffd6a5', '#caffbf', '#9bf6ff', '#bdb2ff', '#ffc6ff'],
+  mono:    ['#0a0a0a', '#5a5a5a', '#b0b0b0', '#f4f4f4'],
+  rainbow: ['#ff5d5d', '#ff9f1c', '#ffe066', '#5dd39e', '#56b6ff', '#8a5cff', '#ff7de0'],
+  aurora:  ['#0b3d91', '#1ec8c8', '#7fffd4', '#b58cff'],
+};
+
+// palette("#a", "#b", …) or palette("sunset").at(x) maps a 0..1 position x — a
+// number, pattern, or osc — to an interpolated colour, for use in .color(). We
+// just package the stops + position here; the renderer does the interpolation.
 function palette(...colors) {
-  const stops = colors.flat();
+  let stops = colors.flat();
+  if (stops.length === 1 && PALETTES[stops[0]]) stops = PALETTES[stops[0]]; // named ramp
   return {
     __pal: stops,
     at(x) {

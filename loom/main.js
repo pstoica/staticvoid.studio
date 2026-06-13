@@ -24,7 +24,7 @@ const HL_FN = new Set(['shape','s','n','stack','cat','slowcat','fastcat','seq','
 const HL_SIG = new Set(['sine','cosine','saw','isaw','tri','square','rand','perlin','fbm','brown','gauss','white']);
 const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux','off','degrade','degradeBy',
   'unDegradeBy','sometimes','sometimesBy','often','rarely','early','late','range','add','sub','mul','div',
-  'color','size','x','y','radius','rotate','rotateX','rotateY','spin','blend','alpha','opacity','pan','jitter','fill','stroke','weight',
+  'color','size','x','y','radius','angle','rotate','rotateX','rotateY','spin','blend','alpha','opacity','pan','jitter','fill','stroke','weight',
   'cap','join','open','vertex','attack','decay','life','set']);
 const HL_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+(?:\.\d+)?\b|=>|\.[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*|[(){}\[\],.]/g;
 const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -126,8 +126,8 @@ function spawn(value, onset) {
 
   // position inputs may be numbers or live oscillators — recomputed each frame
   // only when one is an osc; otherwise the spawn position stands.
-  const pin = { x: v.x, y: v.y, radius: v.radius, pan: v.pan, phase };
-  const posLive = isOsc(v.x) || isOsc(v.y) || isOsc(v.radius) || isOsc(v.pan);
+  const pin = { x: v.x, y: v.y, radius: v.radius, angle: v.angle, pan: v.pan, phase };
+  const posLive = isOsc(v.x) || isOsc(v.y) || isOsc(v.radius) || isOsc(v.angle) || isOsc(v.pan);
 
   // scalar/colour controls that are oscillators keep running over the lifetime
   const mods = [];
@@ -262,13 +262,13 @@ const oscColor = (d, age, phase) => (d.pal ? interpPal(d.pal, evalOsc(d, age)) :
 // place a glyph: explicit x/y (0..1) win, else lay it on a ring by onset phase.
 // Inputs may be live oscillators, so this is re-run each frame for moving glyphs.
 function resolvePos(p, minDim, age) {
-  const { x, y, radius, pan, phase } = p.pin;
+  const { x, y, radius, angle, pan, phase } = p.pin;
   let px, py;
   if (x != null || y != null) {
     px = (x != null ? numAt(x, age) : 0.5) * W;
     py = (y != null ? numAt(y, age) : 0.5) * H;
   } else {
-    const ang = phase * TAU - Math.PI / 2;
+    const ang = (angle != null ? numAt(angle, age) : phase) * TAU - Math.PI / 2; // orbital angle (turns)
     const rad = (radius != null ? numAt(radius, age) : 0.34) * minDim;
     px = W / 2 + Math.cos(ang) * rad;
     py = H / 2 + Math.sin(ang) * rad;
@@ -510,16 +510,17 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
 
 // ── presets ───────────────────────────────────────────────────────────────────────
 const PRESETS = {
-  // gestural line field with breathing weight + perspective tumble
+  // gestural line field — perspective tumble, breathing weight, streaks
   'threads': `shape("line")
   .fast("256 128 256 128")
   .radius(
     sine.range(0.1, 0.2).fast(10)
       .add(sine.range(-0.5, 0.3).fast(7))
   )
+  .angle(saw.range(0, 2))
   .open(sine.range(0, 0.6).slow(8))
   .sometimes(x => x.open(5))
-  .color(saw.range(0, 4))
+  .color(palette("neon").at(saw.range(0, 4)))
   .size(sine.range(0.01, 0.1).fast(2))
   .slow(4)
   .attack(sine.range(0, 0.1))
@@ -530,78 +531,181 @@ const PRESETS = {
   .weight(sine.range(0.001, 0.01).slow(8))
   .cap("square")`,
 
-  // five arcs orbiting, gaps breathing, slowly tipping in 3D
-  'orbit': `shape("arc*5")
-  .radius(sine.range(0.12, 0.4).slow(3))
-  .open(sine.range(0.15, 0.9).slow(5))
-  .color("<#ff5d73 #ffd166 #6df0c2 #56b6ff #b58cff>")
-  .size(0.13).weight(0.012)
-  .rotateY(saw.range(0, 1).slow(6))
-  .spin(0.04)
-  .decay(2.5).fast(1.5)`,
+  // a five-turn spiral of dots over a slow pulsing ring (angle winds the ring)
+  'spiral': `stack(
+  bg("#04060d"),
+  shape("dot*72")
+    .angle(saw.range(0, 5))
+    .radius(saw.range(0.02, 0.46))
+    .color(palette("ice").at(saw.range(0, 1)))
+    .size(sine.range(0.004, 0.018).fast(5))
+    .decay(2.5),
+  shape("ring*3")
+    .radius(osc(0.05, "tri").range(0.12, 0.46))
+    .color("#90e0ef").weight(0.004).decay(3)
+)`,
 
-  // polymeter polygons drifting across the field, tumbling in perspective
-  'lattice': `shape("{square tri hex pent}%7")
-  .x(saw.range(0.12, 0.88))
-  .y(perlin.range(0.15, 0.85).fast(2))
-  .rotateX(saw.range(0, 1).slow(4))
-  .rotateY(saw.range(0, 1).slow(3))
-  .color(perlin.range(0, 1))
-  .size(sine.range(0.04, 0.09).slow(2))
-  .fill(0).stroke().weight(0.008)
-  .decay(1.6).fast(2)`,
+  // rose curve — petals from radius = sine of the angle, twin layers
+  'rose': `stack(
+  bg("#0a0410"),
+  shape("dot*120")
+    .angle(saw.range(0, 1))
+    .radius(sine.range(0.05, 0.42).fast(5))
+    .color(palette("sunset").at(sine.range(0, 1).fast(5)))
+    .size(0.01).decay(2.5),
+  shape("dot*120")
+    .angle(saw.range(0, 1))
+    .radius(sine.range(0.05, 0.3).fast(8))
+    .color(palette("sunset").at(saw.range(0, 1)))
+    .size(0.008).decay(2).blend("lighter")
+)`,
 
-  // random-pipe rhythm scattering dots through perlin space
-  'swarm': `shape("dot | [dot dot] | dot ~ dot")
-  .x(perlin.range(0.05, 0.95).fast(2))
-  .y(perlin.range(0.05, 0.95).fast(3))
-  .color(saw.range(0, 2).add(perlin.range(0, 0.3)))
-  .size(sine.range(0.008, 0.05).fast(4))
-  .fast(8)
-  .decay(sine.range(0.4, 2.5).slow(5))`,
+  // concentric euclid arcs orbiting, tipping through 3D, gaps breathing
+  'orbit': `stack(
+  bg("#02040a"),
+  shape("arc(5,8)")
+    .radius("0.16 0.27 0.38 0.47")
+    .angle(osc(0.04, "saw").range(0, 1))
+    .open(sine.range(0.1, 0.7).slow(5))
+    .color(palette("ice").at(saw.range(0, 1)))
+    .weight(0.012)
+    .rotateY(osc(0.06, "tri").range(-0.3, 0.3))
+    .decay(3).fast(1.5)
+)`,
 
-  // euclidean stars, outline-only, opening and closing like flowers
-  'bloom': `shape("star(5,8)")
-  .radius(sine.range(0.14, 0.4).slow(5))
-  .rotate(saw.range(0, 2).slow(3))
-  .rotateX(sine.range(-0.25, 0.25).slow(7))
-  .color("<#ff5d73 #b58cff #56b6ff #6df0c2>")
-  .size(sine.range(0.05, 0.13).slow(2))
-  .fill(0).stroke().weight("0.004 0.012")
-  .decay(2).fast(2)`,
+  // polymeter polygons drifting and tumbling in perspective
+  'lattice': `stack(
+  bg("#060309"),
+  shape("{square tri hex pent}%9")
+    .x(perlin.range(0.1, 0.9).fast(2))
+    .y(perlin.range(0.1, 0.9).fast(2))
+    .rotateX(osc(0.07, "saw").range(0, 1))
+    .rotateY(osc(0.05, "saw").range(0, 1))
+    .color(palette("candy").at(perlin.range(0, 1)))
+    .size(sine.range(0.03, 0.08).slow(2))
+    .fill(0).stroke().weight(0.006)
+    .decay(1.8).fast(2)
+)`,
 
-  // a custom palette interpolated by a ramp + a tinted background
+  // random-pipe rhythm scattering through perlin space, hue cycling live
+  'swarm': `stack(
+  bg("#04040a"),
+  shape("dot | [dot dot] | dot ~ dot")
+    .x(perlin.range(0.05, 0.95).fast(2))
+    .y(perlin.range(0.05, 0.95).fast(3))
+    .color(palette("neon").at(osc(0.2).range(0, 1)))
+    .size(osc(0.8, "tri").range(0.006, 0.04))
+    .fast(8)
+    .decay(sine.range(0.4, 2.5).slow(5))
+)`,
+
+  // euclid star flowers opening over a counter-rotating inner ring
+  'bloom': `stack(
+  bg("#0a0006"),
+  shape("star(5,8)")
+    .radius(sine.range(0.14, 0.4).slow(5))
+    .angle(saw.range(0, 1))
+    .rotate(saw.range(0, 2).slow(3))
+    .rotateX(sine.range(-0.25, 0.25).slow(7))
+    .color(palette("sunset").at(saw.range(0, 1)))
+    .size(sine.range(0.05, 0.13).slow(2))
+    .fill(0).stroke().weight("0.004 0.012")
+    .decay(2).fast(2),
+  shape("ring(3,8)").radius(0.28).angle(saw.range(0, -1))
+    .color("#b5179e").weight(0.003).decay(2)
+)`,
+
+  // named-palette ring with an inner counter-spiral
   'aurora': `stack(
   bg("#0a0e1a"),
   shape("circle*16")
-    .radius(sine.range(0.08, 0.42).slow(3))
-    .color(
-      palette("#0b3d91", "#1ec8c8", "#7fffd4", "#b58cff")
-        .at(saw.range(0, 1))
-    )
+    .radius(sine.range(0.16, 0.44).slow(3))
+    .angle(saw.range(0, 1))
+    .color(palette("aurora").at(saw.range(0, 1)))
     .size(sine.range(0.02, 0.07).fast(2))
-    .decay(3)
+    .decay(3),
+  shape("dot*48")
+    .angle(saw.range(0, -3))
+    .radius(saw.range(0.02, 0.32))
+    .color("#7fffd4").size(0.007).decay(2)
 )`,
 
-  // live oscillators (osc) keep each dot moving over its lifetime — wandering
-  // position, cycling hue, breathing size. perlin = a livelier, organic waveform.
-  'drift': `shape("circle*8")
-  .x(osc(0.15, "perlin").range(0.15, 0.85))
-  .y(osc(0.19, "perlin").range(0.15, 0.85))
-  .color(osc(0.25).range(0, 1))
-  .size(osc(0.6, "tri").range(0.015, 0.06))
-  .decay(5)`,
+  // wandering dots — live oscillators on position, hue, and size
+  'drift': `stack(
+  bg("#05050a"),
+  shape("circle*10")
+    .x(osc(0.13, "perlin").range(0.12, 0.88))
+    .y(osc(0.17, "perlin").range(0.12, 0.88))
+    .color(palette("candy").at(osc(0.2).range(0, 1)))
+    .size(osc(0.6, "tri").range(0.012, 0.06))
+    .decay(5)
+)`,
 
-  // a spiral of lines unspooling, each clipped + tilted differently
-  'ribbon': `shape("line*24")
-  .radius(saw.range(0, 0.45))
-  .rotate(saw.range(0, 1))
-  .open(sine.range(0, 0.7).slow(3))
-  .color(saw.range(0, 1).add(sine.range(0, 0.3).slow(4)))
-  .size(sine.range(0.05, 0.12).slow(5))
-  .weight(sine.range(0.003, 0.012).fast(2))
-  .rotateY(sine.range(-0.35, 0.35).slow(5))
-  .decay(2.2).fast(1.5)`,
+  // a spiral of clipped lines unspooling, each tilted differently
+  'ribbon': `stack(
+  bg("#05030a"),
+  shape("line*36")
+    .angle(saw.range(0, 2.5))
+    .radius(saw.range(0, 0.45))
+    .rotate(saw.range(0, 1))
+    .open(sine.range(0, 0.7).slow(3))
+    .color(palette("rainbow").at(saw.range(0, 1)))
+    .size(sine.range(0.05, 0.12).slow(5))
+    .weight(sine.range(0.003, 0.012).fast(2))
+    .rotateY(sine.range(-0.35, 0.35).slow(5))
+    .decay(2.2).fast(1.5)
+)`,
+
+  // calm ice arcs spiralling, gaps + weight breathing
+  'tide': `stack(
+  bg("#02040a"),
+  shape("arc*9")
+    .angle(saw.range(0, 2))
+    .radius(saw.range(0.1, 0.44))
+    .open(sine.range(0.2, 0.7).slow(4))
+    .rotate(osc(0.03, "saw").range(0, 1))
+    .color(palette("ice").at(saw.range(0, 1)))
+    .weight(osc(0.4, "tri").range(0.004, 0.012))
+    .decay(4)
+)`,
+
+  // vivid neon spokes, additive, spinning, flickering thickness
+  'neon': `stack(
+  bg("#0a0010"),
+  shape("line(7,12)")
+    .radius(sine.range(0.08, 0.44).fast(3))
+    .angle(saw.range(0, 1))
+    .rotate(saw.range(0, 1))
+    .color(palette("neon").at(rand))
+    .weight(osc(2, "tri").range(0.003, 0.013))
+    .blend("lighter")
+    .fast(2).decay(1.5)
+)`,
+
+  // embers rising, sparks drifting up the screen
+  'embers': `stack(
+  bg("#0c0500"),
+  shape("dot*12")
+    .x(perlin.range(0.15, 0.85).fast(2))
+    .y(osc(0.08, "saw").range(1.05, -0.05))
+    .color(palette("ember").at(osc(0.3).range(0, 1)))
+    .size(osc(0.6, "tri").range(0.008, 0.045))
+    .decay(5),
+  shape("plus*6")
+    .x(rand).y(osc(0.12, "saw").range(1.05, -0.05))
+    .color("#ffd166").size(0.01).rotate(osc(0.5).range(0, 1)).decay(4)
+)`,
+
+  // full-spectrum spiral, hue interpolated in OKLCH
+  'spectrum': `stack(
+  bg("#05060a"),
+  shape("circle*96")
+    .angle(saw.range(0, 4))
+    .radius(saw.range(0.03, 0.45))
+    .color(palette("rainbow").at(saw.range(0, 1)))
+    .size(sine.range(0.008, 0.02).fast(6))
+    .decay(2)
+)`,
 };
 
 // a gentle starting point — a rainbow ring of pulsing dots
@@ -616,16 +720,10 @@ const loadUser = () => { try { return JSON.parse(localStorage.getItem(USER_KEY))
 const saveUser = (obj) => localStorage.setItem(USER_KEY, JSON.stringify(obj));
 
 const presList = $('#preslist');
-const presWrap = $('#presets');
 let activeVal = '';
 function setActive(val) {
   activeVal = val;
   presList.querySelectorAll('.presrow').forEach((r) => r.classList.toggle('active', r.dataset.val === val));
-}
-function setPresOpen(open) {
-  presWrap.classList.toggle('closed', !open);
-  $('#prestoggle').setAttribute('aria-expanded', String(open));
-  localStorage.setItem('loom.presopen', open ? '1' : '0');
 }
 function rebuildPresetList() {
   const user = loadUser();
@@ -712,7 +810,6 @@ traceBtn.addEventListener('click', () => {
   renderTrace();
 });
 renderTrace();
-$('#prestoggle').addEventListener('click', () => setPresOpen(presWrap.classList.contains('closed')));
 
 $('#newbtn').addEventListener('click', () => {
   editor.value = DEFAULT_PATCH; refreshHL(); run(); setActive('');
@@ -723,14 +820,34 @@ $('#savebtn').addEventListener('click', () => {
   const name = (prompt('Save preset as:', cur) || '').trim();
   if (!name) return;
   const user = loadUser(); user[name] = editor.value; saveUser(user);
-  rebuildPresetList(); setActive('u:' + name); setPresOpen(true);
+  rebuildPresetList(); setActive('u:' + name);
 });
 
-const help = $('#help');
-const toggleHelp = (show) => { help.hidden = show != null ? !show : !help.hidden; };
-$('#helpbtn').addEventListener('click', () => toggleHelp());
-$('#helpclose').addEventListener('click', () => toggleHelp(false));
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleHelp(false); });
+// ── right sidebar (swappable presets / guide) ──
+const side = $('#side');
+const panes = [...side.querySelectorAll('.tabpane')];
+const tabs = [...side.querySelectorAll('.tab')];
+function showTab(name) {
+  panes.forEach((p) => { p.hidden = p.dataset.pane !== name; });
+  tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  localStorage.setItem('loom.sidetab', name);
+}
+function setSide(open, tab) {
+  if (tab) showTab(tab);
+  side.classList.toggle('hidden', !open);
+  $('#panelbtn').classList.toggle('on', open);
+  $('#helpbtn').classList.toggle('on', open && side.querySelector('[data-pane="guide"]:not([hidden])'));
+  localStorage.setItem('loom.side', open ? '1' : '0');
+}
+tabs.forEach((t) => t.addEventListener('click', () => setSide(true, t.dataset.tab)));
+$('#sideclose').addEventListener('click', () => setSide(false));
+// panel button toggles the sidebar; ? jumps to the guide tab
+$('#panelbtn').addEventListener('click', () => setSide(side.classList.contains('hidden')));
+$('#helpbtn').addEventListener('click', () => {
+  const onGuide = !side.classList.contains('hidden') && side.querySelector('[data-pane="guide"]:not([hidden])');
+  setSide(!onGuide, 'guide');
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setSide(false); });
 
 // ── fade the control overlay when idle, so the drawing has the screen ──
 const rail = $('#rail');
@@ -755,7 +872,8 @@ resize();
 setCps(cps);
 setDecay(decayScale);
 rebuildPresetList();
-setPresOpen(localStorage.getItem('loom.presopen') !== '0');
+showTab(localStorage.getItem('loom.sidetab') || 'presets');
+setSide(localStorage.getItem('loom.side') !== '0');
 const saved = localStorage.getItem('loom.code');
 editor.value = saved || PRESETS.threads;
 if (!saved) setActive('b:threads');

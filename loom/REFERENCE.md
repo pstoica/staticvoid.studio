@@ -70,6 +70,7 @@ shape("dot*8").size("0.04 0.08").color(sine.range(0, 1))
 | `.size(n)` | `0..1` (fraction of `min(w,h)`) | glyph radius. default `0.06` |
 | `.x(n)` `.y(n)` | `0..1` of width / height | cartesian; **overrides** the ring layout |
 | `.radius(n)` | `0..0.5` typical | distance from centre in the ring layout |
+| `.angle(t)` | turns (`1` = full circle) | orbital position on the ring; default = onset phase. `.angle(saw.range(0,5))` winds a 5-turn spiral; `radius = sine(phase·k)` makes rose petals |
 | `.rotate(t)` | turns (`1` = 360°) | static Z rotation |
 | `.rotateX(t)` `.rotateY(t)` | turns | 3D tilt (foreshortening) around the horizontal / vertical axis |
 | `.spin(t)` | turns/second | continuous Z rotation |
@@ -220,6 +221,9 @@ palette("#0b3d91", "#1ec8c8", "#7fffd4", "#b58cff").at(x)
 `x` wraps, so a `saw` sweeps the ramp and repeats. Stops may be hex, names, or
 hue numbers. Interpolation is in **OKLCH** (perceptually uniform — clean, vivid
 transitions, no muddy grey midpoints). Used in `.color(…)`.
+
+Built-in ramps (use by name — `palette("sunset")`): `sunset` `ember` `ice`
+`neon` `forest` `candy` `mono` `rainbow` `aurora`.
 
 **Background:** `bg("#101820")` sets the canvas background for the patch. It
 returns `silence`, so stack it in: `stack(bg("#101820"), shape("dot*8")…)`.
