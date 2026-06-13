@@ -247,6 +247,7 @@
         <code>.size(0.06)</code><p>radius, fraction of min(w,h)</p>
         <code>.x(0..1) .y(0..1)</code><p>centre point (default screen centre)</p>
         <code>.radius(0..0.5) .angle(turns)</code><p>polar offset from the centre — <em>combine with x/y to orbit a point.</em> angle defaults to onset phase; <code>.angle(saw.range(0,5))</code> winds a spiral</p>
+        <code>.grid(cols, rows)</code><p>lay events into a grid by onset</p>
         <code>.rotate(turns) .spin(turns/s)</code><p>Z spin · 1 = full turn</p>
         <code>.rotateX(turns) .rotateY(turns)</code><p>3D tilt (foreshorten)</p>
         <code>.fill(1|0) .stroke(1|0) .vertex(1|0)</code><p>draw modes — independent &amp; patternable. <code>.fill(0).vertex()</code> = dots only</p>
@@ -266,6 +267,7 @@
         <code>.off(t, p =&gt; …)</code><p>echo, shifted by t cycles</p>
         <code>.degrade() .sometimes(p=&gt;…) .often(…) .rarely(…)</code>
         <code>stack(…) cat(…) seq(…) fastcat(…)</code>
+        <code>group(pat).pixelate(n)</code><p>render a layer to its own buffer + apply an effect (pixelate so far)</p>
       </section>
       <section>
         <h3>signals &amp; maths <span>(0..1 unless ranged)</span></h3>
@@ -273,6 +275,7 @@
         <code>rand perlin fbm brown gauss</code><p>noise: white · smooth · fractal · red · bell</p>
         <code>choose("a","b") irand(8)</code><p>random pick / integer per onset</p>
         <code>osc(rate, "sine").range(lo, hi)</code><p>live LFO — keeps moving over a glyph's life (vs signals, frozen at spawn). shapes: sine saw tri square rand perlin fbm</p>
+        <code>osc(…).spread(n)</code><p>per-glyph phase offset = n × onset phase — spreads the wave <em>around a ring/grid</em> instead of every glyph in lockstep</p>
         <code>.x(osc(0.2, "perlin").range(0, 1))</code><p>← a wandering dot</p>
         <code>.range(lo, hi)</code><p>remap a 0..1 signal — lo/hi may be numbers, patterns, or oscs</p>
         <code>.add(x) .sub(x) .mul(x) .div(x)</code><p>x may be a number <em>or a pattern</em></p>

@@ -74,6 +74,26 @@ shape("dot*8").size("0.04 0.08").color(sine.range(0, 1))
 
 Position is **centre (x/y) + polar offset (radius/angle)**, so they mix freely:
 `x/y` alone → cartesian; `radius/angle` alone → ring; **both → orbit around (x,y)**.
+
+`.grid(cols, rows)` is a third layout — it places events into a `cols×rows` grid
+by onset (the centre point), and `radius/angle` still offset from each cell.
+
+## Groups & effects
+
+`group(pattern)` renders a layer to its own buffer so an effect can be applied to
+the whole layer before it composites. It behaves like a pattern, so it stacks:
+
+```js
+stack(
+  shape("ring*4").radius(0.3),                 // crisp, on the main canvas
+  group(shape("dot*64").angle(saw.range(0,4))  // a layer…
+    .radius(saw.range(0.04,0.45)))
+    .pixelate(14)                              // …rendered chunky
+)
+```
+
+`.pixelate(n)` is the first effect (block size in px). More effects can follow
+the same pattern (each group gets its own render target).
 | `.rotate(t)` | turns (`1` = 360°) | static Z rotation |
 | `.rotateX(t)` `.rotateY(t)` | turns | 3D tilt (foreshortening) around the horizontal / vertical axis |
 | `.spin(t)` | turns/second | continuous Z rotation |
@@ -177,8 +197,14 @@ osc(rate, "sine").range(lo, hi)   // rate in cycles/sec; default range 0..1
 
 Shapes: `sine` `saw` `tri` `square` `rand` `perlin` `fbm` (perlin/fbm are the
 smooth, organic, livelier ones). Chainable: `.range(lo, hi)` `.rate(r)`
-`.phase(p)` `.fast(n)` `.slow(n)`. The `lo`/`hi` of an osc's `.range` may
-themselves be oscs, so the range can move: `osc(2).range(0, osc(0.1).range(0.4, 1))`.
+`.phase(p)` `.spread(n)` `.fast(n)` `.slow(n)`. The `lo`/`hi` of an osc's `.range`
+may themselves be oscs, so the range can move: `osc(2).range(0, osc(0.1).range(0.4, 1))`.
+
+By default glyphs only differ by **age** (birth time), so simultaneous onsets move
+in lockstep. **`.spread(n)`** adds a per-glyph phase offset of `n × the glyph's
+onset phase`, so the wave spreads *around* a ring/grid (a gradient) and still
+animates: `palette("rainbow").at(osc(0.08).spread(1).range(0,1))` = a rotating
+colour wheel around the ring.
 
 Works on any continuous control: `x` `y` `radius` `pan` `size` `weight` `open`
 `alpha` `rotate` `rotateX` `rotateY` `color`. Each glyph runs the osc from its

@@ -136,6 +136,7 @@ class Pattern {
   y(a)     { return this.set('y', a); }
   radius(a){ return this.set('radius', a); }
   angle(a) { return this.set('angle', a); }  // orbital position on the ring (turns); default = onset phase
+  grid(cols, rows) { return this.set('gridX', cols).set('gridY', rows == null ? cols : rows); } // lay events into a cols×rows grid by onset
   rotate(a){ return this.set('rotate', a); }
   spin(a)  { return this.set('spin', a); }
   blend(a) { return this.set('blend', a); }
@@ -160,7 +161,7 @@ class Pattern {
   life(a)   { return this.set('decay', a); } // alias for decay
 }
 
-const NUMERIC = new Set(['size','x','y','radius','angle','rotate','rotateX','rotateY','spin','alpha','pan','jitter','weight','attack','decay','fill','stroke','vertex','open']);
+const NUMERIC = new Set(['size','x','y','radius','angle','gridX','gridY','rotate','rotateX','rotateY','spin','alpha','pan','jitter','weight','attack','decay','fill','stroke','vertex','open']);
 
 // ── primitives ────────────────────────────────────────────────────────────────
 const silence = new Pattern(() => []);
@@ -283,6 +284,7 @@ function makeOsc(o) {
     range(lo, hi) { return makeOsc({ ...o, lo, hi }); },
     rate(r) { return makeOsc({ ...o, rate: r }); },
     phase(p) { return makeOsc({ ...o, phase: p }); },
+    spread(n = 1) { return makeOsc({ ...o, spread: n }); }, // per-glyph phase offset = n × onset phase
     fast(n) { return makeOsc({ ...o, rate: o.rate * n }); },
     slow(n) { return makeOsc({ ...o, rate: o.rate / n }); },
   };
@@ -326,6 +328,21 @@ function palette(...colors) {
 let _bgSink = null;
 function _setBgSink(fn) { _bgSink = fn; }
 function bg(color) { if (_bgSink) _bgSink(color); return silence; }
+
+// ── groups ──────────────────────────────────────────────────────────────────────
+// group(pattern) is a layer rendered to its own buffer, so an effect can be
+// applied to the whole layer before it's composited. group(...).pixelate(n) is the
+// first supported fx. It quacks like a Pattern (has .query) so it stacks normally.
+let _gid = 0;
+class Group {
+  constructor(pat) { this._pat = reify(pat); this._gid = ++_gid; this._fx = {}; }
+  pixelate(n) { this._fx.pixelate = n; return this; }
+  query(s) {
+    const gid = this._gid, fx = this._fx;
+    return this._pat.query(s).map((h) => hap(h.whole, h.part, Object.assign({}, h.value, { _gid: gid, _fx: fx })));
+  }
+}
+function group(pat) { return new Group(pat); }
 
 // ── combine two patterns: structure from the left, value sampled from right ────
 function appLeft(pf, pv) {
@@ -507,7 +524,7 @@ function rev(p) { return reify(p).rev(); }
 export const DSL = {
   Pattern, pure, silence, stack, slowcat, fastcat, cat, seq, sequence, timecat,
   fast, slow, rev, run, range, mini, euclid,
-  shape, s, n, choose, irand, osc, palette, bg, _setBgSink,
+  shape, s, n, choose, irand, osc, palette, bg, group, _setBgSink,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   hasOnset, span, isOsc,
 };

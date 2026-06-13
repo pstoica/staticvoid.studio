@@ -20,12 +20,12 @@ const cpsLabel = $('#cpsval');
 // A transparent <textarea> sits over a <pre>; we re-render coloured HTML into the
 // <pre> on every edit and keep their scroll positions synced.
 const HL_FN = new Set(['shape','s','n','stack','cat','slowcat','fastcat','seq','sequence','timecat',
-  'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand','osc','palette','bg']);
+  'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand','osc','palette','bg','group']);
 const HL_SIG = new Set(['sine','cosine','saw','isaw','tri','square','rand','perlin','fbm','brown','gauss','white']);
 const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux','off','degrade','degradeBy',
   'unDegradeBy','sometimes','sometimesBy','often','rarely','early','late','range','add','sub','mul','div',
-  'color','size','x','y','radius','angle','rotate','rotateX','rotateY','spin','blend','alpha','opacity','pan','jitter','fill','stroke','weight',
-  'cap','join','open','vertex','attack','decay','life','set']);
+  'color','size','x','y','radius','angle','grid','rotate','rotateX','rotateY','spin','blend','alpha','opacity','pan','jitter','fill','stroke','weight','pixelate',
+  'cap','join','open','vertex','attack','decay','life','set','spread','phase','rate']);
 const HL_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+(?:\.\d+)?\b|=>|\.[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*|[(){}\[\],.]/g;
 const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 function classOf(tok) {
@@ -94,7 +94,7 @@ function compile(code) {
   const body = `"use strict";\nreturn (\n${code}\n);`;
   const fn = new Function(...names, body);
   const result = fn(...vals);
-  if (!(result instanceof DSL.Pattern)) throw new Error('expression did not evaluate to a pattern');
+  if (!result || typeof result.query !== 'function') throw new Error('expression did not evaluate to a pattern');
   return result;
 }
 
@@ -126,8 +126,8 @@ function spawn(value, onset) {
 
   // position inputs may be numbers or live oscillators — recomputed each frame
   // only when one is an osc; otherwise the spawn position stands.
-  const pin = { x: v.x, y: v.y, radius: v.radius, angle: v.angle, pan: v.pan, phase };
-  const posLive = isOsc(v.x) || isOsc(v.y) || isOsc(v.radius) || isOsc(v.angle) || isOsc(v.pan);
+  const pin = { x: v.x, y: v.y, radius: v.radius, angle: v.angle, gridX: v.gridX, gridY: v.gridY, pan: v.pan, phase };
+  const posLive = isOsc(v.x) || isOsc(v.y) || isOsc(v.radius) || isOsc(v.angle) || isOsc(v.gridX) || isOsc(v.gridY) || isOsc(v.pan);
 
   // scalar/colour controls that are oscillators keep running over the lifetime
   const mods = [];
@@ -137,19 +137,19 @@ function spawn(value, onset) {
     pin, posLive, jx, jy, phase,
     shape: v.shape || 'dot',
     color: isOsc(v.color) ? oscColor(v.color.__osc, 0, phase) : resolveColor(v.color, phase),
-    size: numAt(v.size != null ? v.size : 0.06, 0) * minDim,
-    rotTurns: numAt(v.rotate != null ? v.rotate : 0, 0),       // Z, turns
-    rotX: numAt(v.rotateX != null ? v.rotateX : 0, 0) * TAU,   // tilt (radians)
-    rotY: numAt(v.rotateY != null ? v.rotateY : 0, 0) * TAU,
+    size: numAt(v.size != null ? v.size : 0.06, 0, phase) * minDim,
+    rotTurns: numAt(v.rotate != null ? v.rotate : 0, 0, phase),       // Z, turns
+    rotX: numAt(v.rotateX != null ? v.rotateX : 0, 0, phase) * TAU,   // tilt (radians)
+    rotY: numAt(v.rotateY != null ? v.rotateY : 0, 0, phase) * TAU,
     spin: (v.spin != null ? v.spin : 0) * TAU,                 // turns/sec (Z), age-driven
     fill: v.fill != null ? v.fill : 1,
     stroke: v.stroke != null ? v.stroke : 0,
     vertex: v.vertex != null ? v.vertex : 0,
-    weight: numAt(v.weight != null ? v.weight : 0.006, 0),
+    weight: numAt(v.weight != null ? v.weight : 0.006, 0, phase),
     cap: v.cap || 'square',
     join: v.join || 'miter',
-    open: numAt(v.open != null ? v.open : 0, 0),
-    alpha: numAt(v.alpha != null ? v.alpha : 1, 0),
+    open: numAt(v.open != null ? v.open : 0, 0, phase),
+    alpha: numAt(v.alpha != null ? v.alpha : 1, 0, phase),
     blend: v.blend || 'source-over',
     age: 0,
     attack: v.attack != null ? v.attack : 0.06,
@@ -157,6 +157,8 @@ function spawn(value, onset) {
     // each glyph keeps the decay it was born with.
     decay: ((v.decay != null ? v.decay : 1.0) / cps) * decayScale,
     mods: mods.length ? mods : null,
+    gid: v._gid || 0,          // group layer id (0 = ungrouped, drawn to main canvas)
+    fx: v._fx || null,         // group effect params (e.g. { pixelate })
   };
   const xy = resolvePos(p, minDim, 0);
   p.x = xy[0]; p.y = xy[1];
@@ -239,8 +241,8 @@ const MOD_FIELDS = ['size', 'color', 'rotate', 'rotateX', 'rotateY', 'open', 'al
 const _h1 = (x) => { const s = Math.sin((x + 0.123) * 12.9898) * 43758.5453; return s - Math.floor(s); };
 const _snoise = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return _h1(i) * (1 - u) + _h1(i + 1) * u; };
 const _fbm = (x) => { let s = 0, a = 1, fr = 1, n = 0; for (let o = 0; o < 4; o++) { s += _snoise(x * fr) * a; n += a; fr *= 2; a *= 0.5; } return s / n; };
-function evalOsc(d, age) {
-  const t = age * d.rate + d.phase, f = t - Math.floor(t);
+function evalOsc(d, age, gp = 0) {
+  const t = age * d.rate + d.phase + (d.spread || 0) * gp, f = t - Math.floor(t); // gp = per-glyph onset phase
   let v;
   switch (d.shape) {
     case 'saw': v = f; break;
@@ -255,9 +257,9 @@ function evalOsc(d, age) {
   const lo = numAt(d.lo, age), hi = numAt(d.hi, age);     // lo/hi may be oscs too
   return lo + v * (hi - lo);
 }
-const numAt = (a, age) => (isOsc(a) ? evalOsc(a.__osc, age) : a);
+const numAt = (a, age, gp = 0) => (isOsc(a) ? evalOsc(a.__osc, age, gp) : a);
 // resolve an oscillator-driven colour: through a palette if attached, else as hue
-const oscColor = (d, age, phase) => (d.pal ? interpPal(d.pal, evalOsc(d, age)) : resolveColor(evalOsc(d, age), phase));
+const oscColor = (d, age, gp) => (d.pal ? interpPal(d.pal, evalOsc(d, age, gp)) : resolveColor(evalOsc(d, age, gp), gp));
 
 // place a glyph: explicit x/y (0..1) win, else lay it on a ring by onset phase.
 // Inputs may be live oscillators, so this is re-run each frame for moving glyphs.
@@ -266,17 +268,26 @@ const oscColor = (d, age, phase) => (d.pal ? interpPal(d.pal, evalOsc(d, age)) :
 // nothing else is set, else 0 — so you can mix freely: x/y alone = cartesian,
 // radius/angle alone = ring, both = orbit around (x,y).
 function resolvePos(p, minDim, age) {
-  const { x, y, radius, angle, pan, phase } = p.pin;
-  let px = (x != null ? numAt(x, age) : 0.5) * W;
-  let py = (y != null ? numAt(y, age) : 0.5) * H;
-  const defR = (x == null && y == null && radius == null) ? 0.34 : 0;
-  const rad = (radius != null ? numAt(radius, age) : defR) * minDim;
+  const { x, y, radius, angle, gridX, gridY, pan, phase } = p.pin;
+  let px, py;
+  if (gridX != null) {                                 // grid: cell from onset phase
+    const cols = Math.max(1, Math.round(numAt(gridX, age)));
+    const rows = Math.max(1, Math.round(numAt(gridY != null ? gridY : gridX, age)));
+    const cell = Math.min(cols * rows - 1, Math.floor((((phase % 1) + 1) % 1) * cols * rows));
+    px = ((cell % cols) + 0.5) / cols * W;
+    py = ((Math.floor(cell / cols) % rows) + 0.5) / rows * H;
+  } else {
+    px = (x != null ? numAt(x, age, phase) : 0.5) * W;
+    py = (y != null ? numAt(y, age, phase) : 0.5) * H;
+  }
+  const defR = (gridX == null && x == null && y == null && radius == null) ? 0.34 : 0;
+  const rad = (radius != null ? numAt(radius, age, phase) : defR) * minDim;
   if (rad !== 0) {
-    const ang = (angle != null ? numAt(angle, age) : phase) * TAU - Math.PI / 2;
+    const ang = (angle != null ? numAt(angle, age, phase) : phase) * TAU - Math.PI / 2;
     px += Math.cos(ang) * rad;
     py += Math.sin(ang) * rad;
   }
-  if (pan != null) px += (numAt(pan, age) - 0.5) * W * 0.42;
+  if (pan != null) px += (numAt(pan, age, phase) - 0.5) * W * 0.42;
   return [px + p.jx * minDim, py + p.jy * minDim];
 }
 
@@ -376,6 +387,74 @@ function drawShape3D(g, name, r, rz, rx, ry, o, vertex) {
   }
 }
 
+// draw a single glyph to any context (main canvas or a group buffer), applying
+// its live oscillators. Shared by ungrouped and grouped rendering.
+function drawGlyph(g, p, minDim) {
+  const age = p.age;
+  let sizePx = p.size, color = p.color, rotTurns = p.rotTurns,
+      rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight;
+  if (p.mods) for (const m of p.mods) {
+    const val = evalOsc(m.osc, age, p.phase);
+    if (m.field === 'size') sizePx = val * minDim;
+    else if (m.field === 'color') color = oscColor(m.osc, age, p.phase);
+    else if (m.field === 'rotate') rotTurns = val;
+    else if (m.field === 'rotateX') rotX = val * TAU;
+    else if (m.field === 'rotateY') rotY = val * TAU;
+    else if (m.field === 'open') open = val;
+    else if (m.field === 'alpha') alpha = val;
+    else if (m.field === 'weight') weight = val;
+  }
+  g.save();
+  g.translate(p.x, p.y);
+  g.globalCompositeOperation = p.blend;
+  g.globalAlpha = Math.max(0, Math.min(1, alpha * p._env));
+  g.fillStyle = color; g.strokeStyle = color;
+  const zRot = rotTurns * TAU + p.spin * age;
+  const lw = Math.max(0.75, weight * minDim);
+  const outline = OUTLINE_SHAPES.has(p.shape);
+  const stroke = outline ? (p.stroke || !p.vertex) : p.stroke;
+  const fill = outline ? 0 : p.fill;
+  const o = { fill, stroke, lw, cap: p.cap, join: p.join, open };
+  if (rotX || rotY) {
+    drawShape3D(g, p.shape, sizePx, zRot, rotX, rotY, o, p.vertex);
+  } else {
+    g.rotate(zRot);
+    if (fill || stroke) drawShape(g, p.shape, sizePx, o);
+    if (p.vertex) drawVertices(g, shapeGeom(p.shape, sizePx, open), Math.max(2, lw * 1.5));
+  }
+  g.restore();
+}
+
+// ── group layers: each renders to its own buffer so a layer effect (pixelate)
+// can be applied before it's composited onto the main canvas. ──
+const groupCanvases = new Map();
+const _tmpCanvas = document.createElement('canvas');
+function groupCtx(gid) {
+  let g = groupCanvases.get(gid);
+  if (!g) { const c = document.createElement('canvas'); groupCanvases.set(gid, g = { canvas: c, ctx: c.getContext('2d') }); }
+  if (g.canvas.width !== canvas.width || g.canvas.height !== canvas.height) { g.canvas.width = canvas.width; g.canvas.height = canvas.height; }
+  g.ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  g.ctx.clearRect(0, 0, W, H);
+  return g.ctx;
+}
+function compositeGroup(gid, fx) {
+  const gc = groupCanvases.get(gid).canvas;
+  if (fx && fx.pixelate > 1) {                          // downscale → upscale, no smoothing = blocky
+    const b = fx.pixelate;
+    const sw = Math.max(1, Math.round(W / b)), sh = Math.max(1, Math.round(H / b));
+    if (_tmpCanvas.width !== sw) _tmpCanvas.width = sw;
+    if (_tmpCanvas.height !== sh) _tmpCanvas.height = sh;
+    const t = _tmpCanvas.getContext('2d');
+    t.clearRect(0, 0, sw, sh); t.imageSmoothingEnabled = true;
+    t.drawImage(gc, 0, 0, sw, sh);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(_tmpCanvas, 0, 0, sw, sh, 0, 0, W, H);
+    ctx.imageSmoothingEnabled = true;
+  } else {
+    ctx.drawImage(gc, 0, 0, W, H);
+  }
+}
+
 // ── main loop ─────────────────────────────────────────────────────────────────────
 function frame(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000);
@@ -462,47 +541,20 @@ function tick(dt) {
     ctx.restore();
   }
 
-  // draw glyphs (newest on top, since live is oldest→newest)
+  // draw glyphs (newest on top, since live is oldest→newest). Ungrouped glyphs
+  // go straight to the main canvas; grouped glyphs render to a per-group buffer
+  // so a layer effect (pixelate) can be applied before compositing.
+  const buckets = new Map();   // gid -> particle[]
   for (const p of live) {
-    const age = p.age;
-    // start from the spawn baseline, then let any running oscillators move it
-    let sizePx = p.size, color = p.color, rotTurns = p.rotTurns,
-        rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight;
-    if (p.mods) for (const m of p.mods) {
-      const val = evalOsc(m.osc, age);
-      if (m.field === 'size') sizePx = val * minDim;
-      else if (m.field === 'color') color = oscColor(m.osc, age, p.phase);
-      else if (m.field === 'rotate') rotTurns = val;
-      else if (m.field === 'rotateX') rotX = val * TAU;
-      else if (m.field === 'rotateY') rotY = val * TAU;
-      else if (m.field === 'open') open = val;
-      else if (m.field === 'alpha') alpha = val;
-      else if (m.field === 'weight') weight = val;
-    }
-
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.globalCompositeOperation = p.blend;
-    ctx.globalAlpha = Math.max(0, Math.min(1, alpha * p._env));
-    ctx.fillStyle = color;
-    ctx.strokeStyle = color;
-    const zRot = rotTurns * TAU + p.spin * age;
-    const lw = Math.max(0.75, weight * minDim);
-    // outlines (ring/arc/line/cross) stroke by default; vertex mode suppresses
-    // that auto-stroke unless stroke is explicitly on. closed shapes use fill.
-    const outline = OUTLINE_SHAPES.has(p.shape);
-    const stroke = outline ? (p.stroke || !p.vertex) : p.stroke;
-    const fill = outline ? 0 : p.fill;
-    const o = { fill, stroke, lw, cap: p.cap, join: p.join, open };
-    if (rotX || rotY) {
-      drawShape3D(ctx, p.shape, sizePx, zRot, rotX, rotY, o, p.vertex);       // true perspective
-    } else {
-      ctx.rotate(zRot);
-      if (fill || stroke) drawShape(ctx, p.shape, sizePx, o);                  // fast crisp 2D
-      if (p.vertex) drawVertices(ctx, shapeGeom(p.shape, sizePx, open), Math.max(2, lw * 1.5));
-    }
-    ctx.restore();
+    if (p.gid) { let b = buckets.get(p.gid); if (!b) buckets.set(p.gid, b = []); b.push(p); }
+    else drawGlyph(ctx, p, minDim);
   }
+  for (const [gid, parts] of buckets) {
+    const gctx = groupCtx(gid);
+    for (const p of parts) drawGlyph(gctx, p, minDim);
+    compositeGroup(gid, parts[0].fx);
+  }
+  for (const gid of [...groupCanvases.keys()]) if (!buckets.has(gid)) groupCanvases.delete(gid); // prune
 
   $('#cycle').textContent = Math.floor(cycle).toString();
 }
@@ -698,6 +750,42 @@ const PRESETS = {
     .x(rand).y(osc(0.12, "saw").range(1.05, -0.05))
     .color("#ffd166").size(0.01).rotate(osc(0.5).range(0, 1)).decay(4)
 )`,
+
+  // a ring whose hue + size form a wave AROUND it (osc .spread by onset phase),
+  // the whole gradient slowly rotating
+  'halo': `stack(
+  bg("#05060d"),
+  shape("circle*32")
+    .radius(0.34)
+    .color(palette("rainbow").at(osc(0.08).spread(1).range(0, 1)))
+    .size(osc(0.5, "sine").spread(2).range(0.01, 0.05))
+    .decay(2)
+)`,
+
+  // a grid of polygons, each cell hue-shifted, gently tumbling
+  'grid': `stack(
+  bg("#06070c"),
+  shape("<square tri hex>*36")
+    .grid(6, 6)
+    .color(palette("candy").at(saw.range(0, 1)))
+    .size(sine.range(0.02, 0.05).fast(3))
+    .rotate(osc(0.1, "saw").range(0, 1))
+    .fill(0).stroke().weight(0.005)
+    .decay(2)
+)`,
+
+  // a crisp spiral fed through a chunky pixelate layer
+  'mosaic': `group(
+  stack(
+    bg("#080510"),
+    shape("dot*64")
+      .angle(saw.range(0, 4))
+      .radius(saw.range(0.04, 0.45))
+      .color(palette("neon").at(saw.range(0, 1)))
+      .size(sine.range(0.01, 0.03).fast(4))
+      .decay(2.5)
+  )
+).pixelate(14)`,
 
   // full-spectrum spiral, hue interpolated in OKLCH
   'spectrum': `stack(
