@@ -242,7 +242,11 @@ const _h1 = (x) => { const s = Math.sin((x + 0.123) * 12.9898) * 43758.5453; ret
 const _snoise = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return _h1(i) * (1 - u) + _h1(i + 1) * u; };
 const _fbm = (x) => { let s = 0, a = 1, fr = 1, n = 0; for (let o = 0; o < 4; o++) { s += _snoise(x * fr) * a; n += a; fr *= 2; a *= 0.5; } return s / n; };
 function evalOsc(d, age, gp = 0) {
-  const t = age * d.rate + d.phase + (d.spread || 0) * gp, f = t - Math.floor(t); // gp = per-glyph onset phase
+  // every parameter may itself be an oscillator → cross-modulation (FM via rate,
+  // PM via phase, AM via range lo/hi). gp = the glyph's onset phase.
+  const rate = numAt(d.rate, age, gp);
+  const t = age * rate + numAt(d.phase || 0, age, gp) + numAt(d.spread || 0, age, gp) * gp;
+  const f = t - Math.floor(t);
   let v;
   switch (d.shape) {
     case 'saw': v = f; break;
@@ -254,7 +258,7 @@ function evalOsc(d, age, gp = 0) {
     case 'fbm': v = _fbm(t); break;                       // organic, multi-octave
     default: v = (Math.sin(TAU * t) + 1) / 2;             // sine
   }
-  const lo = numAt(d.lo, age), hi = numAt(d.hi, age);     // lo/hi may be oscs too
+  const lo = numAt(d.lo, age, gp), hi = numAt(d.hi, age, gp);
   return lo + v * (hi - lo);
 }
 const numAt = (a, age, gp = 0) => (isOsc(a) ? evalOsc(a.__osc, age, gp) : a);
@@ -749,6 +753,18 @@ const PRESETS = {
   shape("plus*6")
     .x(rand).y(osc(0.12, "saw").range(1.05, -0.05))
     .color("#ffd166").size(0.01).rotate(osc(0.5).range(0, 1)).decay(4)
+)`,
+
+  // cross-modulation: the radius oscillator's RATE is itself driven by another
+  // osc (FM), so the spiral warps — speeds up and slows down — as it breathes
+  'warp': `stack(
+  bg("#070310"),
+  shape("dot*64")
+    .angle(saw.range(0, 2))
+    .radius(osc(0.3).rate(osc(0.06).range(0.2, 2.5)).spread(1).range(0.08, 0.45))
+    .color(palette("neon").at(osc(0.1).spread(1).range(0, 1)))
+    .size(0.013)
+    .decay(3)
 )`,
 
   // a ring whose hue + size form a wave AROUND it (osc .spread by onset phase),

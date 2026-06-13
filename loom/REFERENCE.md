@@ -206,6 +206,11 @@ onset phase`, so the wave spreads *around* a ring/grid (a gradient) and still
 animates: `palette("rainbow").at(osc(0.08).spread(1).range(0,1))` = a rotating
 colour wheel around the ring.
 
+**Cross-modulation:** every osc parameter — `rate`, `phase`, `spread`, and the
+`lo`/`hi` of `range` — may itself be an osc, so you get LFOs modulating LFOs:
+`osc(2).rate(osc(0.1).range(1,4))` (FM, warps the tempo), `.phase(osc(...))` (PM,
+smooth wobble), `.range(osc, osc)` (AM, the band breathes).
+
 Works on any continuous control: `x` `y` `radius` `pan` `size` `weight` `open`
 `alpha` `rotate` `rotateX` `rotateY` `color`. Each glyph runs the osc from its
 own birth, so glyphs born at different times stay out of phase.
