@@ -68,9 +68,12 @@ shape("dot*8").size("0.04 0.08").color(sine.range(0, 1))
 | --- | --- | --- |
 | `.color(c)` | `"#rrggbb"`, name (`red` `blue` …), `0..1` hue, or a `palette` | default: rainbow by cycle phase |
 | `.size(n)` | `0..1` (fraction of `min(w,h)`) | glyph radius. default `0.06` |
-| `.x(n)` `.y(n)` | `0..1` of width / height | cartesian; **overrides** the ring layout |
-| `.radius(n)` | `0..0.5` typical | distance from centre in the ring layout |
-| `.angle(t)` | turns (`1` = full circle) | orbital position on the ring; default = onset phase. `.angle(saw.range(0,5))` winds a 5-turn spiral; `radius = sine(phase·k)` makes rose petals |
+| `.x(n)` `.y(n)` | `0..1` of width / height | the **centre point** (default = screen centre) |
+| `.radius(n)` | `0..0.5` typical | **polar offset** from the centre. Defaults to the mandala ring (0.34) only when no x/y/radius is set, else 0 |
+| `.angle(t)` | turns (`1` = full circle) | orbital position; default = onset phase. `.angle(saw.range(0,5))` winds a 5-turn spiral; `radius = sine(phase·k)` makes rose petals |
+
+Position is **centre (x/y) + polar offset (radius/angle)**, so they mix freely:
+`x/y` alone → cartesian; `radius/angle` alone → ring; **both → orbit around (x,y)**.
 | `.rotate(t)` | turns (`1` = 360°) | static Z rotation |
 | `.rotateX(t)` `.rotateY(t)` | turns | 3D tilt (foreshortening) around the horizontal / vertical axis |
 | `.spin(t)` | turns/second | continuous Z rotation |

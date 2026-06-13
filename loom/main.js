@@ -261,17 +261,20 @@ const oscColor = (d, age, phase) => (d.pal ? interpPal(d.pal, evalOsc(d, age)) :
 
 // place a glyph: explicit x/y (0..1) win, else lay it on a ring by onset phase.
 // Inputs may be live oscillators, so this is re-run each frame for moving glyphs.
+// Unified layout: position = centre (x/y) + polar offset (radius, angle). x/y
+// default to screen centre; radius defaults to the mandala ring (0.34) only when
+// nothing else is set, else 0 — so you can mix freely: x/y alone = cartesian,
+// radius/angle alone = ring, both = orbit around (x,y).
 function resolvePos(p, minDim, age) {
   const { x, y, radius, angle, pan, phase } = p.pin;
-  let px, py;
-  if (x != null || y != null) {
-    px = (x != null ? numAt(x, age) : 0.5) * W;
-    py = (y != null ? numAt(y, age) : 0.5) * H;
-  } else {
-    const ang = (angle != null ? numAt(angle, age) : phase) * TAU - Math.PI / 2; // orbital angle (turns)
-    const rad = (radius != null ? numAt(radius, age) : 0.34) * minDim;
-    px = W / 2 + Math.cos(ang) * rad;
-    py = H / 2 + Math.sin(ang) * rad;
+  let px = (x != null ? numAt(x, age) : 0.5) * W;
+  let py = (y != null ? numAt(y, age) : 0.5) * H;
+  const defR = (x == null && y == null && radius == null) ? 0.34 : 0;
+  const rad = (radius != null ? numAt(radius, age) : defR) * minDim;
+  if (rad !== 0) {
+    const ang = (angle != null ? numAt(angle, age) : phase) * TAU - Math.PI / 2;
+    px += Math.cos(ang) * rad;
+    py += Math.sin(ang) * rad;
   }
   if (pan != null) px += (numAt(pan, age) - 0.5) * W * 0.42;
   return [px + p.jx * minDim, py + p.jy * minDim];

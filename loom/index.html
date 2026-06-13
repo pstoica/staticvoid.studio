@@ -245,9 +245,8 @@
         <code>.color("#ff5d73" | "red" | 0..1)</code>
         <code>.color(palette("#a","#b","#c").at(x))</code><p>interpolate a palette by x (number · pattern · osc)</p>
         <code>.size(0.06)</code><p>radius, fraction of min(w,h)</p>
-        <code>.x(0..1) .y(0..1)</code><p>cartesian; overrides the ring layout</p>
-        <code>.radius(0..0.5)</code><p>distance from centre (ring layout)</p>
-        <code>.angle(turns)</code><p>orbital position on the ring (default = onset phase). winds into spirals: <code>.angle(saw.range(0,5))</code></p>
+        <code>.x(0..1) .y(0..1)</code><p>centre point (default screen centre)</p>
+        <code>.radius(0..0.5) .angle(turns)</code><p>polar offset from the centre — <em>combine with x/y to orbit a point.</em> angle defaults to onset phase; <code>.angle(saw.range(0,5))</code> winds a spiral</p>
         <code>.rotate(turns) .spin(turns/s)</code><p>Z spin · 1 = full turn</p>
         <code>.rotateX(turns) .rotateY(turns)</code><p>3D tilt (foreshorten)</p>
         <code>.fill(1|0) .stroke(1|0) .vertex(1|0)</code><p>draw modes — independent &amp; patternable. <code>.fill(0).vertex()</code> = dots only</p>
