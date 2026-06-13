@@ -20,11 +20,11 @@ const cpsLabel = $('#cpsval');
 // A transparent <textarea> sits over a <pre>; we re-render coloured HTML into the
 // <pre> on every edit and keep their scroll positions synced.
 const HL_FN = new Set(['shape','s','n','stack','cat','slowcat','fastcat','seq','sequence','timecat',
-  'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand','osc']);
+  'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand','osc','palette','bg']);
 const HL_SIG = new Set(['sine','cosine','saw','isaw','tri','square','rand','perlin','fbm','brown','gauss','white']);
 const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux','off','degrade','degradeBy',
   'unDegradeBy','sometimes','sometimesBy','often','rarely','early','late','range','add','sub','mul','div',
-  'color','size','x','y','radius','rotate','rotateX','rotateY','spin','blend','alpha','pan','jitter','fill','stroke','weight',
+  'color','size','x','y','radius','rotate','rotateX','rotateY','spin','blend','alpha','opacity','pan','jitter','fill','stroke','weight',
   'cap','join','open','vertex','attack','decay','life','set']);
 const HL_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+(?:\.\d+)?\b|=>|\.[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*|[(){}\[\],.]/g;
 const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -67,7 +67,7 @@ function resize() {
   canvas.height = Math.round(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   // paint an opaque base so the first trail-fade has something to eat
-  ctx.fillStyle = '#06070a';
+  ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, W, H);
 }
 new ResizeObserver(resize).observe(canvas);
@@ -78,7 +78,8 @@ let cps = 0.6;          // cycles per second
 let cycle = 0;          // current position in cycles (fractional)
 let playing = true;
 let decayScale = 1.5;   // master multiplier on a new glyph's decay (how long it lingers)
-let opacity = 1;        // master opacity multiplier over every glyph
+const DEFAULT_BG = '#06070a';
+let bgColor = DEFAULT_BG; // canvas background; set per-patch via bg("…")
 let showClock = localStorage.getItem('loom.clock') !== '0'; // playhead sweep on/off
 let traceMode = localStorage.getItem('loom.trace') === '1'; // connect live points into a path
 let lastT = performance.now();
@@ -99,6 +100,7 @@ function compile(code) {
 
 function run() {
   try {
+    bgColor = DEFAULT_BG;                 // bg("…") in the patch overrides this during compile
     pattern = compile(editor.value);
     errBar.textContent = '';
     errBar.classList.remove('show');
@@ -134,7 +136,7 @@ function spawn(value, onset) {
   const p = {
     pin, posLive, jx, jy, phase,
     shape: v.shape || 'dot',
-    color: resolveColor(numAt(v.color, 0), phase),
+    color: isOsc(v.color) ? oscColor(v.color.__osc, 0, phase) : resolveColor(v.color, phase),
     size: numAt(v.size != null ? v.size : 0.06, 0) * minDim,
     rotTurns: numAt(v.rotate != null ? v.rotate : 0, 0),       // Z, turns
     rotX: numAt(v.rotateX != null ? v.rotateX : 0, 0) * TAU,   // tilt (radians)
@@ -161,19 +163,73 @@ function spawn(value, onset) {
   particles.push(p);
 }
 
+const NAMED = { red: '#ff5d73', orange: '#ff9d5c', yellow: '#ffd166', green: '#6df0c2',
+  cyan: '#56e0ff', blue: '#56b6ff', purple: '#b58cff', pink: '#ff8ad1', white: '#f4f6fb', black: '#06070a' };
+
 function resolveColor(c, phase) {
+  if (c && typeof c === 'object' && c.__pal) return interpPal(c.__pal, c.t != null ? c.t : phase);
   if (typeof c === 'string') {
     if (c[0] === '#') return c;
-    const named = { red:'#ff5d73', orange:'#ff9d5c', yellow:'#ffd166', green:'#6df0c2',
-      cyan:'#56e0ff', blue:'#56b6ff', purple:'#b58cff', pink:'#ff8ad1', white:'#f4f6fb' };
-    if (named[c]) return named[c];
-    // a word like "a"/"b" → stable hue from the string
-    let h = 0; for (let i = 0; i < c.length; i++) h = (h * 31 + c.charCodeAt(i)) % 360;
+    if (NAMED[c]) return NAMED[c];
+    let h = 0; for (let i = 0; i < c.length; i++) h = (h * 31 + c.charCodeAt(i)) % 360; // word → stable hue
     return `hsl(${h} 80% 64%)`;
   }
   if (typeof c === 'number') return `hsl(${(((c * 360) % 360) + 360) % 360} 82% 64%)`;
   // default: hue follows position in the cycle → a rainbow ring
   return PALETTE[Math.floor(phase * PALETTE.length) % PALETTE.length];
+}
+
+// ── colour → rgb, for palette interpolation ──
+function hslRGB(h, s, l) {
+  h = (((h % 360) + 360) % 360) / 360;
+  const a = s * Math.min(l, 1 - l);
+  const f = (k) => Math.round(255 * (l - a * Math.max(-1, Math.min((k + h * 12) % 12 - 3, 9 - (k + h * 12) % 12, 1))));
+  return [f(0), f(8), f(4)];
+}
+function parseRGB(c) {
+  if (typeof c === 'number') return hslRGB(((c * 360) % 360 + 360) % 360, 0.82, 0.64);
+  if (typeof c === 'string') {
+    const s = c[0] === '#' ? c : NAMED[c];
+    if (s && s[0] === '#') { let h = s.slice(1); if (h.length === 3) h = h.split('').map((x) => x + x).join(''); const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+    let hh = 0; for (let i = 0; i < c.length; i++) hh = (hh * 31 + c.charCodeAt(i)) % 360;
+    return hslRGB(hh, 0.8, 0.64);
+  }
+  return [240, 243, 250];
+}
+// ── OKLab/OKLCH — perceptually-uniform colour, for clean palette interpolation ──
+const _lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+const _gam = (c) => Math.max(0, Math.min(255, Math.round((c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055) * 255)));
+function rgbToLch([r, g, b]) {
+  const R = _lin(r), G = _lin(g), B = _lin(b);
+  const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B);
+  const m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B);
+  const s = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B);
+  const L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+  const a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+  const bb = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+  return [L, Math.hypot(a, bb), Math.atan2(bb, a)];   // L, Chroma, Hue
+}
+function lchToRgb(L, C, h) {
+  const a = C * Math.cos(h), b = C * Math.sin(h);
+  const l_ = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m_ = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s_ = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3;
+  return `rgb(${_gam(+4.0767416621 * l_ - 3.3077115913 * m_ + 0.2309699292 * s_)},${_gam(-1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_)},${_gam(-0.0041960863 * l_ - 0.7034186147 * m_ + 1.7076147010 * s_)})`;
+}
+const _palCache = new WeakMap();
+function palStops(colors) { let r = _palCache.get(colors); if (!r) { r = colors.map((c) => rgbToLch(parseRGB(c))); _palCache.set(colors, r); } return r; }
+function interpPal(colors, t) {
+  const lch = palStops(colors), n = lch.length;
+  if (n === 0) return '#fff';
+  if (n === 1) return lchToRgb(lch[0][0], lch[0][1], lch[0][2]);
+  const u = t - Math.floor(t);                        // wrap so signals loop the gradient
+  const x = u * (n - 1), i = Math.min(n - 2, Math.floor(x)), f = x - i, A = lch[i], B = lch[i + 1];
+  const L = A[0] + (B[0] - A[0]) * f;
+  const C = A[1] + (B[1] - A[1]) * f;
+  let h;                                              // interpolate hue along the shortest arc
+  if (A[1] < 1e-4) h = B[2]; else if (B[1] < 1e-4) h = A[2];
+  else { let dh = B[2] - A[2]; if (dh > Math.PI) dh -= 2 * Math.PI; if (dh < -Math.PI) dh += 2 * Math.PI; h = A[2] + dh * f; }
+  return lchToRgb(L, C, h);
 }
 
 // ── live oscillators (LFOs): evaluated each frame against a glyph's age, so a
@@ -200,6 +256,8 @@ function evalOsc(d, age) {
   return lo + v * (hi - lo);
 }
 const numAt = (a, age) => (isOsc(a) ? evalOsc(a.__osc, age) : a);
+// resolve an oscillator-driven colour: through a palette if attached, else as hue
+const oscColor = (d, age, phase) => (d.pal ? interpPal(d.pal, evalOsc(d, age)) : resolveColor(evalOsc(d, age), phase));
 
 // place a glyph: explicit x/y (0..1) win, else lay it on a ring by onset phase.
 // Inputs may be live oscillators, so this is re-run each frame for moving glyphs.
@@ -329,7 +387,7 @@ function tick(dt) {
   // "Trails" come from particles fading out over their own lifetime, not from a veil.
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
-  ctx.fillStyle = '#06070a';
+  ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, W, H);
 
   if (playing) {
@@ -394,7 +452,7 @@ function tick(dt) {
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (let i = 1; i < live.length; i++) {
       const a = live[i - 1], b = live[i];
-      ctx.globalAlpha = Math.min(a._a, b._a) * 0.6 * opacity;
+      ctx.globalAlpha = Math.min(a._a, b._a) * 0.6;
       ctx.strokeStyle = b.color;
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     }
@@ -410,7 +468,7 @@ function tick(dt) {
     if (p.mods) for (const m of p.mods) {
       const val = evalOsc(m.osc, age);
       if (m.field === 'size') sizePx = val * minDim;
-      else if (m.field === 'color') color = resolveColor(val, p.phase);
+      else if (m.field === 'color') color = oscColor(m.osc, age, p.phase);
       else if (m.field === 'rotate') rotTurns = val;
       else if (m.field === 'rotateX') rotX = val * TAU;
       else if (m.field === 'rotateY') rotY = val * TAU;
@@ -422,7 +480,7 @@ function tick(dt) {
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.globalCompositeOperation = p.blend;
-    ctx.globalAlpha = Math.max(0, Math.min(1, alpha * p._env * opacity));
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha * p._env));
     ctx.fillStyle = color;
     ctx.strokeStyle = color;
     const zRot = rotTurns * TAU + p.spin * age;
@@ -512,6 +570,19 @@ const PRESETS = {
   .fill(0).stroke().weight("0.004 0.012")
   .decay(2).fast(2)`,
 
+  // a custom palette interpolated by a ramp + a tinted background
+  'aurora': `stack(
+  bg("#0a0e1a"),
+  shape("circle*16")
+    .radius(sine.range(0.08, 0.42).slow(3))
+    .color(
+      palette("#0b3d91", "#1ec8c8", "#7fffd4", "#b58cff")
+        .at(saw.range(0, 1))
+    )
+    .size(sine.range(0.02, 0.07).fast(2))
+    .decay(3)
+)`,
+
   // live oscillators (osc) keep each dot moving over its lifetime — wandering
   // position, cycling hue, breathing size. perlin = a livelier, organic waveform.
   'drift': `shape("circle*8")
@@ -593,7 +664,7 @@ function applyPreset(val) {
 }
 
 // ── wiring ──────────────────────────────────────────────────────────────────────────
-function setCps(v) { cps = v; cpsLabel.textContent = v.toFixed(2); }
+function setCps(v) { cps = v; $('#cps').value = v; cpsLabel.textContent = v.toFixed(2); }
 
 editor.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run(); flash(); }
@@ -614,11 +685,15 @@ $('#playbtn').addEventListener('click', (e) => {
   playing = !playing; e.target.textContent = playing ? '❚❚ pause' : '▶ play';
 });
 $('#clearbtn').addEventListener('click', () => {
-  particles.length = 0; ctx.fillStyle = '#06070a'; ctx.fillRect(0, 0, W, H);
+  particles.length = 0; ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H);
 });
+const decayLabel = $('#decayval');
+function setDecay(v) { decayScale = v; $('#persist').value = v; decayLabel.textContent = v % 1 ? v.toFixed(2) : v.toString(); }
 $('#cps').addEventListener('input', (e) => setCps(Number(e.target.value)));
-$('#persist').addEventListener('input', (e) => { decayScale = Number(e.target.value); });
-$('#opacity').addEventListener('input', (e) => { opacity = Number(e.target.value); });
+$('#persist').addEventListener('input', (e) => setDecay(Number(e.target.value)));
+// double-click a slider to reset it to its default
+$('#cps').addEventListener('dblclick', () => setCps(0.6));
+$('#persist').addEventListener('dblclick', () => setDecay(1.5));
 
 const clockBtn = $('#clockbtn');
 function renderClock() { clockBtn.classList.toggle('on', showClock); clockBtn.classList.toggle('off', !showClock); }
@@ -675,9 +750,10 @@ editor.addEventListener('blur', activity);
 document.addEventListener('mouseleave', () => { if (document.activeElement !== editor) setIdle(true); });
 
 // ── boot ────────────────────────────────────────────────────────────────────────────
+DSL._setBgSink((c) => { bgColor = resolveColor(c, 0); });   // bg("…") writes here at compile time
 resize();
 setCps(cps);
-$('#persist').value = decayScale;
+setDecay(decayScale);
 rebuildPresetList();
 setPresOpen(localStorage.getItem('loom.presopen') !== '0');
 const saved = localStorage.getItem('loom.code');

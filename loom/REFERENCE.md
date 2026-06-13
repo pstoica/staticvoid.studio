@@ -66,7 +66,7 @@ shape("dot*8").size("0.04 0.08").color(sine.range(0, 1))
 
 | Control | Range / units | Notes |
 | --- | --- | --- |
-| `.color(c)` | `"#rrggbb"`, name (`red` `blue` …), or `0..1` hue | default: rainbow by cycle phase |
+| `.color(c)` | `"#rrggbb"`, name (`red` `blue` …), `0..1` hue, or a `palette` | default: rainbow by cycle phase |
 | `.size(n)` | `0..1` (fraction of `min(w,h)`) | glyph radius. default `0.06` |
 | `.x(n)` `.y(n)` | `0..1` of width / height | cartesian; **overrides** the ring layout |
 | `.radius(n)` | `0..0.5` typical | distance from centre in the ring layout |
@@ -75,7 +75,7 @@ shape("dot*8").size("0.04 0.08").color(sine.range(0, 1))
 | `.spin(t)` | turns/second | continuous Z rotation |
 | `.pan(n)` | `0..1` (0=left, .5=centre, 1=right) | horizontal shift; `jux` uses this |
 | `.jitter(n)` | `0..0.1` typical | random positional scatter |
-| `.alpha(n)` | `0..1` | peak opacity |
+| `.alpha(n)` / `.opacity(n)` | `0..1` | peak opacity (per glyph) |
 
 ### Style
 
@@ -202,6 +202,28 @@ shape("dot*16")
 > the values are control objects.
 
 ---
+
+## Palettes & background
+
+Define a colour ramp and interpolate through it:
+
+```js
+palette("#0b3d91", "#1ec8c8", "#7fffd4", "#b58cff").at(x)
+```
+
+`.at(x)` maps a `0..1` position `x` to an interpolated colour, where `x` may be:
+
+- a **number** — a fixed colour at that position,
+- a **pattern/signal** (`saw`, `"0 .5 1"`) — sampled at each glyph's onset (frozen),
+- an **`osc`** — the colour keeps interpolating over the glyph's lifetime (live).
+
+`x` wraps, so a `saw` sweeps the ramp and repeats. Stops may be hex, names, or
+hue numbers. Interpolation is in **OKLCH** (perceptually uniform — clean, vivid
+transitions, no muddy grey midpoints). Used in `.color(…)`.
+
+**Background:** `bg("#101820")` sets the canvas background for the patch. It
+returns `silence`, so stack it in: `stack(bg("#101820"), shape("dot*8")…)`.
+Remove it and the background reverts to the default on the next run.
 
 ## Layout model
 

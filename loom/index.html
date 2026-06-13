@@ -195,9 +195,8 @@
       <button class="btn" id="clearbtn">clear</button>
       <button class="btn" id="clockbtn" title="toggle the cycle playhead">◷ clock</button>
       <button class="btn" id="tracebtn" title="thread a path through the live points">◇ trace</button>
-      <label class="slider">cps <input type="range" id="cps" min="0.1" max="2" step="0.05" value="0.6"><b id="cpsval">0.60</b></label>
-      <label class="slider">decay <input type="range" id="persist" min="0.25" max="6" step="0.05" value="1.5"></label>
-      <label class="slider">opacity <input type="range" id="opacity" min="0" max="1" step="0.02" value="1"></label>
+      <label class="slider">cps <input type="range" id="cps" min="0.1" max="2" step="0.05" value="0.6" title="double-click to reset"><b id="cpsval">0.60</b></label>
+      <label class="slider">decay <input type="range" id="persist" min="0.25" max="6" step="0.05" value="1.5" title="double-click to reset"><b id="decayval">1.5</b></label>
     </div>
 
     <div id="meta">
@@ -230,11 +229,13 @@
         <h3>sources</h3>
         <code>shape("circle*8")</code><p>emit glyphs (alias <code>s</code>)</p>
         <code>n("0 1 2")</code><p>numbered dots · <code>run(8)</code> = 0…7</p>
+        <code>bg("#101820")</code><p>set the canvas background — stack it in</p>
         <p class="shapes">shapes: dot circle ring arc square box tri pent hex star plus line cross</p>
       </section>
       <section>
         <h3>controls <span>(chain onto a source)</span></h3>
         <code>.color("#ff5d73" | "red" | 0..1)</code>
+        <code>.color(palette("#a","#b","#c").at(x))</code><p>interpolate a palette by x (number · pattern · osc)</p>
         <code>.size(0.06)</code><p>radius, fraction of min(w,h)</p>
         <code>.x(0..1) .y(0..1)</code><p>cartesian; overrides the ring layout</p>
         <code>.radius(0..0.5)</code><p>distance from centre (ring layout)</p>
@@ -245,7 +246,7 @@
         <code>.cap("round"|"butt"|"square")</code><p>line ends</p>
         <code>.join("round"|"miter"|"bevel")</code><p>corners</p>
         <code>.open(0..1)</code><p>arc/ring gap (use shape <code>arc</code>)</p>
-        <code>.alpha(0..1) .pan(0..1) .jitter(0..0.1)</code>
+        <code>.alpha(0..1) .opacity(0..1) .pan(0..1) .jitter(0..0.1)</code>
         <code>.attack(s) .decay(s)</code><p>fade-in / fade-out (s alias <code>.life</code>)</p>
         <code>.blend("source-over"|"screen"|"lighter"|"multiply")</code>
       </section>

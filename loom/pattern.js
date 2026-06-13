@@ -138,8 +138,9 @@ class Pattern {
   rotate(a){ return this.set('rotate', a); }
   spin(a)  { return this.set('spin', a); }
   blend(a) { return this.set('blend', a); }
-  alpha(a) { return this.set('alpha', a); }
-  pan(a)   { return this.set('pan', a); }
+  alpha(a)   { return this.set('alpha', a); }
+  opacity(a) { return this.set('alpha', a); } // alias for alpha
+  pan(a)     { return this.set('pan', a); }
   jitter(a){ return this.set('jitter', a); }
   // draw style — fill and stroke are independent, patternable booleans, so you
   // can `.fill(0)` to disable fill, or `.stroke("1 0")` to alternate.
@@ -286,6 +287,29 @@ function makeOsc(o) {
   };
 }
 const isOsc = (a) => a != null && typeof a === 'object' && a.__osc !== undefined;
+
+// ── palettes ───────────────────────────────────────────────────────────────────
+// palette("#a", "#b", …).at(x) maps a 0..1 position x — a number, pattern, or osc
+// — to an interpolated colour, for use in .color(). We just package the stops +
+// position here; the renderer does the actual interpolation.
+function palette(...colors) {
+  const stops = colors.flat();
+  return {
+    __pal: stops,
+    at(x) {
+      if (isOsc(x)) return makeOsc({ ...x.__osc, pal: stops });                       // live
+      if (x instanceof Pattern || typeof x === 'string') return reify(x).fmap((v) => ({ __pal: stops, t: +v }));
+      return pure({ __pal: stops, t: +x });                                           // fixed
+    },
+  };
+}
+
+// ── background colour ───────────────────────────────────────────────────────────
+// bg("#101820") sets the canvas background for this patch. Returns silence so it
+// can sit inside a stack(...). The renderer reads it through a registered sink.
+let _bgSink = null;
+function _setBgSink(fn) { _bgSink = fn; }
+function bg(color) { if (_bgSink) _bgSink(color); return silence; }
 
 // ── combine two patterns: structure from the left, value sampled from right ────
 function appLeft(pf, pv) {
@@ -467,7 +491,7 @@ function rev(p) { return reify(p).rev(); }
 export const DSL = {
   Pattern, pure, silence, stack, slowcat, fastcat, cat, seq, sequence, timecat,
   fast, slow, rev, run, range, mini, euclid,
-  shape, s, n, choose, irand, osc,
+  shape, s, n, choose, irand, osc, palette, bg, _setBgSink,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   hasOnset, span, isOsc,
 };
