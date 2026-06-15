@@ -283,6 +283,94 @@ const numAt = (a, age, gp = 0) => (isOsc(a) ? evalOsc(a.__osc, age, gp) : a);
 // resolve an oscillator-driven colour: through a palette if attached, else as hue
 const oscColor = (d, age, gp) => (d.pal ? interpPal(d.pal, evalOsc(d, age, gp)) : resolveColor(evalOsc(d, age, gp), gp));
 
+// ── colour → rgb float triples (0..1), for the WebGL renderer ──────────────────
+// The Canvas2D path works in CSS colour strings; WebGL wants float rgb. These
+// mirror resolveColor / interpPal / oscColor but return [r,g,b] in 0..1 (sRGB).
+function hexToRGB01(s) {
+  let h = s[0] === '#' ? s.slice(1) : s;
+  if (h.length === 3) h = h.split('').map((x) => x + x).join('');
+  const n = parseInt(h, 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+function lchToRgb01(L, C, h) {
+  const a = C * Math.cos(h), b = C * Math.sin(h);
+  const l_ = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m_ = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s_ = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3;
+  return [
+    _gam(+4.0767416621 * l_ - 3.3077115913 * m_ + 0.2309699292 * s_) / 255,
+    _gam(-1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_) / 255,
+    _gam(-0.0041960863 * l_ - 0.7034186147 * m_ + 1.7076147010 * s_) / 255,
+  ];
+}
+function interpPalRGB(colors, t) {
+  const lch = palStops(colors), n = lch.length;
+  if (n === 0) return [1, 1, 1];
+  if (n === 1) return lchToRgb01(lch[0][0], lch[0][1], lch[0][2]);
+  const u = t - Math.floor(t);
+  const x = u * (n - 1), i = Math.min(n - 2, Math.floor(x)), f = x - i, A = lch[i], B = lch[i + 1];
+  const L = A[0] + (B[0] - A[0]) * f, C = A[1] + (B[1] - A[1]) * f;
+  let h;
+  if (A[1] < 1e-4) h = B[2]; else if (B[1] < 1e-4) h = A[2];
+  else { let dh = B[2] - A[2]; if (dh > Math.PI) dh -= 2 * Math.PI; if (dh < -Math.PI) dh += 2 * Math.PI; h = A[2] + dh * f; }
+  return lchToRgb01(L, C, h);
+}
+function resolveColorRGB(c, phase) {
+  if (c && typeof c === 'object' && c.__pal) return interpPalRGB(c.__pal, c.t != null ? c.t : phase);
+  if (typeof c === 'string') {
+    if (c[0] === '#') return hexToRGB01(c);
+    if (NAMED[c]) return hexToRGB01(NAMED[c]);
+    let h = 0; for (let i = 0; i < c.length; i++) h = (h * 31 + c.charCodeAt(i)) % 360;
+    const rgb = hslRGB(h, 0.8, 0.64); return [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255];
+  }
+  if (typeof c === 'number') { const rgb = hslRGB(((c * 360) % 360 + 360) % 360, 0.82, 0.64); return [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255]; }
+  const rgb = hexToRGB01(PALETTE[Math.floor(phase * PALETTE.length) % PALETTE.length]); return rgb;
+}
+const oscColorRGB = (d, age, gp) => (d.pal ? interpPalRGB(d.pal, evalOsc(d, age, gp)) : resolveColorRGB(evalOsc(d, age, gp), gp));
+// parse a captured CSS colour string (resolveColor output: '#…', 'rgb(…)', 'hsl(h s% l%)')
+function cssToRGB(s) {
+  if (typeof s !== 'string') return [1, 1, 1];
+  if (s[0] === '#') return hexToRGB01(s);
+  const m = s.match(/[\d.]+/g);
+  if (!m) return [1, 1, 1];
+  if (s[0] === 'r') return [(+m[0]) / 255, (+m[1]) / 255, (+m[2]) / 255];
+  if (s[0] === 'h') { const rgb = hslRGB(+m[0], (+m[1]) / 100, (+m[2]) / 100); return [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255]; }
+  return [1, 1, 1];
+}
+
+// ── pack a particle into the WebGL instance scratch (live oscillators applied).
+// Mirrors drawGlyph's mod resolution but emits numbers + float rgb for the GPU.
+const SHAPE_ID = { dot: 0, circle: 0, ring: 1, arc: 2, square: 3, box: 3, tri: 4, pent: 5, hex: 6, star: 7, plus: 8, line: 9, cross: 10 };
+const OUTLINE_IDS = new Set([1, 2, 9, 10]);
+function glResolve(p, minDim, out) {
+  const age = p.age;
+  let sizePx = p.size, rotTurns = p.rotTurns, open = p.open, alpha = p.alpha, weight = p.weight, color = null;
+  if (p.mods) for (const m of p.mods) {
+    const val = evalOsc(m.osc, age, p.phase);
+    if (m.field === 'size') sizePx = val * minDim;
+    else if (m.field === 'color') color = oscColorRGB(m.osc, age, p.phase);
+    else if (m.field === 'rotate') rotTurns = val;
+    else if (m.field === 'open') open = val;
+    else if (m.field === 'alpha') alpha = val;
+    else if (m.field === 'weight') weight = val;
+    // rotateX / rotateY are flat in P1 — real perspective lands in P2
+  }
+  if (!color) { if (!p._rgb) p._rgb = cssToRGB(p.color); color = p._rgb; }
+  out.x = p.x; out.y = p.y;
+  out.r = sizePx;
+  out.rot = rotTurns * TAU + p.spin * age;
+  out.rgb = color;
+  out.alpha = Math.max(0, Math.min(1, alpha * p._env));
+  out.weight = Math.max(0.75, weight * minDim);
+  out.open = open;
+  const id = SHAPE_ID[p.shape] != null ? SHAPE_ID[p.shape] : 0;
+  out.shape = id;
+  const outline = OUTLINE_IDS.has(id);
+  out.stroke = outline ? 1 : (p.stroke ? 1 : 0);
+  out.fill = outline ? 0 : (p.fill ? 1 : 0);
+  out.blend = p.blend;
+}
+
 // place a glyph: explicit x/y (0..1) win, else lay it on a ring by onset phase.
 // Inputs may be live oscillators, so this is re-run each frame for moving glyphs.
 // Unified layout: position = centre (x/y) + polar offset (radius, angle). x/y
@@ -569,7 +657,7 @@ function tick(dt) {
   // go straight to the main canvas; grouped glyphs render to a per-group buffer
   // so a layer effect (pixelate) can be applied before compositing.
   if (USE_GL) {
-    glr.render({ live, minDim, W, H, cycle, showClock, traceMode });
+    glr.render({ live, minDim, resolve: glResolve, W, H, cycle, showClock, traceMode });
   } else {
     const buckets = new Map();   // gid -> particle[]
     for (const p of live) {
@@ -589,7 +677,7 @@ function tick(dt) {
 
 // debug stepper — lets tooling drive frames when the tab is backgrounded (the
 // browser pauses requestAnimationFrame while hidden). Harmless in production.
-window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); }, particles, setDecay: (v) => { decayScale = v; } };
+window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); }, particles, setDecay: (v) => { decayScale = v; }, glr };
 
 // ── presets ───────────────────────────────────────────────────────────────────────
 const PRESETS = {
