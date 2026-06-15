@@ -186,6 +186,35 @@ void main(){
   gl_FragColor = vec4(vColor * a, a);     // premultiplied — blends set the factors
 }`;
 
+// ── fullscreen post-process passes (per-group FX chain) ──────────────────────────
+// A single big triangle covering the screen; `vUv` is 0..1. Each FX is a fragment
+// shader sampling the previous pass's texture (tMap). Passes ping-pong between two
+// render targets per group, then a final composite blits the result to the screen.
+const FS_VERT = `
+precision highp float;
+attribute vec3 position;        // clip-space corner (z unused; 3-comp avoids NaN bounds)
+varying vec2 vUv;
+void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+
+const COPY_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+varying vec2 vUv;
+void main() { gl_FragColor = texture2D(tMap, vUv); }`;
+
+// pixelate: snap the sample coordinate to block centres (block size in device px)
+const PIXELATE_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform vec2 uTexel;       // 1 / target size, device px
+uniform float uBlock;      // block size, device px
+varying vec2 vUv;
+void main() {
+  vec2 px = vUv / uTexel;
+  vec2 snapped = (floor(px / uBlock) + 0.5) * uBlock;
+  gl_FragColor = texture2D(tMap, snapped * uTexel);
+}`;
+
 // blend mode → bucket key. Buckets draw in BLEND_ORDER (additive/screen last so
 // glows sit on top); within a bucket, age order (newest last) is preserved.
 const BLEND_ORDER = ['normal', 'multiply', 'screen', 'additive'];
@@ -259,7 +288,35 @@ export class GLRenderer {
     this.trace.frustumCulled = false; this.trace.visible = false;
     this.overlay.add(this.trace);
 
+    // fullscreen-pass scene (post-process FX). One big triangle; `position` is the
+    // clip-space coord, so no camera transform is needed.
+    this.fsScene = new THREE.Scene();
+    const fsGeom = new THREE.BufferGeometry();
+    fsGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3));
+    const fsMat = (frag, uniforms) => new THREE.RawShaderMaterial({ vertexShader: FS_VERT, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false });
+    this.fx = {
+      copy: fsMat(COPY_FRAG, { tMap: { value: null } }),
+      pixelate: fsMat(PIXELATE_FRAG, { tMap: { value: null }, uTexel: { value: new THREE.Vector2() }, uBlock: { value: 1 } }),
+    };
+    this.fsMesh = new THREE.Mesh(fsGeom, this.fx.copy);
+    this.fsMesh.frustumCulled = false;
+    this.fsScene.add(this.fsMesh);
+
+    this.groupRTs = new Map();   // gid → { a, b, w, h } ping-pong targets
+
     this._scratch = { x: 0, y: 0, r: 0, rot: 0, rotX: 0, rotY: 0, rgb: [1, 1, 1], alpha: 1, weight: 1, open: 0, shape: 0, fill: 1, stroke: 0, blend: 'source-over' };
+  }
+
+  _getGroupRT(gid) {
+    const dw = Math.max(1, Math.round(this.W * this.DPR)), dh = Math.max(1, Math.round(this.H * this.DPR));
+    let rt = this.groupRTs.get(gid);
+    if (!rt || rt.w !== dw || rt.h !== dh) {
+      if (rt) { rt.a.dispose(); rt.b.dispose(); }
+      const opt = { depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
+      rt = { a: new THREE.WebGLRenderTarget(dw, dh, opt), b: new THREE.WebGLRenderTarget(dw, dh, opt), w: dw, h: dh };
+      this.groupRTs.set(gid, rt);
+    }
+    return rt;
   }
 
   _ensureCapacity(n) {
@@ -287,27 +344,54 @@ export class GLRenderer {
 
   setBackground(css) { try { this.bg.set(css); } catch { /* keep previous */ } }
 
-  // state: { live, minDim, resolve }  — resolve(p, minDim, out) fills `out` with
-  // the glyph's effective draw values (live oscillators already applied).
+  // state: { live, minDim, resolve, ... }  — resolve(p, minDim, out) fills `out`
+  // with the glyph's effective draw values (live oscillators already applied).
+  // Ungrouped glyphs composite straight to the screen; each group() renders to its
+  // own target, runs its FX chain, then composites on top.
   render(state) {
     const r = this.renderer;
+    r.setRenderTarget(null);
     r.setClearColor(this.bg, 1);
     r.clear(true, true, true);
     const live = (state && state.live) || [];
+    this._minDim = state ? state.minDim : Math.min(this.W, this.H);
+    this._resolve = state && state.resolve;
 
     // overlays first (behind the glyphs): playhead sweep + trace polyline
     this._updateOverlays(state, live);
     if (this.playhead.visible || this.trace.visible) r.render(this.overlay, this.camera);
-    if (!live.length) return;
+    if (!live.length) { this._pruneGroups(null); return; }
 
-    this._ensureCapacity(live.length);
-    const out = this._scratch;
-    const { minDim, resolve } = state;
+    const ungrouped = [];
+    const groups = new Map();   // gid → { parts, fx }, in first-seen (age) order
+    for (const p of live) {
+      if (p.gid) { let g = groups.get(p.gid); if (!g) groups.set(p.gid, g = { parts: [], fx: p.fx }); g.parts.push(p); }
+      else ungrouped.push(p);
+    }
 
+    if (ungrouped.length) this._drawGlyphs(ungrouped, null);
+
+    for (const [gid, g] of groups) {
+      const rt = this._getGroupRT(gid);
+      this._drawGlyphs(g.parts, rt.a);
+      const tex = this._applyChain(rt, g.fx);
+      this._composite(tex, g.fx);
+    }
+    this._pruneGroups(groups);
+  }
+
+  // draw a glyph list (blend-bucketed, age order preserved) into `target`
+  // (a render target, or null for the screen). Targets are cleared transparent
+  // first; the screen is not (it already holds the bg + overlays + earlier layers).
+  _drawGlyphs(parts, target) {
+    const r = this.renderer, out = this._scratch, minDim = this._minDim, resolve = this._resolve;
+    this._ensureCapacity(parts.length);
+    r.setRenderTarget(target);
+    if (target) { r.setClearColor(0x000000, 0); r.clear(true, false, false); }
     for (const key of BLEND_ORDER) {
       let count = 0;
-      for (let i = 0; i < live.length; i++) {
-        const p = live[i];
+      for (let i = 0; i < parts.length; i++) {
+        const p = parts[i];
         if (blendKey(p.blend) !== key) continue;
         resolve(p, minDim, out);
         const a = this.arrays;
@@ -333,6 +417,57 @@ export class GLRenderer {
       this.geom.instanceCount = count;
       this.mesh.material = this.materials[key];
       r.render(this.scene, this.camera);
+    }
+    r.setRenderTarget(null);
+  }
+
+  // run the group's FX passes, ping-ponging between rt.a/rt.b; return the final
+  // texture. (P3: pixelate only — the chain grows in P4.)
+  _applyChain(rt, fx) {
+    let read = rt.a, write = rt.b;
+    for (const name of this._fxPasses(fx)) {
+      const mat = this._setupPass(name, fx, rt);
+      this._blit(mat, read.texture, write);
+      const t = read; read = write; write = t;
+    }
+    return read.texture;
+  }
+  _fxPasses(fx) {
+    const out = [];
+    if (fx && fx.pixelate > 1) out.push('pixelate');
+    return out;
+  }
+  _setupPass(name, fx, rt) {
+    const mat = this.fx[name];
+    if (name === 'pixelate') { mat.uniforms.uTexel.value.set(1 / rt.w, 1 / rt.h); mat.uniforms.uBlock.value = Math.max(1, fx.pixelate * this.DPR); }
+    return mat;
+  }
+  // offscreen pass: replace the target's contents with the shaded result
+  _blit(mat, inputTex, target) {
+    mat.uniforms.tMap.value = inputTex;
+    mat.blending = THREE.NoBlending; mat.transparent = false;
+    this.fsMesh.material = mat;
+    this.renderer.setRenderTarget(target);
+    this.renderer.render(this.fsScene, this.camera);
+    this.renderer.setRenderTarget(null);
+  }
+  // composite a (premultiplied) group texture onto the screen, premultiplied-over
+  _composite(tex /*, fx */) {
+    const mat = this.fx.copy;
+    mat.uniforms.tMap.value = tex;
+    mat.blending = THREE.CustomBlending; mat.blendEquation = THREE.AddEquation;
+    mat.blendSrc = THREE.OneFactor; mat.blendDst = THREE.OneMinusSrcAlphaFactor;
+    mat.blendSrcAlpha = THREE.OneFactor; mat.blendDstAlpha = THREE.OneMinusSrcAlphaFactor;
+    mat.transparent = true;
+    this.fsMesh.material = mat;
+    this.renderer.setRenderTarget(null);
+    this.renderer.render(this.fsScene, this.camera);
+  }
+  _pruneGroups(activeGroups) {
+    for (const gid of [...this.groupRTs.keys()]) {
+      if (!activeGroups || !activeGroups.has(gid)) {
+        const rt = this.groupRTs.get(gid); rt.a.dispose(); rt.b.dispose(); this.groupRTs.delete(gid);
+      }
     }
   }
 
@@ -378,6 +513,9 @@ export class GLRenderer {
   dispose() {
     this.geom.dispose();
     for (const m of Object.values(this.materials)) m.dispose();
+    for (const m of Object.values(this.fx)) m.dispose();
+    this.fsMesh.geometry.dispose();
+    this._pruneGroups(null);
     this.playhead.geometry.dispose(); this.playhead.material.dispose();
     this.trace.geometry.dispose(); this.trace.material.dispose();
     this.renderer.dispose();
