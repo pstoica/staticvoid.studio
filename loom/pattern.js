@@ -343,8 +343,24 @@ function bg(color) { if (_bgSink) _bgSink(color); return silence; }
 // first supported fx. It quacks like a Pattern (has .query) so it stacks normally.
 let _gid = 0;
 class Group {
-  constructor(pat) { this._pat = reify(pat); this._gid = ++_gid; this._fx = {}; }
-  pixelate(n) { this._fx.pixelate = n; return this; }
+  constructor(pat) { this._pat = reify(pat); this._gid = ++_gid; this._fx = { chain: [] }; }
+  // Each effect appends to an ordered chain; the renderer runs them in call order
+  // as post-process passes on the group's render target. Every param may be a
+  // number, an osc, or a pattern — resolved against *global* time each frame
+  // (FX run per-layer-per-frame, not per-glyph). pixelate also keeps a flat
+  // `_fx.pixelate` so the legacy Canvas2D renderer still applies it.
+  _push(fx) { this._fx.chain.push(fx); return this; }
+  pixelate(n) { this._fx.pixelate = n; return this._push({ type: 'pixelate', block: n }); }      // block size, px
+  blur(n = 4) { return this._push({ type: 'blur', radius: n }); }                                  // gaussian radius, px
+  feedback(fade = 0.92, zoom = 1.0, rot = 0) { return this._push({ type: 'feedback', fade, zoom, rot }); } // trails/tunnel
+  trails(fade = 0.92) { return this._push({ type: 'feedback', fade, zoom: 1.0, rot: 0 }); }        // feedback, no warp
+  hue(t = 0) { return this._push({ type: 'grade', hue: t }); }                                     // hue shift, turns
+  brightness(b = 1) { return this._push({ type: 'grade', brightness: b }); }                       // 1 = identity
+  contrast(c = 1) { return this._push({ type: 'grade', contrast: c }); }                           // 1 = identity
+  saturate(s = 1) { return this._push({ type: 'grade', saturate: s }); }                           // 0 = grayscale
+  displace(amount = 0.02, scale = 3) { return this._push({ type: 'displace', amount, scale }); }   // uv warp
+  kaleido(n = 6) { return this._push({ type: 'kaleido', slices: n }); }                            // radial mirror
+  mirror() { return this._push({ type: 'mirror' }); }                                              // left/right symmetry
   query(s) {
     const gid = this._gid, fx = this._fx;
     return this._pat.query(s).map((h) => hap(h.whole, h.part, Object.assign({}, h.value, { _gid: gid, _fx: fx })));

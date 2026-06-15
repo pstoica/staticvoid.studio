@@ -215,6 +215,109 @@ void main() {
   gl_FragColor = texture2D(tMap, snapped * uTexel);
 }`;
 
+// separable gaussian blur (9 taps); run once horizontal, once vertical
+const BLUR_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform vec2 uTexel;
+uniform vec2 uDir;         // (1,0) horizontal | (0,1) vertical
+uniform float uRadius;     // spread, device px
+varying vec2 vUv;
+void main() {
+  vec4 sum = vec4(0.0); float wsum = 0.0;
+  for (int i = -4; i <= 4; i++) {
+    float fi = float(i);
+    float w = exp(-fi * fi / 8.0);
+    vec2 off = uDir * uTexel * fi * (uRadius * 0.25);
+    sum += texture2D(tMap, vUv + off) * w; wsum += w;
+  }
+  gl_FragColor = sum / wsum;
+}`;
+
+// feedback / trails: composite the current layer over a transformed copy of the
+// previous accumulated frame (zoom + rotate about centre, faded). Premultiplied.
+const FEEDBACK_FRAG = `
+precision highp float;
+uniform sampler2D tMap;    // current layer
+uniform sampler2D tHist;   // previous accumulation
+uniform float uFade, uZoom, uRot;
+varying vec2 vUv;
+void main() {
+  vec2 p = vUv - 0.5;
+  float c = cos(uRot), s = sin(uRot);
+  vec2 pr = vec2(c * p.x - s * p.y, s * p.x + c * p.y) / max(uZoom, 0.001);
+  vec4 hist = texture2D(tHist, pr + 0.5);
+  vec4 cur = texture2D(tMap, vUv);
+  // current OVER faded history (premultiplied): trails decay instead of blowing
+  // out to white, while zoom/rot still build the tunnel.
+  gl_FragColor = clamp(cur + hist * uFade * (1.0 - cur.a), 0.0, 1.0);
+}`;
+
+// colour grade: hue (turns), saturate (0..), contrast (1=id), brightness (1=id).
+// input/output premultiplied, so unpremultiply → grade → repremultiply.
+const GRADE_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform float uHue, uBright, uContrast, uSat;
+varying vec2 vUv;
+void main() {
+  vec4 t = texture2D(tMap, vUv);
+  float a = t.a;
+  vec3 col = a > 0.0 ? t.rgb / a : t.rgb;
+  float ang = uHue * 6.28318530718;                 // hue rotate in YIQ
+  float Y = dot(col, vec3(0.299, 0.587, 0.114));
+  float I = dot(col, vec3(0.595716, -0.274453, -0.321263));
+  float Q = dot(col, vec3(0.211456, -0.522591, 0.311135));
+  float c = cos(ang), s = sin(ang);
+  float I2 = I * c - Q * s, Q2 = I * s + Q * c;
+  col = vec3(Y + 0.9563 * I2 + 0.6210 * Q2, Y - 0.2721 * I2 - 0.6474 * Q2, Y - 1.1070 * I2 + 1.7046 * Q2);
+  float l = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(vec3(l), col, uSat);                     // saturate
+  col = (col - 0.5) * uContrast + 0.5;               // contrast
+  col *= uBright;                                     // brightness
+  col = clamp(col, 0.0, 1.0);
+  gl_FragColor = vec4(col * a, a);
+}`;
+
+// displacement: warp the sample coordinate with a moving sinusoid field
+const DISPLACE_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform float uAmount, uScale, uTime;
+varying vec2 vUv;
+void main() {
+  vec2 uv = vUv;
+  float fx = sin((uv.y * uScale + uTime) * 6.28318530718);
+  float fy = cos((uv.x * uScale + uTime) * 6.28318530718);
+  gl_FragColor = texture2D(tMap, uv + vec2(fx, fy) * uAmount);
+}`;
+
+// kaleidoscope: fold the plane into N mirrored wedges about the centre
+const KALEIDO_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform float uSlices;
+varying vec2 vUv;
+void main() {
+  vec2 p = vUv - 0.5;
+  float r = length(p);
+  float a = atan(p.y, p.x);
+  float seg = 6.28318530718 / max(uSlices, 1.0);
+  a = mod(a, seg);
+  a = abs(a - seg * 0.5);
+  gl_FragColor = texture2D(tMap, vec2(cos(a), sin(a)) * r + 0.5);
+}`;
+
+// mirror: left/right symmetry about the vertical centre
+const MIRROR_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+varying vec2 vUv;
+void main() {
+  vec2 uv = vUv; uv.x = max(uv.x, 1.0 - uv.x);
+  gl_FragColor = texture2D(tMap, uv);
+}`;
+
 // blend mode → bucket key. Buckets draw in BLEND_ORDER (additive/screen last so
 // glows sit on top); within a bucket, age order (newest last) is preserved.
 const BLEND_ORDER = ['normal', 'multiply', 'screen', 'additive'];
@@ -294,9 +397,16 @@ export class GLRenderer {
     const fsGeom = new THREE.BufferGeometry();
     fsGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3));
     const fsMat = (frag, uniforms) => new THREE.RawShaderMaterial({ vertexShader: FS_VERT, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false });
+    const V2 = () => new THREE.Vector2();
     this.fx = {
       copy: fsMat(COPY_FRAG, { tMap: { value: null } }),
-      pixelate: fsMat(PIXELATE_FRAG, { tMap: { value: null }, uTexel: { value: new THREE.Vector2() }, uBlock: { value: 1 } }),
+      pixelate: fsMat(PIXELATE_FRAG, { tMap: { value: null }, uTexel: { value: V2() }, uBlock: { value: 1 } }),
+      blur: fsMat(BLUR_FRAG, { tMap: { value: null }, uTexel: { value: V2() }, uDir: { value: V2() }, uRadius: { value: 4 } }),
+      feedback: fsMat(FEEDBACK_FRAG, { tMap: { value: null }, tHist: { value: null }, uFade: { value: 0.92 }, uZoom: { value: 1 }, uRot: { value: 0 } }),
+      grade: fsMat(GRADE_FRAG, { tMap: { value: null }, uHue: { value: 0 }, uBright: { value: 1 }, uContrast: { value: 1 }, uSat: { value: 1 } }),
+      displace: fsMat(DISPLACE_FRAG, { tMap: { value: null }, uAmount: { value: 0.02 }, uScale: { value: 3 }, uTime: { value: 0 } }),
+      kaleido: fsMat(KALEIDO_FRAG, { tMap: { value: null }, uSlices: { value: 6 } }),
+      mirror: fsMat(MIRROR_FRAG, { tMap: { value: null } }),
     };
     this.fsMesh = new THREE.Mesh(fsGeom, this.fx.copy);
     this.fsMesh.frustumCulled = false;
@@ -311,7 +421,7 @@ export class GLRenderer {
     const dw = Math.max(1, Math.round(this.W * this.DPR)), dh = Math.max(1, Math.round(this.H * this.DPR));
     let rt = this.groupRTs.get(gid);
     if (!rt || rt.w !== dw || rt.h !== dh) {
-      if (rt) { rt.a.dispose(); rt.b.dispose(); }
+      if (rt) { rt.a.dispose(); rt.b.dispose(); if (rt.hist) { rt.hist[0].dispose(); rt.hist[1].dispose(); } }
       const opt = { depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
       rt = { a: new THREE.WebGLRenderTarget(dw, dh, opt), b: new THREE.WebGLRenderTarget(dw, dh, opt), w: dw, h: dh };
       this.groupRTs.set(gid, rt);
@@ -356,6 +466,9 @@ export class GLRenderer {
     const live = (state && state.live) || [];
     this._minDim = state ? state.minDim : Math.min(this.W, this.H);
     this._resolve = state && state.resolve;
+    this._eg = (state && state.evalGlobal) || ((v) => (typeof v === 'number' ? v : 0));
+    this._cycle = state ? state.cycle || 0 : 0;
+    this._elapsed = state ? state.elapsed || 0 : 0;
 
     // overlays first (behind the glyphs): playhead sweep + trace polyline
     this._updateOverlays(state, live);
@@ -421,26 +534,61 @@ export class GLRenderer {
     r.setRenderTarget(null);
   }
 
-  // run the group's FX passes, ping-ponging between rt.a/rt.b; return the final
-  // texture. (P3: pixelate only — the chain grows in P4.)
+  // resolve an FX param against global time (number / osc / pattern) via main.js
+  _num(v, def) { return v == null ? def : this._eg(v, this._cycle, this._elapsed); }
+
+  // run the group's FX chain in call order, ping-ponging between rt.a/rt.b; return
+  // the final texture. feedback uses a separate persistent history pair (rt.h).
   _applyChain(rt, fx) {
+    if (!fx || !fx.chain || !fx.chain.length) return rt.a.texture;
     let read = rt.a, write = rt.b;
-    for (const name of this._fxPasses(fx)) {
-      const mat = this._setupPass(name, fx, rt);
-      this._blit(mat, read.texture, write);
-      const t = read; read = write; write = t;
+    const swap = () => { const t = read; read = write; write = t; };
+    const texel = (m) => m.uniforms.uTexel.value.set(1 / rt.w, 1 / rt.h);
+    for (const e of fx.chain) {
+      const t = e.type;
+      if (t === 'pixelate') {
+        const m = this.fx.pixelate; texel(m); m.uniforms.uBlock.value = Math.max(1, this._num(e.block, 8) * this.DPR);
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'blur') {
+        const m = this.fx.blur; texel(m); m.uniforms.uRadius.value = this._num(e.radius, 4) * this.DPR;
+        m.uniforms.uDir.value.set(1, 0); this._blit(m, read.texture, write); swap();
+        m.uniforms.uDir.value.set(0, 1); this._blit(m, read.texture, write); swap();
+      } else if (t === 'grade') {
+        const m = this.fx.grade;
+        m.uniforms.uHue.value = this._num(e.hue, 0);
+        m.uniforms.uBright.value = this._num(e.brightness, 1);
+        m.uniforms.uContrast.value = this._num(e.contrast, 1);
+        m.uniforms.uSat.value = this._num(e.saturate, 1);
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'displace') {
+        const m = this.fx.displace; m.uniforms.uAmount.value = this._num(e.amount, 0.02); m.uniforms.uScale.value = this._num(e.scale, 3); m.uniforms.uTime.value = this._elapsed * 0.2;
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'kaleido') {
+        const m = this.fx.kaleido; m.uniforms.uSlices.value = Math.max(1, this._num(e.slices, 6));
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'mirror') {
+        this._blit(this.fx.mirror, read.texture, write); swap();
+      } else if (t === 'feedback') {
+        this._ensureHistory(rt);
+        const m = this.fx.feedback;
+        m.uniforms.tHist.value = rt.hist[rt.histCur].texture;
+        m.uniforms.uFade.value = this._num(e.fade, 0.92);
+        m.uniforms.uZoom.value = this._num(e.zoom, 1.0);
+        m.uniforms.uRot.value = this._num(e.rot, 0);
+        this._blit(m, read.texture, write); swap();                     // result = current + faded history
+        this._blit(this.fx.copy, read.texture, rt.hist[1 - rt.histCur]); // store as next history
+        rt.histCur = 1 - rt.histCur;
+      }
     }
     return read.texture;
   }
-  _fxPasses(fx) {
-    const out = [];
-    if (fx && fx.pixelate > 1) out.push('pixelate');
-    return out;
-  }
-  _setupPass(name, fx, rt) {
-    const mat = this.fx[name];
-    if (name === 'pixelate') { mat.uniforms.uTexel.value.set(1 / rt.w, 1 / rt.h); mat.uniforms.uBlock.value = Math.max(1, fx.pixelate * this.DPR); }
-    return mat;
+  // lazily allocate the feedback history pair (persistent across frames, unlike a/b)
+  _ensureHistory(rt) {
+    if (rt.hist && rt.histW === rt.w && rt.histH === rt.h) return;
+    if (rt.hist) { rt.hist[0].dispose(); rt.hist[1].dispose(); }
+    const opt = { depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
+    rt.hist = [new THREE.WebGLRenderTarget(rt.w, rt.h, opt), new THREE.WebGLRenderTarget(rt.w, rt.h, opt)];
+    rt.histW = rt.w; rt.histH = rt.h; rt.histCur = 0;
   }
   // offscreen pass: replace the target's contents with the shaded result
   _blit(mat, inputTex, target) {
@@ -466,7 +614,9 @@ export class GLRenderer {
   _pruneGroups(activeGroups) {
     for (const gid of [...this.groupRTs.keys()]) {
       if (!activeGroups || !activeGroups.has(gid)) {
-        const rt = this.groupRTs.get(gid); rt.a.dispose(); rt.b.dispose(); this.groupRTs.delete(gid);
+        const rt = this.groupRTs.get(gid);
+        rt.a.dispose(); rt.b.dispose(); if (rt.hist) { rt.hist[0].dispose(); rt.hist[1].dispose(); }
+        this.groupRTs.delete(gid);
       }
     }
   }

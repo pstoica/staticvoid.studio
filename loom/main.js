@@ -37,6 +37,7 @@ const HL_SIG = new Set(['sine','cosine','saw','isaw','tri','square','rand','perl
 const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux','off','degrade','degradeBy',
   'unDegradeBy','sometimes','sometimesBy','often','rarely','early','late','range','add','sub','mul','div',
   'color','size','x','y','radius','angle','grid','rotate','rotateX','rotateY','spin','blend','alpha','opacity','pan','jitter','fill','stroke','weight','pixelate',
+  'blur','feedback','trails','hue','brightness','contrast','saturate','displace','kaleido','mirror',
   'cap','join','open','vertex','attack','decay','life','set','spread','phase','rate','quantize']);
 const HL_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+(?:\.\d+)?\b|=>|\.[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*|[(){}\[\],.]/g;
 const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -89,6 +90,7 @@ new ResizeObserver(resize).observe(activeCanvas);
 let pattern = DSL.silence;
 let cps = 0.6;          // cycles per second
 let cycle = 0;          // current position in cycles (fractional)
+let elapsed = 0;        // wall-clock seconds since start, for global-time FX params
 let playing = true;
 let decayScale = 1.5;   // master multiplier on a new glyph's decay (how long it lingers)
 const DEFAULT_BG = '#06070a';
@@ -373,6 +375,20 @@ function glResolve(p, minDim, out) {
   out.blend = p.blend;
 }
 
+// resolve an FX parameter against GLOBAL time — FX run per-layer-per-frame, not
+// per-glyph, so oscs evaluate at elapsed seconds (not glyph age) and patterns are
+// sampled at the current cycle. Numbers pass through.
+function evalGlobal(param, cycle, elapsed) {
+  if (param == null) return param;
+  if (isOsc(param)) return evalOsc(param.__osc, elapsed, 0);
+  if (param instanceof DSL.Pattern) {
+    const hs = param.query(DSL.span(cycle, cycle));
+    for (const h of hs) if (h.value != null) return +h.value;
+    return 0;
+  }
+  return param;
+}
+
 // place a glyph: explicit x/y (0..1) win, else lay it on a ring by onset phase.
 // Inputs may be live oscillators, so this is re-run each frame for moving glyphs.
 // Unified layout: position = centre (x/y) + polar offset (radius, angle). x/y
@@ -576,6 +592,7 @@ function frame(now) {
 }
 
 function tick(dt) {
+  elapsed += dt;   // advances even when paused (like glyph age), so FX keep living
   // Clean redraw: wipe the buffer completely every frame, then repaint only the
   // live particles. Nothing is ever baked in, so there's no alpha residue/ghosting.
   // "Trails" come from particles fading out over their own lifetime, not from a veil.
@@ -659,7 +676,7 @@ function tick(dt) {
   // go straight to the main canvas; grouped glyphs render to a per-group buffer
   // so a layer effect (pixelate) can be applied before compositing.
   if (USE_GL) {
-    glr.render({ live, minDim, resolve: glResolve, W, H, cycle, showClock, traceMode });
+    glr.render({ live, minDim, resolve: glResolve, evalGlobal, elapsed, W, H, cycle, showClock, traceMode });
   } else {
     const buckets = new Map();   // gid -> particle[]
     for (const p of live) {
