@@ -25,7 +25,7 @@ const HL_SIG = new Set(['sine','cosine','saw','isaw','tri','square','rand','perl
 const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux','off','degrade','degradeBy',
   'unDegradeBy','sometimes','sometimesBy','often','rarely','early','late','range','add','sub','mul','div',
   'color','size','x','y','radius','angle','grid','rotate','rotateX','rotateY','spin','blend','alpha','opacity','pan','jitter','fill','stroke','weight','pixelate',
-  'cap','join','open','vertex','attack','decay','life','set','spread','phase','rate']);
+  'cap','join','open','vertex','attack','decay','life','set','spread','phase','rate','quantize']);
 const HL_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+(?:\.\d+)?\b|=>|\.[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*|[(){}\[\],.]/g;
 const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 function classOf(tok) {
@@ -260,9 +260,9 @@ function evalOsc(d, age, gp = 0) {
   }
   const lo = numAt(d.lo, age, gp), hi = numAt(d.hi, age, gp);
   let r = lo + v * (hi - lo);
-  if (d.ops) for (const [op, x] of d.ops) {            // .add/.sub/.mul/.div (x may be an osc)
+  if (d.ops) for (const [op, x] of d.ops) {            // .add/.sub/.mul/.div/.quantize (x may be an osc)
     const y = numAt(x, age, gp);
-    r = op === '*' ? r * y : op === '+' ? r + y : op === '-' ? r - y : r / y;
+    r = op === '*' ? r * y : op === '+' ? r + y : op === '-' ? r - y : op === '/' ? r / y : op === 'q' ? Math.round(r * y) / y : r;
   }
   return r;
 }
@@ -758,6 +758,17 @@ const PRESETS = {
   shape("plus*6")
     .x(rand).y(osc(0.12, "saw").range(1.05, -0.05))
     .color("#ffd166").size(0.01).rotate(osc(0.5).range(0, 1)).decay(4)
+)`,
+
+  // quantized placement — wandering oscillators snapped to a grid, color stepped
+  'quant': `stack(
+  bg("#06060c"),
+  shape("dot*64")
+    .x(osc(0.12, "perlin").spread(1).range(0.08, 0.92).quantize(12))
+    .y(osc(0.15, "perlin").spread(2).range(0.08, 0.92).quantize(12))
+    .color(palette("neon").at(saw.quantize(6)))
+    .size(0.018)
+    .decay(2.5)
 )`,
 
   // cross-modulation: the radius oscillator's RATE is itself driven by another

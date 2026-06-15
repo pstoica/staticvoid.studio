@@ -123,6 +123,7 @@ class Pattern {
   sub(arg) { return appLeft(this.fmap((l) => (r) => l - r), reify(arg)); }
   mul(arg) { return appLeft(this.fmap((l) => (r) => l * r), reify(arg)); }
   div(arg) { return appLeft(this.fmap((l) => (r) => l / r), reify(arg)); }
+  quantize(n) { return this.fmap((v) => Math.round(v * n) / n); } // snap to nearest 1/n
 
   // ── control setters (structure from the left, value sampled from the right) ──
   set(name, arg) {
@@ -293,6 +294,7 @@ function makeOsc(o) {
     sub(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['-', x]] }); },
     mul(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['*', x]] }); },
     div(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['/', x]] }); },
+    quantize(n) { return makeOsc({ ...o, ops: [...(o.ops || []), ['q', n]] }); }, // snap to nearest 1/n
   };
 }
 const isOsc = (a) => a != null && typeof a === 'object' && a.__osc !== undefined;
