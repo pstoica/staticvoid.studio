@@ -209,7 +209,9 @@ colour wheel around the ring.
 **Cross-modulation:** every osc parameter — `rate`, `phase`, `spread`, and the
 `lo`/`hi` of `range` — may itself be an osc, so you get LFOs modulating LFOs:
 `osc(2).rate(osc(0.1).range(1,4))` (FM, warps the tempo), `.phase(osc(...))` (PM,
-smooth wobble), `.range(osc, osc)` (AM, the band breathes).
+smooth wobble), `.range(osc, osc)` (AM, the band breathes). Oscs also take
+arithmetic — `.add/.sub/.mul/.div(x)`, where `x` is a number or another osc:
+`osc(1).range(0,1).mul(osc(0.2).range(0.5,1))` rings one osc's output with another.
 
 Works on any continuous control: `x` `y` `radius` `pan` `size` `weight` `open`
 `alpha` `rotate` `rotateX` `rotateY` `color`. Each glyph runs the osc from its

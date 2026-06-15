@@ -259,7 +259,12 @@ function evalOsc(d, age, gp = 0) {
     default: v = (Math.sin(TAU * t) + 1) / 2;             // sine
   }
   const lo = numAt(d.lo, age, gp), hi = numAt(d.hi, age, gp);
-  return lo + v * (hi - lo);
+  let r = lo + v * (hi - lo);
+  if (d.ops) for (const [op, x] of d.ops) {            // .add/.sub/.mul/.div (x may be an osc)
+    const y = numAt(x, age, gp);
+    r = op === '*' ? r * y : op === '+' ? r + y : op === '-' ? r - y : r / y;
+  }
+  return r;
 }
 const numAt = (a, age, gp = 0) => (isOsc(a) ? evalOsc(a.__osc, age, gp) : a);
 // resolve an oscillator-driven colour: through a palette if attached, else as hue

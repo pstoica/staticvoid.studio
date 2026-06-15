@@ -287,6 +287,12 @@ function makeOsc(o) {
     spread(n = 1) { return makeOsc({ ...o, spread: n }); }, // per-glyph phase offset = n × onset phase
     fast(n) { return makeOsc({ ...o, rate: o.rate * n }); },
     slow(n) { return makeOsc({ ...o, rate: o.rate / n }); },
+    // arithmetic on the osc's output (x may be a number or another osc) — applied
+    // after range, evaluated live by the renderer.
+    add(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['+', x]] }); },
+    sub(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['-', x]] }); },
+    mul(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['*', x]] }); },
+    div(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['/', x]] }); },
   };
 }
 const isOsc = (a) => a != null && typeof a === 'object' && a.__osc !== undefined;
@@ -424,7 +430,9 @@ function parseMiniClean(str) {
     while (i < str.length && str[i] !== close) {
       if (str[i] === ',') { i++; groups.push([]); ws(); continue; }       // parallel
       if (str[i] === '|') { i++; groups.push([]); sawPipe = true; ws(); continue; } // random
+      const before = i;
       const t = term(); if (t) groups[groups.length - 1].push(t); ws();
+      if (i === before) i++;   // unparseable char (e.g. a stray '(') → skip, never loop forever
     }
     const layers = groups.map((g) => (g.length ? timecat(g) : silence));
     if (layers.length <= 1) return layers[0] || silence;
@@ -436,7 +444,9 @@ function parseMiniClean(str) {
     ws();
     while (i < str.length && str[i] !== '}') {
       if (str[i] === ',') { i++; layers.push([]); ws(); continue; }
+      const before = i;
       const t = term(); if (t) layers[layers.length - 1].push(t[1]); ws();
+      if (i === before) i++;
     }
     if (str[i] === '}') i++;
     let steps = 0;
@@ -449,7 +459,9 @@ function parseMiniClean(str) {
     const items = [];
     ws();
     while (i < str.length && str[i] !== '>') {
+      const before = i;
       const t = term(); if (t) items.push(t[1]); ws();
+      if (i === before) i++;
     }
     return slowcat(...items);
   }
