@@ -344,21 +344,23 @@ const SHAPE_ID = { dot: 0, circle: 0, ring: 1, arc: 2, square: 3, box: 3, tri: 4
 const OUTLINE_IDS = new Set([1, 2, 9, 10]);
 function glResolve(p, minDim, out) {
   const age = p.age;
-  let sizePx = p.size, rotTurns = p.rotTurns, open = p.open, alpha = p.alpha, weight = p.weight, color = null;
+  let sizePx = p.size, rotTurns = p.rotTurns, rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, color = null;
   if (p.mods) for (const m of p.mods) {
     const val = evalOsc(m.osc, age, p.phase);
     if (m.field === 'size') sizePx = val * minDim;
     else if (m.field === 'color') color = oscColorRGB(m.osc, age, p.phase);
     else if (m.field === 'rotate') rotTurns = val;
+    else if (m.field === 'rotateX') rotX = val * TAU;
+    else if (m.field === 'rotateY') rotY = val * TAU;
     else if (m.field === 'open') open = val;
     else if (m.field === 'alpha') alpha = val;
     else if (m.field === 'weight') weight = val;
-    // rotateX / rotateY are flat in P1 — real perspective lands in P2
   }
   if (!color) { if (!p._rgb) p._rgb = cssToRGB(p.color); color = p._rgb; }
   out.x = p.x; out.y = p.y;
   out.r = sizePx;
   out.rot = rotTurns * TAU + p.spin * age;
+  out.rotX = rotX; out.rotY = rotY;
   out.rgb = color;
   out.alpha = Math.max(0, Math.min(1, alpha * p._env));
   out.weight = Math.max(0.75, weight * minDim);

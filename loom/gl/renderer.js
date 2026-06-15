@@ -23,18 +23,20 @@ const QUAD_IDX = new Uint16Array([0, 1, 2, 0, 2, 3]);
 
 // instance attributes: name → component count
 const IATTRS = {
-  iPos: 2, iRadius: 1, iRot: 1, iColor: 3, iAlpha: 1,
+  iPos: 2, iRadius: 1, iRot: 1, iRotX: 1, iRotY: 1, iColor: 3, iAlpha: 1,
   iWeight: 1, iOpen: 1, iShape: 1, iFill: 1, iStroke: 1,
 };
+const TRACE_CAP = 8192;         // max points in the trace polyline
 
 const VERT = `
 precision highp float;
-uniform mat4 projectionMatrix;  // supplied by three for the active camera
-uniform mat4 modelViewMatrix;
+uniform vec2 uResolution;       // viewport in CSS px (W, H); pixel→NDC mapping
 attribute vec3 position;        // quad corner in -1..1
 attribute vec2 iPos;            // glyph centre, pixel space
 attribute float iRadius;        // glyph radius, px
-attribute float iRot;           // z rotation, radians
+attribute float iRot;           // z rotation / spin, radians
+attribute float iRotX;          // 3D tilt around horizontal axis, radians
+attribute float iRotY;          // 3D tilt around vertical axis, radians
 attribute vec3 iColor;          // rgb 0..1 (sRGB)
 attribute float iAlpha;         // 0..1, envelope already folded in
 attribute float iWeight;        // stroke width (full), px
@@ -42,17 +44,36 @@ attribute float iOpen;          // arc/line gap 0..1
 attribute float iShape;         // shape id
 attribute float iFill;          // 0/1
 attribute float iStroke;        // 0/1
-varying vec2 vLocal;            // shape-space coordinate, px (pre-rotation)
+varying vec2 vLocal;            // shape-space coordinate, px (un-rotated)
 varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vAlpha;
 varying vec3 vColor;
 void main() {
   float pad = iWeight * 0.5 + 2.0;          // stroke half-width + AA margin
   float ext = iRadius + pad;                 // quad half-extent, px
-  vec2 local = position.xy * ext;            // shape-space position, px
+  vec2 local = position.xy * ext;            // shape-space position, px (flat, z=0)
   vLocal = local;
-  float c = cos(iRot), s = sin(iRot);
-  vec2 world = iPos + vec2(local.x * c - local.y * s, local.x * s + local.y * c);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(world, 0.0, 1.0);
+
+  // Per-glyph pinhole, matching the Canvas2D drawShape3D: tilt the flat quad in
+  // 3D (X then Y), then project; the Z spin happens in screen space afterward.
+  // Emitting the perspective divide through gl_Position.w (rather than dividing
+  // here) makes the rasteriser interpolate vLocal perspective-correctly, so the
+  // SDF rides the tilted plane exactly. With rotX=rotY=0 this is the flat ortho.
+  float cx = cos(iRotX), sx = sin(iRotX), cy = cos(iRotY), sy = sin(iRotY);
+  float x = local.x;
+  float y = local.y * cx;
+  float z = local.y * sx;
+  float x2 = x * cy + z * sy; z = -x * sy + z * cy; x = x2;
+  float d = 2.6 * max(1.0, iRadius);         // camera distance, px
+  float w = max((d - z) / d, 0.01);          // homogeneous depth (1 when flat)
+  float cz = cos(iRot), sz = sin(iRot);      // Z spin, screen space
+  vec2 N = vec2(x * cz - y * sz, x * sz + y * cz);
+  vec2 P = N + iPos * w;                      // offset is perspective, centre is affine (×w)
+  gl_Position = vec4(
+    2.0 * P.x / uResolution.x - w,            // ÷w later → 2·world.x/W − 1
+    w - 2.0 * P.y / uResolution.y,            // ÷w later → 1 − 2·world.y/H (y down)
+    0.0,
+    w
+  );
   vR = iRadius; vWeight = iWeight; vOpen = iOpen; vShape = iShape;
   vFill = iFill; vStroke = iStroke; vAlpha = iAlpha; vColor = iColor;
 }`;
@@ -198,9 +219,10 @@ export class GLRenderer {
     this._ensureCapacity(4096);
 
     // a material per blend mode (premultiplied output → custom blend factors)
-    // DoubleSide: the pixel-space ortho camera flips Y (top<bottom), which
-    // inverts triangle winding — without this, front-face culling drops every quad.
-    const base = { vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide };
+    this.uniforms = { uResolution: { value: new THREE.Vector2(1, 1) } };
+    // DoubleSide: the pixel-space projection flips Y, which inverts triangle
+    // winding — without this, front-face culling drops every quad.
+    const base = { uniforms: this.uniforms, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide };
     const F = THREE;
     const mk = (src, dst, srcA, dstA) => {
       const m = new THREE.RawShaderMaterial(base);
@@ -220,7 +242,24 @@ export class GLRenderer {
     this.mesh.frustumCulled = false;
     this.scene.add(this.mesh);
 
-    this._scratch = { x: 0, y: 0, r: 0, rot: 0, rgb: [1, 1, 1], alpha: 1, weight: 1, open: 0, shape: 0, fill: 1, stroke: 0, blend: 'source-over' };
+    // overlay scene (playhead + trace), drawn behind the glyphs with the ortho
+    // camera (which maps pixel-space world coords → NDC). Both are thin lines.
+    this.overlay = new THREE.Scene();
+    const playGeom = new THREE.BufferGeometry();
+    playGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    this.playhead = new THREE.Line(playGeom, new THREE.LineBasicMaterial({ color: 0x9db4ff, transparent: true, opacity: 0.18, depthTest: false, depthWrite: false }));
+    this.playhead.frustumCulled = false; this.playhead.visible = false;
+    this.overlay.add(this.playhead);
+
+    const traceGeom = new THREE.BufferGeometry();
+    traceGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRACE_CAP * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    traceGeom.setAttribute('color', new THREE.BufferAttribute(new Float32Array(TRACE_CAP * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    traceGeom.setDrawRange(0, 0);
+    this.trace = new THREE.Line(traceGeom, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6, depthTest: false, depthWrite: false }));
+    this.trace.frustumCulled = false; this.trace.visible = false;
+    this.overlay.add(this.trace);
+
+    this._scratch = { x: 0, y: 0, r: 0, rot: 0, rotX: 0, rotY: 0, rgb: [1, 1, 1], alpha: 1, weight: 1, open: 0, shape: 0, fill: 1, stroke: 0, blend: 'source-over' };
   }
 
   _ensureCapacity(n) {
@@ -240,7 +279,8 @@ export class GLRenderer {
     this.W = W; this.H = H; this.DPR = DPR;
     this.renderer.setPixelRatio(DPR);
     this.renderer.setSize(W, H, false);
-    const cam = this.camera;            // y grows downward, like Canvas2D
+    this.uniforms.uResolution.value.set(W, H);
+    const cam = this.camera;            // y grows downward, like Canvas2D (used for the line overlays)
     cam.left = 0; cam.right = W; cam.top = 0; cam.bottom = H;
     cam.updateProjectionMatrix();
   }
@@ -253,8 +293,12 @@ export class GLRenderer {
     const r = this.renderer;
     r.setClearColor(this.bg, 1);
     r.clear(true, true, true);
-    const live = state && state.live;
-    if (!live || !live.length) return;
+    const live = (state && state.live) || [];
+
+    // overlays first (behind the glyphs): playhead sweep + trace polyline
+    this._updateOverlays(state, live);
+    if (this.playhead.visible || this.trace.visible) r.render(this.overlay, this.camera);
+    if (!live.length) return;
 
     this._ensureCapacity(live.length);
     const out = this._scratch;
@@ -270,6 +314,7 @@ export class GLRenderer {
         a.iPos[count * 2] = out.x; a.iPos[count * 2 + 1] = out.y;
         a.iRadius[count] = out.r;
         a.iRot[count] = out.rot;
+        a.iRotX[count] = out.rotX; a.iRotY[count] = out.rotY;
         a.iColor[count * 3] = out.rgb[0]; a.iColor[count * 3 + 1] = out.rgb[1]; a.iColor[count * 3 + 2] = out.rgb[2];
         a.iAlpha[count] = out.alpha;
         a.iWeight[count] = out.weight;
@@ -291,9 +336,50 @@ export class GLRenderer {
     }
   }
 
+  // playhead = a faint clock hand at the cycle phase; trace = a polyline through
+  // the live glyph centres in spawn order. Both match the Canvas2D overlays.
+  _updateOverlays(state, live) {
+    const showClock = !!(state && state.showClock);
+    const traceMode = !!(state && state.traceMode);
+    const W = this.W, H = this.H, minDim = state ? state.minDim : Math.min(W, H);
+
+    this.playhead.visible = showClock;
+    if (showClock) {
+      const phase = state.cycle - Math.floor(state.cycle);
+      const ang = phase * Math.PI * 2 - Math.PI / 2;
+      const pos = this.playhead.geometry.getAttribute('position');
+      pos.array[0] = W / 2; pos.array[1] = H / 2; pos.array[2] = 0;
+      pos.array[3] = W / 2 + Math.cos(ang) * minDim * 0.4;
+      pos.array[4] = H / 2 + Math.sin(ang) * minDim * 0.4;
+      pos.array[5] = 0;
+      pos.needsUpdate = true;
+    }
+
+    this.trace.visible = traceMode && live.length > 1;
+    if (this.trace.visible) {
+      const n = Math.min(live.length, TRACE_CAP);
+      const pos = this.trace.geometry.getAttribute('position');
+      const col = this.trace.geometry.getAttribute('color');
+      for (let i = 0; i < n; i++) {
+        const p = live[i];
+        pos.array[i * 3] = p.x; pos.array[i * 3 + 1] = p.y; pos.array[i * 3 + 2] = 0;
+        // bake the per-glyph alpha proxy into the colour (premultiplied-ish) so
+        // faint glyphs give faint trace segments, à la the 2D min(a._a,b._a) fade
+        const a = Math.max(0, Math.min(1, p._a != null ? p._a : 1));
+        const rgb = p._rgb || [0.62, 0.71, 1];
+        pos.needsUpdate = true;
+        col.array[i * 3] = rgb[0] * a; col.array[i * 3 + 1] = rgb[1] * a; col.array[i * 3 + 2] = rgb[2] * a;
+      }
+      col.needsUpdate = true;
+      this.trace.geometry.setDrawRange(0, n);
+    }
+  }
+
   dispose() {
     this.geom.dispose();
     for (const m of Object.values(this.materials)) m.dispose();
+    this.playhead.geometry.dispose(); this.playhead.material.dispose();
+    this.trace.geometry.dispose(); this.trace.material.dispose();
     this.renderer.dispose();
   }
 }
