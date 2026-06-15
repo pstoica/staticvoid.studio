@@ -268,7 +268,16 @@
         <code>.off(t, p =&gt; …)</code><p>echo, shifted by t cycles</p>
         <code>.degrade() .sometimes(p=&gt;…) .often(…) .rarely(…)</code>
         <code>stack(…) cat(…) seq(…) fastcat(…)</code>
-        <code>group(pat).pixelate(n)</code><p>render a layer to its own buffer + apply an effect (pixelate so far)</p>
+        <code>group(pat)</code><p>render a layer to its own buffer, then run a shader FX chain on it</p>
+      </section>
+      <section>
+        <h3>shader fx <span>(chain onto a group)</span></h3>
+        <code>.pixelate(n) .blur(n)</code><p>mosaic · gaussian glow</p>
+        <code>.feedback(fade, zoom, rot) .trails(fade)</code><p>trails / tunnel — warps the previous frame</p>
+        <code>.kaleido(n) .mirror()</code><p>radial wedges · left/right symmetry</p>
+        <code>.displace(amount, scale)</code><p>warp / melt the layer</p>
+        <code>.hue(t) .brightness(b) .contrast(c) .saturate(s)</code><p>colour grade</p>
+        <code>.pixelate(osc(0.2).range(3,26))</code><p>FX params take numbers, patterns, or oscs (global time) — so the effect itself moves</p>
       </section>
       <section>
         <h3>signals &amp; maths <span>(0..1 unless ranged)</span></h3>

@@ -24,7 +24,7 @@ const QUAD_IDX = new Uint16Array([0, 1, 2, 0, 2, 3]);
 // instance attributes: name → component count
 const IATTRS = {
   iPos: 2, iRadius: 1, iRot: 1, iRotX: 1, iRotY: 1, iColor: 3, iAlpha: 1,
-  iWeight: 1, iOpen: 1, iShape: 1, iFill: 1, iStroke: 1,
+  iWeight: 1, iOpen: 1, iShape: 1, iFill: 1, iStroke: 1, iVertex: 1,
 };
 const TRACE_CAP = 8192;         // max points in the trace polyline
 
@@ -44,8 +44,9 @@ attribute float iOpen;          // arc/line gap 0..1
 attribute float iShape;         // shape id
 attribute float iFill;          // 0/1
 attribute float iStroke;        // 0/1
+attribute float iVertex;        // 0/1 — dot at each vertex
 varying vec2 vLocal;            // shape-space coordinate, px (un-rotated)
-varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vAlpha;
+varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vAlpha;
 varying vec3 vColor;
 void main() {
   float pad = iWeight * 0.5 + 2.0;          // stroke half-width + AA margin
@@ -75,7 +76,7 @@ void main() {
     w
   );
   vR = iRadius; vWeight = iWeight; vOpen = iOpen; vShape = iShape;
-  vFill = iFill; vStroke = iStroke; vAlpha = iAlpha; vColor = iColor;
+  vFill = iFill; vStroke = iStroke; vVertex = iVertex; vAlpha = iAlpha; vColor = iColor;
 }`;
 
 const FRAG = `
@@ -83,10 +84,30 @@ precision highp float;
 #define PI 3.14159265359
 #define TAU 6.28318530718
 varying vec2 vLocal;
-varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vAlpha;
+varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vAlpha;
 varying vec3 vColor;
 
 vec2 rot2(vec2 p, float a){ float c=cos(a), s=sin(a); return vec2(p.x*c-p.y*s, p.x*s+p.y*c); }
+
+// distance to the nearest of a shape's vertices (maths space, vertex-up), for the
+// .vertex() draw mode — a filled dot at each vertex.
+float vertDist(vec2 q, int id, float r, float open) {
+  if (id == 3 || id == 10) { vec2 c = abs(q) - r; return length(c); }          // square / cross corners
+  if (id == 4 || id == 5 || id == 7) {                                          // tri / pent / star (outer pts)
+    float n = id == 4 ? 3.0 : 5.0;
+    float seg = 6.28318530718 / n;
+    float a = atan(q.x, q.y); a = mod(a + seg * 0.5, seg) - seg * 0.5;
+    return length(vec2(sin(a), cos(a)) * length(q) - vec2(0.0, r));
+  }
+  if (id == 6) {                                                                // hex
+    float seg = 6.28318530718 / 6.0;
+    float a = atan(q.x, q.y); a = mod(a + seg * 0.5, seg) - seg * 0.5;
+    return length(vec2(sin(a), cos(a)) * length(q) - vec2(0.0, r));
+  }
+  if (id == 8) { vec2 aq = abs(q); return min(length(aq - vec2(0.0, r)), length(aq - vec2(r, 0.0))); } // plus tips
+  if (id == 9) { float h = (1.0 - open) * r; return min(length(q - vec2(h, 0.0)), length(q - vec2(-h, 0.0))); } // line ends
+  return abs(length(q) - r);                                                    // circle/ring/arc → dotted ring
+}
 
 float sdSeg(vec2 p, vec2 a, vec2 b){
   vec2 pa = p-a, ba = b-a;
@@ -180,6 +201,11 @@ void main(){
     float fillCov = vFill * (1.0 - smoothstep(-aa, aa, d));
     float strokeCov = vStroke * (1.0 - smoothstep(hw - aa, hw + aa, abs(d)));
     cov = max(fillCov, strokeCov);
+  }
+  if (vVertex > 0.5) {                    // dot at each vertex (filled)
+    float vr = max(vWeight * 1.5, 2.0);
+    float vd = vertDist(q, id, vR, vOpen);
+    cov = max(cov, 1.0 - smoothstep(vr - aa, vr + aa, vd));
   }
   if (cov <= 0.0) discard;
   float a = clamp(vAlpha * cov, 0.0, 1.0);
@@ -519,6 +545,7 @@ export class GLRenderer {
         a.iShape[count] = out.shape;
         a.iFill[count] = out.fill;
         a.iStroke[count] = out.stroke;
+        a.iVertex[count] = out.vertex;
         count++;
       }
       if (!count) continue;

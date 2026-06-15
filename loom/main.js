@@ -14,11 +14,10 @@ const canvas = $('#stage');
 const ctx = canvas.getContext('2d');
 
 // ── renderer selection ──────────────────────────────────────────────────────────
-// During the Canvas2D→WebGL migration both renderers coexist: the WebGL path runs
-// on a second canvas (#glstage) and is opt-in via ?gl=1, so the live 2D renderer
-// stays untouched for A/B diffing. Once the port lands, GL becomes the default and
-// the 2D path is retired.
-const USE_GL = new URLSearchParams(location.search).get('gl') === '1';
+// The WebGL renderer (on #glstage) is the default; the legacy Canvas2D path is
+// kept as an escape hatch via ?gl=0 (it lacks the shader FX chain — blur,
+// feedback, kaleido, etc. — and renders only pixelate on groups).
+const USE_GL = new URLSearchParams(location.search).get('gl') !== '0';
 const glCanvas = $('#glstage');
 const glr = USE_GL ? new GLRenderer(glCanvas) : null;
 if (USE_GL) { canvas.hidden = true; glCanvas.hidden = false; }
@@ -369,9 +368,12 @@ function glResolve(p, minDim, out) {
   out.open = open;
   const id = SHAPE_ID[p.shape] != null ? SHAPE_ID[p.shape] : 0;
   out.shape = id;
+  // mirror the 2D draw-mode logic: outline shapes (ring/arc/line/cross) stroke
+  // unless they're vertex-only; other shapes honour fill/stroke directly.
   const outline = OUTLINE_IDS.has(id);
-  out.stroke = outline ? 1 : (p.stroke ? 1 : 0);
+  out.stroke = outline ? ((p.stroke || !p.vertex) ? 1 : 0) : (p.stroke ? 1 : 0);
   out.fill = outline ? 0 : (p.fill ? 1 : 0);
+  out.vertex = p.vertex ? 1 : 0;
   out.blend = p.blend;
 }
 
@@ -954,6 +956,72 @@ const PRESETS = {
     .color(palette("rainbow").at(saw.range(0, 1)))
     .size(sine.range(0.008, 0.02).fast(6))
     .decay(2)
+)`,
+
+  // ── shader FX (WebGL): each group() runs a post-process chain on its layer ──
+
+  // feedback tunnel — rings fed back with zoom + rotation leave a spiralling trail
+  'tunnel': `group(stack(
+  bg("#03030a"),
+  shape("ring*5")
+    .radius(saw.range(0.04, 0.4))
+    .color(palette("neon").at(saw.range(0, 1)))
+    .weight(0.008).decay(1.5)
+)).feedback(0.94, 1.05, 0.03)`,
+
+  // kaleidoscope — a small layer folded into mirrored wedges, feeding back slowly
+  'kaleido': `group(
+  shape("tri*6")
+    .radius(0.24).size(0.05)
+    .rotate(saw.range(0, 1))
+    .color(palette("candy").at(saw.range(0, 1)))
+).kaleido(8).feedback(0.86, 1.0, 0.04)`,
+
+  // bloom — soft glow from a blur pass, brightness lifted
+  'glow': `stack(
+  bg("#04040c"),
+  group(
+    shape("dot*40")
+      .angle(saw.range(0, 2))
+      .radius(saw.range(0.05, 0.42))
+      .color(palette("ember").at(saw.range(0, 1)))
+      .size(0.02).decay(2)
+  ).blur(7).brightness(1.35)
+)`,
+
+  // melt — a grid warped by a moving displacement field
+  'melt': `stack(
+  bg("#070310"),
+  group(
+    shape("square*20").grid(5, 4)
+      .color(palette("ice").at(saw.range(0, 1)))
+      .size(0.045).rotate(saw.range(0, 1))
+  ).displace(0.02, 4)
+)`,
+
+  // mirrored aurora plus-field, folded twice
+  'prism': `stack(
+  bg("#05060d"),
+  group(
+    shape("plus*8")
+      .angle(saw.range(0, 1))
+      .radius(saw.range(0.1, 0.4))
+      .color(palette("aurora").at(saw.range(0, 1)))
+      .size(0.05).rotate(saw.range(0, 1))
+  ).mirror().kaleido(4).hue(osc(0.05).range(0, 1))
+)`,
+
+  // patternable FX — the pixelate block size is itself an oscillator (global time),
+  // so the mosaic breathes; saturation pushed for vivid blocks
+  'pulse': `stack(
+  bg("#08040c"),
+  group(
+    shape("dot*64")
+      .angle(saw.range(0, 3))
+      .radius(saw.range(0.04, 0.44))
+      .color(palette("neon").at(saw.range(0, 1)))
+      .size(0.014).decay(2.5)
+  ).pixelate(osc(0.2).range(3, 26)).saturate(1.4)
 )`,
 };
 

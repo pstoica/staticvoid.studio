@@ -78,10 +78,11 @@ Position is **centre (x/y) + polar offset (radius/angle)**, so they mix freely:
 `.grid(cols, rows)` is a third layout — it places events into a `cols×rows` grid
 by onset (the centre point), and `radius/angle` still offset from each cell.
 
-## Groups & effects
+## Groups & effects (shader FX)
 
-`group(pattern)` renders a layer to its own buffer so an effect can be applied to
-the whole layer before it composites. It behaves like a pattern, so it stacks:
+`group(pattern)` renders a layer to its own buffer (a GPU render target) so a
+chain of post-process **effects** can be applied to the whole layer before it
+composites back. It behaves like a pattern, so it stacks:
 
 ```js
 stack(
@@ -92,8 +93,39 @@ stack(
 )
 ```
 
-`.pixelate(n)` is the first effect (block size in px). More effects can follow
-the same pattern (each group gets its own render target).
+Effects **chain in call order** — each is a shader pass over the layer's texture:
+
+| Effect | Params | Does |
+| --- | --- | --- |
+| `.pixelate(block)` | block size (px) | mosaic / blocky downscale |
+| `.blur(radius)` | radius (px) | gaussian blur → soft glow |
+| `.feedback(fade, zoom, rot)` | fade `0..1`, zoom `~1`, rot turns | trails / tunnel — composites over a warped copy of the previous frame |
+| `.trails(fade)` | fade `0..1` | feedback with no zoom / rotation |
+| `.hue(t)` | turns | rotate hue |
+| `.brightness(b)` `.contrast(c)` `.saturate(s)` | `1` = identity (`saturate(0)` = grey) | colour grade |
+| `.displace(amount, scale)` | amount (uv), scale (freq) | warp / melt the layer |
+| `.kaleido(slices)` | n | fold into `n` mirrored wedges |
+| `.mirror()` | — | left/right symmetry |
+
+```js
+group(shape("tri*6").radius(0.24).rotate(saw.range(0,1))
+  .color(palette("candy").at(saw.range(0,1))))
+  .kaleido(8).feedback(0.86, 1.0, 0.04)        // chained: kaleidoscope, then trails
+```
+
+**Patternable FX params.** Effects run **per-layer-per-frame**, not per glyph, so
+their params evaluate against **global time** (not a glyph's age): a number is
+constant, a **pattern** is sampled at the current cycle, and an **`osc`** runs at
+elapsed seconds. So the effect itself can move:
+
+```js
+group(shape("dot*64").angle(saw.range(0,3)).radius(saw.range(0.04,0.44))
+  .color(palette("neon").at(saw.range(0,1))))
+  .pixelate(osc(0.2).range(3, 26))             // the block size breathes
+```
+
+> The shader FX run on the WebGL renderer (the default). The legacy Canvas2D
+> renderer (append `?gl=0` to the URL) applies only `pixelate`.
 | `.rotate(t)` | turns (`1` = 360°) | static Z rotation |
 | `.rotateX(t)` `.rotateY(t)` | turns | 3D tilt (foreshortening) around the horizontal / vertical axis |
 | `.spin(t)` | turns/second | continuous Z rotation |

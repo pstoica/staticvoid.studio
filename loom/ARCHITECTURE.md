@@ -2,9 +2,17 @@
 
 Loom is a live-coding "pattern language for drawing": you type a Tidal/Strudel-style
 expression, it's queried each frame over cyclic time, and every event onset spawns a
-glyph. This doc is the handoff for **replacing the Canvas2D renderer with a WebGL one
+glyph. This doc was the handoff for **replacing the Canvas2D renderer with a WebGL one
 that supports a patternable shader effects pipeline**. The language stays; only the
 draw layer changes.
+
+> **Status: implemented.** The WebGL renderer lives in `gl/renderer.js` (Three.js)
+> and is the default; the Canvas2D path remains behind `?gl=0`. All six phases below
+> landed — instanced SDF glyphs, real per-glyph perspective, per-group render
+> targets, the post-process FX chain (`blur`, `feedback`, `pixelate`, hue/brightness/
+> contrast/saturate, `displace`, `kaleido`, `mirror`), and patternable FX params via
+> `evalGlobal`. `pattern.js` gained FX verb methods on `Group` (renderer-agnostic —
+> they only stash params).
 
 See `REFERENCE.md` for the full user-facing language. This doc is the internals.
 
