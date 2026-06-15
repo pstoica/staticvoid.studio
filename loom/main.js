@@ -6,11 +6,23 @@
 // bloom and fade as particles over a trailed canvas, so rhythm becomes geometry.
 
 import { DSL } from './pattern.js';
+import { GLRenderer } from './gl/renderer.js';
 
 const $ = (sel) => document.querySelector(sel);
 const TAU = Math.PI * 2;
 const canvas = $('#stage');
 const ctx = canvas.getContext('2d');
+
+// ── renderer selection ──────────────────────────────────────────────────────────
+// During the Canvas2D→WebGL migration both renderers coexist: the WebGL path runs
+// on a second canvas (#glstage) and is opt-in via ?gl=1, so the live 2D renderer
+// stays untouched for A/B diffing. Once the port lands, GL becomes the default and
+// the 2D path is retired.
+const USE_GL = new URLSearchParams(location.search).get('gl') === '1';
+const glCanvas = $('#glstage');
+const glr = USE_GL ? new GLRenderer(glCanvas) : null;
+if (USE_GL) { canvas.hidden = true; glCanvas.hidden = false; }
+const activeCanvas = USE_GL ? glCanvas : canvas;   // the visible canvas drives sizing
 const editor = $('#code');
 const hl = $('#hl');
 const errBar = $('#err');
@@ -61,7 +73,7 @@ function refreshHL() {
 let W = 0, H = 0, DPR = 1;
 function resize() {
   DPR = Math.min(2, window.devicePixelRatio || 1);
-  const r = canvas.getBoundingClientRect();
+  const r = activeCanvas.getBoundingClientRect();
   W = r.width; H = r.height;
   canvas.width = Math.round(W * DPR);
   canvas.height = Math.round(H * DPR);
@@ -69,8 +81,9 @@ function resize() {
   // paint an opaque base so the first trail-fade has something to eat
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, W, H);
+  if (glr) glr.resize(W, H, DPR);
 }
-new ResizeObserver(resize).observe(canvas);
+new ResizeObserver(resize).observe(activeCanvas);
 
 // ── the pattern + clock ──────────────────────────────────────────────────────────
 let pattern = DSL.silence;
@@ -476,10 +489,12 @@ function tick(dt) {
   // Clean redraw: wipe the buffer completely every frame, then repaint only the
   // live particles. Nothing is ever baked in, so there's no alpha residue/ghosting.
   // "Trails" come from particles fading out over their own lifetime, not from a veil.
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = bgColor;
-  ctx.fillRect(0, 0, W, H);
+  if (!USE_GL) {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, W, H);
+  }
 
   if (playing) {
     const prev = cycle;
@@ -499,7 +514,7 @@ function tick(dt) {
 
   // playhead — a faint clock hand sweeping the cycle phase, drawn *behind* the
   // glyphs. Toggleable, and freezes when paused (it reads `cycle`).
-  if (showClock) {
+  if (showClock && !USE_GL) {
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
     const phase = cycle - Math.floor(cycle);
@@ -536,7 +551,7 @@ function tick(dt) {
 
   // trace mode: thread a line through the live points in spawn order, behind
   // the glyphs — rhythm becomes a connected path / constellation.
-  if (traceMode && live.length > 1) {
+  if (traceMode && live.length > 1 && !USE_GL) {
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
     ctx.lineWidth = Math.max(1, 0.0014 * minDim);
@@ -553,17 +568,21 @@ function tick(dt) {
   // draw glyphs (newest on top, since live is oldest→newest). Ungrouped glyphs
   // go straight to the main canvas; grouped glyphs render to a per-group buffer
   // so a layer effect (pixelate) can be applied before compositing.
-  const buckets = new Map();   // gid -> particle[]
-  for (const p of live) {
-    if (p.gid) { let b = buckets.get(p.gid); if (!b) buckets.set(p.gid, b = []); b.push(p); }
-    else drawGlyph(ctx, p, minDim);
+  if (USE_GL) {
+    glr.render({ live, minDim, W, H, cycle, showClock, traceMode });
+  } else {
+    const buckets = new Map();   // gid -> particle[]
+    for (const p of live) {
+      if (p.gid) { let b = buckets.get(p.gid); if (!b) buckets.set(p.gid, b = []); b.push(p); }
+      else drawGlyph(ctx, p, minDim);
+    }
+    for (const [gid, parts] of buckets) {
+      const gctx = groupCtx(gid);
+      for (const p of parts) drawGlyph(gctx, p, minDim);
+      compositeGroup(gid, parts[0].fx);
+    }
+    for (const gid of [...groupCanvases.keys()]) if (!buckets.has(gid)) groupCanvases.delete(gid); // prune
   }
-  for (const [gid, parts] of buckets) {
-    const gctx = groupCtx(gid);
-    for (const p of parts) drawGlyph(gctx, p, minDim);
-    compositeGroup(gid, parts[0].fx);
-  }
-  for (const gid of [...groupCanvases.keys()]) if (!buckets.has(gid)) groupCanvases.delete(gid); // prune
 
   $('#cycle').textContent = Math.floor(cycle).toString();
 }
@@ -990,7 +1009,7 @@ editor.addEventListener('blur', activity);
 document.addEventListener('mouseleave', () => { if (document.activeElement !== editor) setIdle(true); });
 
 // ── boot ────────────────────────────────────────────────────────────────────────────
-DSL._setBgSink((c) => { bgColor = resolveColor(c, 0); });   // bg("…") writes here at compile time
+DSL._setBgSink((c) => { bgColor = resolveColor(c, 0); if (glr) glr.setBackground(bgColor); });   // bg("…") writes here at compile time
 resize();
 setCps(cps);
 setDecay(decayScale);

@@ -29,7 +29,7 @@
     font-family:var(--font); -webkit-font-smoothing:antialiased; overflow:hidden; }
 
   /* fullscreen canvas behind everything */
-  #stage { position:fixed; inset:0; width:100vw; height:100vh; display:block; z-index:0; }
+  #stage, #glstage { position:fixed; inset:0; width:100vw; height:100vh; display:block; z-index:0; }
 
   /* ── Hydra-style code overlay: text floats directly over the fullscreen
      visuals (no panel). A soft left-edge gradient keeps it legible; the bare
@@ -169,6 +169,7 @@
 </head>
 <body>
   <canvas id="stage"></canvas>
+  <canvas id="glstage" hidden></canvas>
 
   <aside id="rail">
     <div id="brand">
