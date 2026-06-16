@@ -969,13 +969,36 @@ let flashT = 0;
 // — discrete steps that fit the app's solid-colour glyphs better than a gradient.
 const LOGO_COLORS = ['#ff5d73', '#ffd166', '#6df0c2', '#56b6ff', '#b58cff'];
 const logoSpans = [...$('#brand h1').querySelectorAll('span')];
-let logoOffset = 0;
-function paintLogo() { logoSpans.forEach((s, i) => { s.style.color = LOGO_COLORS[(logoOffset + i) % LOGO_COLORS.length]; }); }
+const LN = LOGO_COLORS.length;
+let logoOffset = 0, slotGen = 0;
+function paintLogo() { logoSpans.forEach((s, i) => { s.style.color = LOGO_COLORS[(logoOffset + i) % LN]; }); }
 paintLogo();
+// slot-machine spin on run: each letter cycles colours quickly, decelerates, and
+// the reels lock left→right onto the new resting palette. Brief and brand-coloured.
+function slotLogo() {
+  logoOffset++;
+  const gen = ++slotGen;
+  logoSpans.forEach((span, i) => {
+    const finalColor = LOGO_COLORS[(logoOffset + i) % LN];
+    const stop = 360 + i * 100;     // reels stop staggered, left→right
+    let elapsed = 0, k = 0;
+    span.style.transition = 'none'; // instant flips while spinning
+    const tick = () => {
+      if (gen !== slotGen) return;  // a newer run superseded this spin
+      if (elapsed >= stop) { span.style.transition = 'color .26s var(--ease)'; span.style.color = finalColor; return; }
+      span.style.color = LOGO_COLORS[(k + i + 1) % LN];
+      k++;
+      const interval = 50 + elapsed * 0.22;   // decelerate
+      elapsed += interval;
+      setTimeout(tick, interval);
+    };
+    tick();
+  });
+}
 function flash() {
   const el = $('#runbtn'); el.classList.add('lit'); clearTimeout(flashT);
   flashT = setTimeout(() => el.classList.remove('lit'), 220);
-  logoOffset++; paintLogo();    // shift the wordmark colours one step
+  slotLogo();                   // spin the wordmark like a slot machine
   $('#hint').hidden = true;     // "edit the pattern" hint has served its purpose
 }
 
