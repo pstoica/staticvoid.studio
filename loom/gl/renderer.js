@@ -228,7 +228,9 @@ uniform sampler2D tMap;
 varying vec2 vUv;
 void main() { gl_FragColor = texture2D(tMap, vUv); }`;
 
-// pixelate: snap the sample coordinate to block centres (block size in device px)
+// pixelate: box-average each block (not point-sample its centre — that biases
+// content toward block centres). A 4x4 grid of taps over the block is isotropic,
+// matching the Canvas2D downscale-average look.
 const PIXELATE_FRAG = `
 precision highp float;
 uniform sampler2D tMap;
@@ -236,9 +238,15 @@ uniform vec2 uTexel;       // 1 / target size, device px
 uniform float uBlock;      // block size, device px
 varying vec2 vUv;
 void main() {
-  vec2 px = vUv / uTexel;
-  vec2 snapped = (floor(px / uBlock) + 0.5) * uBlock;
-  gl_FragColor = texture2D(tMap, snapped * uTexel);
+  vec2 origin = floor((vUv / uTexel) / uBlock) * uBlock;   // block top-left, device px
+  vec4 sum = vec4(0.0);
+  for (int y = 0; y < 4; y++) {
+    for (int x = 0; x < 4; x++) {
+      vec2 sub = (vec2(float(x), float(y)) + 0.5) * 0.25;  // 4x4 sub-cell centres
+      sum += texture2D(tMap, (origin + sub * uBlock) * uTexel);
+    }
+  }
+  gl_FragColor = sum * 0.0625;                              // / 16
 }`;
 
 // separable gaussian blur (9 taps); run once horizontal, once vertical
