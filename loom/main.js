@@ -117,6 +117,10 @@ function run() {
   try {
     bgSource = DEFAULT_BG;                // bg("…") in the patch overrides this during compile
     pattern = compile(editor.value);
+    // re-run starts fresh: drop glyphs from the previous patch so their (now
+    // stale) group FX — feedback history especially — don't linger after you
+    // remove an effect. Old group render targets are pruned once their glyphs go.
+    particles.length = 0;
     errBar.textContent = '';
     errBar.classList.remove('show');
     localStorage.setItem('loom.code', editor.value);
@@ -1038,6 +1042,11 @@ editor.addEventListener('blur', activity);
 document.addEventListener('mouseleave', () => { if (document.activeElement !== editor) setIdle(true); });
 
 // ── boot ────────────────────────────────────────────────────────────────────────────
+// one-time photosensitivity disclosure — shown until acknowledged (saved in localStorage)
+const warn = $('#warn');
+if (localStorage.getItem('loom.epilepsy') !== '1') warn.hidden = false;
+$('#warnok').addEventListener('click', () => { localStorage.setItem('loom.epilepsy', '1'); warn.hidden = true; });
+
 DSL._setBgSink((c) => { bgSource = c; });   // bg("…") stores its (raw) arg here at compile time; resolved per-frame in tick
 resize();
 setCps(cps);
