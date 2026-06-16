@@ -43,12 +43,9 @@
   #rail.idle:hover { opacity:1; }
 
   #brand { display:flex; align-items:baseline; gap:10px; padding:18px 22px 12px; }
-  #brand h1 { font-family:"Unbounded",var(--font); font-weight:700; font-size:19px; margin:0; letter-spacing:-.01em;
-    background:linear-gradient(92deg,#ff5d73,#ffd166,#6df0c2,#56b6ff,#b58cff,#ff5d73);
-    background-size:220% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; }
-  /* sweep the wordmark's colours on run() */
-  @keyframes loomflow { to { background-position:-220% 0; } }
-  #brand h1.run { animation:loomflow .7s var(--ease); }
+  #brand h1 { font-family:"Unbounded",var(--font); font-weight:700; font-size:19px; margin:0;
+    letter-spacing:-.01em; display:inline-flex; }
+  #brand h1 span { transition:color .55s var(--ease); }   /* per-letter solid colours, shifted on run() via JS */
   #brand .sub { font-size:11px; color:var(--muted); letter-spacing:.02em; }
   /* panel/guide live in the transport row now; styled as .btn (see #transport) */
 
@@ -112,6 +109,15 @@
     user-select:none; -webkit-user-select:none; touch-action:none; }
   .num:hover, .num.drag { color:var(--ink); background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.2); }
   .num b { color:var(--ink); font-weight:500; min-width:34px; text-align:right; }
+  .num b.editing { cursor:text; outline:none; user-select:text; -webkit-user-select:text;
+    background:rgba(255,255,255,.14); padding:0 2px; }
+
+  /* drag the editor's right edge to resize the code column */
+  #railgrab { position:absolute; top:0; bottom:0; right:-6px; width:12px; z-index:3; cursor:ew-resize;
+    display:flex; align-items:center; justify-content:center; touch-action:none; }
+  #railgrab::before { content:""; width:2px; height:42px; background:var(--line);
+    transition:background .16s var(--ease), height .16s var(--ease); }
+  #railgrab:hover::before, #railgrab.drag::before { background:var(--ink); height:66px; }
 
   #meta { padding:0 22px 16px; font:400 11px/1.5 var(--mono); color:var(--muted);
     display:flex; justify-content:space-between; }
@@ -177,7 +183,7 @@
     #sideclose { width:40px; height:40px; font-size:17px; }
     .tab { padding:9px 16px; font-size:12px; }
     .presrow .load { height:42px; font-size:13px; }
-    #sidegrab { display:none; }
+    #sidegrab, #railgrab { display:none; }   /* no edge-resize on touch */
   }
 
   /* one-time photosensitivity disclosure (dismissal saved to localStorage) */
@@ -211,7 +217,7 @@
 
   <aside id="rail">
     <div id="brand">
-      <h1>Loom</h1>
+      <h1><span>L</span><span>o</span><span>o</span><span>m</span></h1>
       <span class="sub">a pattern language for drawing</span>
     </div>
 
@@ -219,6 +225,7 @@
       <pre id="hl" aria-hidden="true"></pre>
       <textarea id="code" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" wrap="soft"></textarea>
     </div>
+    <div id="railgrab" title="drag to resize the editor"></div>
     <div id="err"></div>
 
     <div id="transport">
@@ -227,7 +234,7 @@
       <button class="btn" id="clearbtn">clear</button>
       <button class="btn" id="clockbtn" title="toggle the cycle playhead">◷ clock</button>
       <button class="btn" id="tracebtn" title="thread a path through the live points">◇ trace</button>
-      <button class="btn" id="panelbtn" title="presets &amp; guide panel">▤ panel</button>
+      <button class="btn" id="panelbtn" title="presets panel">▤ presets</button>
       <button class="btn" id="helpbtn" title="guide">? guide</button>
       <div class="num" id="cpsnum" title="drag ↔ or scroll · double-click to reset">speed <b id="cpsval">0.60</b></div>
       <div class="num" id="persistnum" title="drag ↔ or scroll · double-click to reset">decay <b id="decayval">1.5</b></div>

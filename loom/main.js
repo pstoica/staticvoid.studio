@@ -917,16 +917,43 @@ function applyPreset(val) {
 
 // ── wiring ──────────────────────────────────────────────────────────────────────────
 function setCps(v) { cps = Math.max(0.1, Math.min(2, v)); cpsLabel.textContent = cps.toFixed(2); }
-// drag horizontally or scroll-wheel over a number field to change its value
+// a number field: drag horizontally, scroll-wheel, or click to type a value.
 function attachScrub(el, { min, max, step, get, set }) {
   const sens = (max - min) / 180;   // px → value
-  const snap = (v) => Math.round(Math.max(min, Math.min(max, v)) / step) * step;
-  let dragging = false, sx = 0, sv = 0;
-  el.addEventListener('pointerdown', (e) => { dragging = true; sx = e.clientX; sv = get(); el.setPointerCapture?.(e.pointerId); el.classList.add('drag'); document.body.style.userSelect = 'none'; e.preventDefault(); });
-  el.addEventListener('pointermove', (e) => { if (dragging) set(snap(sv + (e.clientX - sx) * sens)); });
-  const end = () => { dragging = false; el.classList.remove('drag'); document.body.style.userSelect = ''; };
-  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
-  el.addEventListener('wheel', (e) => { e.preventDefault(); set(snap(get() + (e.deltaY < 0 ? step : -step))); }, { passive: false });
+  const snap = (v) => { const s = Math.round(Math.max(min, Math.min(max, v)) / step) * step; return Math.round(s * 1000) / 1000; };
+  const valEl = el.querySelector('b');
+  let dragging = false, sx = 0, sv = 0, moved = false;
+  el.addEventListener('pointerdown', (e) => {
+    if (valEl.isContentEditable) return;                 // mid-edit — let the caret work
+    dragging = true; moved = false; sx = e.clientX; sv = get(); el.setPointerCapture?.(e.pointerId);
+    el.classList.add('drag'); document.body.style.userSelect = 'none'; e.preventDefault();
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    if (Math.abs(e.clientX - sx) > 2) moved = true;
+    set(snap(sv + (e.clientX - sx) * sens));
+  });
+  const reset = () => { dragging = false; el.classList.remove('drag'); document.body.style.userSelect = ''; };
+  el.addEventListener('pointerup', () => { const wasDragging = dragging, didMove = moved; reset(); if (wasDragging && !didMove) editValue(); });
+  el.addEventListener('pointercancel', reset);
+  el.addEventListener('wheel', (e) => { if (valEl.isContentEditable) return; e.preventDefault(); set(snap(get() + (e.deltaY < 0 ? step : -step))); }, { passive: false });
+
+  function editValue() {
+    valEl.contentEditable = 'true'; valEl.classList.add('editing'); valEl.focus();
+    const r = document.createRange(); r.selectNodeContents(valEl);
+    const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    const commit = () => {
+      valEl.removeEventListener('blur', commit); valEl.removeEventListener('keydown', onKey);
+      valEl.contentEditable = 'false'; valEl.classList.remove('editing');
+      const n = parseFloat(valEl.textContent);
+      set(isNaN(n) ? get() : snap(n));                   // set() re-renders the label
+    };
+    const onKey = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); valEl.blur(); }
+      else if (e.key === 'Escape') { e.preventDefault(); valEl.textContent = ''; valEl.blur(); }
+    };
+    valEl.addEventListener('blur', commit); valEl.addEventListener('keydown', onKey);
+  }
 }
 
 editor.addEventListener('keydown', (e) => {
@@ -938,11 +965,18 @@ editor.addEventListener('input', refreshHL);
 editor.addEventListener('scroll', () => { hl.scrollTop = editor.scrollTop; hl.scrollLeft = editor.scrollLeft; });
 
 let flashT = 0;
-const brandH1 = $('#brand h1');
+// the wordmark is one solid colour per letter; each run shifts the palette by one
+// — discrete steps that fit the app's solid-colour glyphs better than a gradient.
+const LOGO_COLORS = ['#ff5d73', '#ffd166', '#6df0c2', '#56b6ff', '#b58cff'];
+const logoSpans = [...$('#brand h1').querySelectorAll('span')];
+let logoOffset = 0;
+function paintLogo() { logoSpans.forEach((s, i) => { s.style.color = LOGO_COLORS[(logoOffset + i) % LOGO_COLORS.length]; }); }
+paintLogo();
 function flash() {
   const el = $('#runbtn'); el.classList.add('lit'); clearTimeout(flashT);
   flashT = setTimeout(() => el.classList.remove('lit'), 220);
-  brandH1.classList.remove('run'); void brandH1.offsetWidth; brandH1.classList.add('run'); // sweep the logo colours
+  logoOffset++; paintLogo();    // shift the wordmark colours one step
+  $('#hint').hidden = true;     // "edit the pattern" hint has served its purpose
 }
 
 $('#runbtn').addEventListener('click', () => { run(); flash(); });
@@ -1002,18 +1036,18 @@ function showTab(name) {
 function setSide(open, tab) {
   if (tab) showTab(tab);
   side.classList.toggle('hidden', !open);
-  $('#panelbtn').classList.toggle('on', open);
-  $('#helpbtn').classList.toggle('on', open && side.querySelector('[data-pane="guide"]:not([hidden])'));
+  // highlight only the button for the tab that's actually showing (or neither when closed)
+  const onGuide = open && !!side.querySelector('[data-pane="guide"]:not([hidden])');
+  $('#panelbtn').classList.toggle('on', open && !onGuide);
+  $('#helpbtn').classList.toggle('on', onGuide);
   localStorage.setItem('loom.side', open ? '1' : '0');
 }
 tabs.forEach((t) => t.addEventListener('click', () => setSide(true, t.dataset.tab)));
 $('#sideclose').addEventListener('click', () => setSide(false));
-// panel button toggles the sidebar; ? jumps to the guide tab
-$('#panelbtn').addEventListener('click', () => setSide(side.classList.contains('hidden')));
-$('#helpbtn').addEventListener('click', () => {
-  const onGuide = !side.classList.contains('hidden') && side.querySelector('[data-pane="guide"]:not([hidden])');
-  setSide(!onGuide, 'guide');
-});
+// presets / guide each open the sidebar on their tab (and toggle it shut when already there)
+const onTab = (name) => !side.classList.contains('hidden') && side.querySelector(`[data-pane="${name}"]:not([hidden])`);
+$('#panelbtn').addEventListener('click', () => setSide(!onTab('presets'), 'presets'));
+$('#helpbtn').addEventListener('click', () => setSide(!onTab('guide'), 'guide'));
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setSide(false); });
 const isMobile = () => window.matchMedia('(max-width:760px)').matches;
 // tap the canvas (outside the sidebar and the control rail) to close the sidebar
@@ -1043,6 +1077,26 @@ sideGrab.addEventListener('pointerup', () => {
   sideDragging = false; sideGrab.classList.remove('drag'); document.body.style.userSelect = '';
   localStorage.setItem(SIDE_W_KEY, parseInt(side.style.width, 10));
 });
+
+// resizable editor — drag the rail's right-edge grabber to set the code column width
+const railGrab = $('#railgrab');
+const RAIL_W_KEY = 'loom.railwidth';
+const clampRailW = (w) => Math.max(340, Math.min(window.innerWidth - 180, w));
+const setRailW = (w) => document.documentElement.style.setProperty('--rail-w', clampRailW(w) + 'px');
+const savedRailW = parseInt(localStorage.getItem(RAIL_W_KEY) || '', 10);
+if (savedRailW) setRailW(savedRailW);
+let railDragging = false;
+railGrab.addEventListener('pointerdown', (e) => {
+  railDragging = true; railGrab.classList.add('drag'); railGrab.setPointerCapture?.(e.pointerId);
+  document.body.style.userSelect = 'none'; e.preventDefault();
+});
+railGrab.addEventListener('pointermove', (e) => { if (railDragging) setRailW(e.clientX); });
+const railEnd = () => {
+  if (!railDragging) return;
+  railDragging = false; railGrab.classList.remove('drag'); document.body.style.userSelect = '';
+  localStorage.setItem(RAIL_W_KEY, parseInt(getComputedStyle(document.documentElement).getPropertyValue('--rail-w'), 10));
+};
+railGrab.addEventListener('pointerup', railEnd); railGrab.addEventListener('pointercancel', railEnd);
 
 // ── fade the control overlay when idle, so the drawing has the screen ──
 const rail = $('#rail');
@@ -1074,8 +1128,9 @@ setDecay(decayScale);
 rebuildPresetList();
 showTab(localStorage.getItem('loom.sidetab') || 'presets');
 setSide(localStorage.getItem('loom.side') !== '0');
-editor.value = PRESETS.threads;   // always open on the threads showcase (run() still autosaves to localStorage)
-setActive('b:threads');
+const saved = localStorage.getItem('loom.code');   // restore last-worked-on patch; threads if none
+editor.value = saved || PRESETS.threads;
+if (!saved) setActive('b:threads');
 refreshHL();
 run();
 activity();   // start the idle countdown
