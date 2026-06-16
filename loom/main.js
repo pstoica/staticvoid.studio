@@ -916,7 +916,18 @@ function applyPreset(val) {
 }
 
 // ── wiring ──────────────────────────────────────────────────────────────────────────
-function setCps(v) { cps = v; $('#cps').value = v; cpsLabel.textContent = v.toFixed(2); }
+function setCps(v) { cps = Math.max(0.1, Math.min(2, v)); cpsLabel.textContent = cps.toFixed(2); }
+// drag horizontally or scroll-wheel over a number field to change its value
+function attachScrub(el, { min, max, step, get, set }) {
+  const sens = (max - min) / 180;   // px → value
+  const snap = (v) => Math.round(Math.max(min, Math.min(max, v)) / step) * step;
+  let dragging = false, sx = 0, sv = 0;
+  el.addEventListener('pointerdown', (e) => { dragging = true; sx = e.clientX; sv = get(); el.setPointerCapture?.(e.pointerId); el.classList.add('drag'); document.body.style.userSelect = 'none'; e.preventDefault(); });
+  el.addEventListener('pointermove', (e) => { if (dragging) set(snap(sv + (e.clientX - sx) * sens)); });
+  const end = () => { dragging = false; el.classList.remove('drag'); document.body.style.userSelect = ''; };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+  el.addEventListener('wheel', (e) => { e.preventDefault(); set(snap(get() + (e.deltaY < 0 ? step : -step))); }, { passive: false });
+}
 
 editor.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run(); flash(); }
@@ -942,12 +953,12 @@ $('#clearbtn').addEventListener('click', () => {
   particles.length = 0; ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H);
 });
 const decayLabel = $('#decayval');
-function setDecay(v) { decayScale = v; $('#persist').value = v; decayLabel.textContent = v % 1 ? v.toFixed(2) : v.toString(); }
-$('#cps').addEventListener('input', (e) => setCps(Number(e.target.value)));
-$('#persist').addEventListener('input', (e) => setDecay(Number(e.target.value)));
-// double-click a slider to reset it to its default
-$('#cps').addEventListener('dblclick', () => setCps(0.6));
-$('#persist').addEventListener('dblclick', () => setDecay(1.5));
+function setDecay(v) { decayScale = Math.max(0.25, Math.min(6, v)); decayLabel.textContent = decayScale % 1 ? decayScale.toFixed(2) : decayScale.toString(); }
+attachScrub($('#cpsnum'), { min: 0.1, max: 2, step: 0.05, get: () => cps, set: setCps });
+attachScrub($('#persistnum'), { min: 0.25, max: 6, step: 0.05, get: () => decayScale, set: setDecay });
+// double-click a number field to reset it to its default
+$('#cpsnum').addEventListener('dblclick', () => setCps(0.6));
+$('#persistnum').addEventListener('dblclick', () => setDecay(1.5));
 
 const clockBtn = $('#clockbtn');
 function renderClock() { clockBtn.classList.toggle('on', showClock); clockBtn.classList.toggle('off', !showClock); }
@@ -1063,9 +1074,8 @@ setDecay(decayScale);
 rebuildPresetList();
 showTab(localStorage.getItem('loom.sidetab') || 'presets');
 setSide(localStorage.getItem('loom.side') !== '0');
-const saved = localStorage.getItem('loom.code');
-editor.value = saved || PRESETS.threads;
-if (!saved) setActive('b:threads');
+editor.value = PRESETS.threads;   // always open on the threads showcase (run() still autosaves to localStorage)
+setActive('b:threads');
 refreshHL();
 run();
 activity();   // start the idle countdown
