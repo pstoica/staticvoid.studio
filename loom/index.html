@@ -117,6 +117,9 @@
   #runbtn { color:var(--ink); border-color:rgba(255,255,255,.22); }
   #runbtn.lit { background:var(--ink); color:var(--bg); border-color:var(--ink); }
   #runbtn kbd { font:inherit; opacity:.5; }
+  /* play doubles as the "stop now" button: solid/inverted while the animation is live */
+  #playbtn.live { color:var(--bg); background:var(--ink); border-color:var(--ink); }
+  #playbtn.live:hover { background:var(--ink); color:var(--bg); box-shadow:0 0 0 2px var(--accent-dim); }
 
   /* draggable / scrollable number field (replaces the cps + decay sliders) */
   .num { font:500 13px/1 var(--mono); color:var(--muted); background:rgba(255,255,255,.04);
