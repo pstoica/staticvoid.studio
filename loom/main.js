@@ -757,6 +757,19 @@ const PRESETS = {
     .color("#90e0ef").weight(0.004).decay(3)
 )`,
 
+  // euclid + parallel voices — 3-of-8 stars, with a reversed copy panned beside it
+  // (jux), plus a recoloured echo a beat later (off)
+  'weave': `stack(
+  bg("#070512"),
+  shape("star(3,8)")
+    .radius(0.28).size(0.07)
+    .rotate(saw.range(0, 1).slow(3))
+    .color(palette("neon").at(saw.range(0, 1)))
+    .jux(p => p.rev())
+    .off(0.2, p => p.color("#6df0c2").size(0.03))
+    .decay(2)
+)`,
+
   // 3D perspective — polymeter polygons drifting and tumbling (rotateX / rotateY)
   'lattice': `stack(
   bg("#060309"),
