@@ -1,4 +1,4 @@
-// pattern.js — a tiny TidalCycles/Strudel-style pattern engine, retargeted at
+// pattern.js, a tiny TidalCycles/Strudel-style pattern engine, retargeted at
 // *drawing* instead of sound. A Pattern is a pure function from a stretch of
 // cyclic time to a list of events (haps). Combinators transform that function;
 // the renderer (main.js) queries the result each frame and turns every event
@@ -69,7 +69,7 @@ class Pattern {
   }
 
   // ── per-cycle structural transforms ──
-  // bind/innerJoin let a pattern of patterns flatten — this is how `fast("2 4")`
+  // bind/innerJoin let a pattern of patterns flatten, this is how `fast("2 4")`
   // (a *pattern* of speeds) works.
   innerJoin() {
     return new Pattern((s) =>
@@ -92,7 +92,7 @@ class Pattern {
 
   off(t, f) { return stack(this, f(this._late(t))); }
 
-  // overlay a transformed copy in place — stack(this, f(this)). The plain sibling
+  // overlay a transformed copy in place, stack(this, f(this)). The plain sibling
   // of jux (superimpose + pan apart) and off (superimpose + delay).
   superimpose(f) { return stack(this, f(this)); }
 
@@ -115,12 +115,12 @@ class Pattern {
   rarely(f) { return this.sometimesBy(0.25, f); }
 
   // ── continuous signal helpers ──
-  // lo/hi may each be a number, a mini-notation string, or a pattern — sampled
+  // lo/hi may each be a number, a mini-notation string, or a pattern, sampled
   // (structure from the left) so the range itself can move: `sine.range(0, "1 2")`.
   range(lo, hi) {
     return appLeft(appLeft(this.fmap((v) => (l) => (h) => l + v * (h - l)), reify(lo)), reify(hi));
   }
-  // arithmetic — the argument may be a number, a mini-notation string, or any
+  // arithmetic, the argument may be a number, a mini-notation string, or any
   // Pattern (e.g. a signal). Structure comes from the left, value from the
   // right, so `saw.add(sine.range(0, 0.1))` wobbles a ramp by a sampled sine.
   add(arg) { return appLeft(this.fmap((l) => (r) => l + r), reify(arg)); }
@@ -149,7 +149,7 @@ class Pattern {
   opacity(a) { return this.set('alpha', a); } // alias for alpha
   pan(a)     { return this.set('pan', a); }
   jitter(a){ return this.set('jitter', a); }
-  // draw style — fill and stroke are independent, patternable booleans, so you
+  // draw style, fill and stroke are independent, patternable booleans, so you
   // can `.fill(0)` to disable fill, or `.stroke("1 0")` to alternate.
   fill(v = 1)   { return this.set('fill', v); }
   stroke(v = 1) { return this.set('stroke', v); }
@@ -249,7 +249,7 @@ function timeRand(x) {
   const s = Math.sin((x + 0.123) * 12.9898) * 43758.5453;
   return s - Math.floor(s);
 }
-// ── a small noise family — all in 0..1, sampled at each event's onset ──
+// ── a small noise family, all in 0..1, sampled at each event's onset ──
 const smoothstep = (t) => t * t * (3 - 2 * t);
 // value noise: hash the integer lattice, smoothstep between neighbours.
 function valueNoise(x) {
@@ -263,10 +263,10 @@ function fbmAt(x, octaves, persist) {
   return sum / norm;
 }
 
-const rand   = signal((t) => timeRand(t));                 // white noise — uncorrelated, harsh
-const perlin = signal((t) => valueNoise(t * 4));           // smooth value noise — gentle drift
-const fbm    = signal((t) => fbmAt(t * 2, 5, 0.5));        // fractal noise — organic, cloudy
-const brown  = signal((t) => fbmAt(t * 1.2, 6, 0.72));     // red/brownian — slow, wandering
+const rand   = signal((t) => timeRand(t));                 // white noise, uncorrelated, harsh
+const perlin = signal((t) => valueNoise(t * 4));           // smooth value noise, gentle drift
+const fbm    = signal((t) => fbmAt(t * 2, 5, 0.5));        // fractal noise, organic, cloudy
+const brown  = signal((t) => fbmAt(t * 1.2, 6, 0.72));     // red/brownian, slow, wandering
 const gauss  = signal((t) => {                              // bell curve around 0.5 (central-limit of 4 rands)
   let s = 0; for (let k = 1; k <= 4; k++) s += timeRand(t + k * 0.137);
   return s / 4;
@@ -279,7 +279,7 @@ function choose(...xs) { return signal((t) => xs[Math.min(xs.length - 1, Math.fl
 function irand(k) { return signal((t) => Math.floor(timeRand(t) * k)); }
 
 // ── live oscillator (LFO) ──────────────────────────────────────────────────────
-// Unlike a signal — which is sampled once at a glyph's onset and frozen — an osc
+// Unlike a signal (which is sampled once at a glyph's onset and frozen) an osc
 // keeps running over the glyph's whole lifetime, evaluated each frame against its
 // age. osc(rate, shape).range(lo, hi). Shapes: sine saw tri square rand perlin fbm.
 function osc(rate = 1, shape = 'sine') { return makeOsc({ shape, rate, lo: 0, hi: 1, phase: 0 }); }
@@ -292,7 +292,7 @@ function makeOsc(o) {
     spread(n = 1) { return makeOsc({ ...o, spread: n }); }, // per-glyph phase offset = n × onset phase
     fast(n) { return makeOsc({ ...o, rate: o.rate * n }); },
     slow(n) { return makeOsc({ ...o, rate: o.rate / n }); },
-    // arithmetic on the osc's output (x may be a number or another osc) — applied
+    // arithmetic on the osc's output (x may be a number or another osc), applied
     // after range, evaluated live by the renderer.
     add(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['+', x]] }); },
     sub(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['-', x]] }); },
@@ -318,8 +318,8 @@ const PALETTES = {
   aurora:  ['#0b3d91', '#1ec8c8', '#7fffd4', '#b58cff'],
 };
 
-// palette("#a", "#b", …) or palette("sunset").at(x) maps a 0..1 position x — a
-// number, pattern, or osc — to an interpolated colour, for use in .color(). We
+// palette("#a", "#b", …) or palette("sunset").at(x) maps a 0..1 position x (a
+// number, pattern, or osc) to an interpolated colour, for use in .color(). We
 // just package the stops + position here; the renderer does the interpolation.
 function palette(...colors) {
   let stops = colors.flat();
@@ -352,7 +352,7 @@ class Group {
   constructor(pat) { this._pat = reify(pat); this._gid = ++_gid; this._fx = { chain: [] }; }
   // Each effect appends to an ordered chain; the renderer runs them in call order
   // as post-process passes on the group's render target. Every param may be a
-  // number, an osc, or a pattern — resolved against *global* time each frame
+  // number, an osc, or a pattern, resolved against *global* time each frame
   // (FX run per-layer-per-frame, not per-glyph). pixelate also keeps a flat
   // `_fx.pixelate` so the legacy Canvas2D renderer still applies it.
   // string params are mini-notation, like any control arg → reify to a pattern

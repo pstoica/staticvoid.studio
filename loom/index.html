@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Loom — a pattern language for drawing</title>
+<title>Loom: a pattern language for drawing</title>
 <meta name="description" content="Live-code Tidal/Strudel-style patterns that bloom into particle drawings. Rhythm becomes geometry, in your browser." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -134,7 +134,7 @@
     letter-spacing:.03em; transition:opacity .55s var(--ease); }
   #hint.idle { opacity:0; }
 
-  /* right sidebar — swappable presets / guide */
+  /* right sidebar, swappable presets / guide */
   #side { position:fixed; top:0; right:0; bottom:0; width:380px; max-width:92vw; z-index:6;
     display:flex; flex-direction:column; background:rgba(13,13,14,.96); backdrop-filter:blur(10px);
     border-left:1px solid var(--line); box-shadow:-22px 0 60px rgba(0,0,0,.5);
@@ -211,10 +211,10 @@
   <div id="warn" hidden>
     <div class="warncard">
       <h2><svg viewBox="0 0 24 24" fill="none" stroke="#d9a441" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18.5a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>Photosensitivity warning</h2>
-      <p>Loom generates flashing, strobing, and rapidly shifting imagery — especially
-        with feedback and fast oscillators — that may trigger seizures in people with
+      <p>Loom generates flashing, strobing, and rapidly shifting imagery (especially
+        with feedback and fast oscillators) that may trigger seizures in people with
         photosensitive epilepsy. Viewer discretion is advised.</p>
-      <button id="warnok" class="btn">I understand — continue</button>
+      <button id="warnok" class="btn">I understand, continue</button>
     </div>
   </div>
 
@@ -280,7 +280,7 @@
     <div class="helpbody">
       <section>
         <h3>mini-notation <span>(inside "…")</span></h3>
-        <code>"a b c d"</code><p>sequence — splits the cycle evenly</p>
+        <code>"a b c d"</code><p>sequence, splits the cycle evenly</p>
         <code>"a [b c]"</code><p>subdivide a step</p>
         <code>"&lt;a b c&gt;"</code><p>one per cycle (alternate)</p>
         <code>"a*3" "a/2"</code><p>speed up / slow down a step</p>
@@ -288,13 +288,13 @@
         <code>"a(3,8)" "a(3,8,2)"</code><p>euclid (pulses, steps, rotation)</p>
         <code>"a , b"</code><p>stack in parallel · <code>~</code> = rest</p>
         <code>"a | b | c"</code><p>random choice each cycle</p>
-        <code>"{a b c}%4"</code><p>polymeter — n steps/cycle</p>
+        <code>"{a b c}%4"</code><p>polymeter, n steps/cycle</p>
       </section>
       <section>
         <h3>sources</h3>
         <code>shape("circle*8")</code><p>emit glyphs (alias <code>s</code>)</p>
         <code>n("0 1 2")</code><p>numbered dots · <code>run(8)</code> = 0…7</p>
-        <code>bg("#101820")</code><p>set the canvas background — stack it in</p>
+        <code>bg("#101820")</code><p>set the canvas background, stack it in</p>
         <p class="shapes">shapes: dot circle ring arc square box tri pent hex star plus line cross</p>
       </section>
       <section>
@@ -303,11 +303,11 @@
         <code>.color(palette("#a","#b","#c").at(x))</code><p>interpolate a palette by x (number · pattern · osc)</p>
         <code>.size(0.06)</code><p>radius, fraction of min(w,h)</p>
         <code>.x(0..1) .y(0..1)</code><p>centre point (default screen centre)</p>
-        <code>.radius(0..0.5) .angle(turns)</code><p>polar offset from the centre — <em>combine with x/y to orbit a point.</em> angle defaults to onset phase; <code>.angle(saw.range(0,5))</code> winds a spiral</p>
+        <code>.radius(0..0.5) .angle(turns)</code><p>polar offset from the centre, <em>combine with x/y to orbit a point.</em> angle defaults to onset phase; <code>.angle(saw.range(0,5))</code> winds a spiral</p>
         <code>.grid(cols, rows)</code><p>lay events into a grid by onset</p>
         <code>.rotate(turns) .spin(turns/s)</code><p>Z spin · 1 = full turn</p>
         <code>.rotateX(turns) .rotateY(turns)</code><p>3D tilt (foreshorten)</p>
-        <code>.fill(1|0) .stroke(1|0) .vertex(1|0)</code><p>draw modes — independent &amp; patternable. <code>.fill(0).vertex()</code> = dots only</p>
+        <code>.fill(1|0) .stroke(1|0) .vertex(1|0)</code><p>draw modes, independent &amp; patternable. <code>.fill(0).vertex()</code> = dots only</p>
         <code>.weight(0..0.1)</code><p>stroke / line / vertex-dot size</p>
         <code>.cap("round"|"butt"|"square")</code><p>line ends</p>
         <code>.join("round"|"miter"|"bevel")</code><p>corners</p>
@@ -329,22 +329,22 @@
       <section>
         <h3>shader fx <span>(chain onto a group)</span></h3>
         <code>.pixelate(n) .blur(n)</code><p>mosaic · gaussian glow</p>
-        <code>.feedback(fade, zoom, rot) .trails(fade)</code><p>trails / tunnel — warps the previous frame</p>
+        <code>.feedback(fade, zoom, rot) .trails(fade)</code><p>trails / tunnel, warps the previous frame</p>
         <code>.kaleido(n) .mirror()</code><p>radial wedges · left/right symmetry</p>
         <code>.displace(amount, scale)</code><p>warp / melt the layer</p>
         <code>.hue(t) .brightness(b) .contrast(c) .saturate(s)</code><p>colour grade</p>
-        <code>.pixelate(osc(0.2).range(3,26))</code><p>FX params take numbers, patterns, or oscs (global time) — so the effect itself moves</p>
+        <code>.pixelate(osc(0.2).range(3,26))</code><p>FX params take numbers, patterns, or oscs (global time), so the effect itself moves</p>
       </section>
       <section>
         <h3>signals &amp; maths <span>(0..1 unless ranged)</span></h3>
         <code>sine cosine saw isaw tri square</code>
         <code>rand perlin fbm brown gauss</code><p>noise: white · smooth · fractal · red · bell</p>
         <code>choose("a","b") irand(8)</code><p>random pick / integer per onset</p>
-        <code>osc(rate, "sine").range(lo, hi)</code><p>live LFO — keeps moving over a glyph's life (vs signals, frozen at spawn). shapes: sine saw tri square rand perlin fbm</p>
-        <code>osc(…).spread(n)</code><p>per-glyph phase offset = n × onset phase — spreads the wave <em>around a ring/grid</em> instead of every glyph in lockstep</p>
+        <code>osc(rate, "sine").range(lo, hi)</code><p>live LFO, keeps moving over a glyph's life (vs signals, frozen at spawn). shapes: sine saw tri square rand perlin fbm</p>
+        <code>osc(…).spread(n)</code><p>per-glyph phase offset = n × onset phase, spreads the wave <em>around a ring/grid</em> instead of every glyph in lockstep</p>
         <code>osc(2).rate(osc(0.1).range(1,4))</code><p>any osc param (rate · phase · range) can itself be an osc → cross-modulation (FM · PM · AM)</p>
         <code>.x(osc(0.2, "perlin").range(0, 1))</code><p>← a wandering dot</p>
-        <code>.range(lo, hi)</code><p>remap a 0..1 signal — lo/hi may be numbers, patterns, or oscs</p>
+        <code>.range(lo, hi)</code><p>remap a 0..1 signal, lo/hi may be numbers, patterns, or oscs</p>
         <code>.add(x) .sub(x) .mul(x) .div(x)</code><p>x may be a number <em>or a pattern</em></p>
         <code>.x( saw.add(sine.range(0, 0.1)) )</code><p>← wobble a ramp by a sine</p>
       </section>

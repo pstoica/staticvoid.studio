@@ -1,4 +1,4 @@
-// main.js — the live-coding shell and the particle renderer.
+// main.js, the live-coding shell and the particle renderer.
 //
 // You type a pattern expression; we eval it (with the DSL in scope) into a
 // Pattern. A clock advances cyclic time; each frame we query the pattern for the
@@ -15,8 +15,8 @@ const ctx = canvas.getContext('2d');
 
 // ── renderer selection ──────────────────────────────────────────────────────────
 // The WebGL renderer (on #glstage) is the default; the legacy Canvas2D path is
-// kept as an escape hatch via ?gl=0 (it lacks the shader FX chain — blur,
-// feedback, kaleido, etc. — and renders only pixelate on groups).
+// kept as an escape hatch via ?gl=0 (it lacks the shader FX chain (blur,
+// feedback, kaleido, etc.) and renders only pixelate on groups).
 const USE_GL = new URLSearchParams(location.search).get('gl') !== '0';
 const glCanvas = $('#glstage');
 const glr = USE_GL ? new GLRenderer(glCanvas) : null;
@@ -94,9 +94,9 @@ let playing = true;
 let decayScale = 1.5;   // master multiplier on a new glyph's decay (how long it lingers)
 const DEFAULT_BG = '#0a0a0a';
 let bgColor = DEFAULT_BG; // resolved canvas background for the current frame
-let bgSource = DEFAULT_BG; // raw bg arg (string/number/pattern/osc) — resolved each frame, so bg() is patternable
+let bgSource = DEFAULT_BG; // raw bg arg (string/number/pattern/osc), resolved each frame, so bg() is patternable
 let showClock = localStorage.getItem('loom.clock') !== '0'; // playhead sweep on/off
-let traceMode = false; // trace path — UI toggle removed for now; renderer support stays
+let traceMode = false; // trace path, UI toggle removed for now; renderer support stays
 let lastT = performance.now();
 
 const particles = [];
@@ -118,7 +118,7 @@ function run() {
     bgSource = DEFAULT_BG;                // bg("…") in the patch overrides this during compile
     pattern = compile(editor.value);
     // re-run starts fresh: drop glyphs from the previous patch so their (now
-    // stale) group FX — feedback history especially — don't linger after you
+    // stale) group FX (feedback history especially) don't linger after you
     // remove an effect. Old group render targets are pruned once their glyphs go.
     particles.length = 0;
     errBar.textContent = '';
@@ -143,7 +143,7 @@ function spawn(value, onset) {
   const jx = jit ? (Math.random() - 0.5) * jit : 0;
   const jy = jit ? (Math.random() - 0.5) * jit : 0;
 
-  // position inputs may be numbers or live oscillators — recomputed each frame
+  // position inputs may be numbers or live oscillators, recomputed each frame
   // only when one is an osc; otherwise the spawn position stands.
   const pin = { x: v.x, y: v.y, radius: v.radius, angle: v.angle, gridX: v.gridX, gridY: v.gridY, pan: v.pan, phase };
   const posLive = isOsc(v.x) || isOsc(v.y) || isOsc(v.radius) || isOsc(v.angle) || isOsc(v.gridX) || isOsc(v.gridY) || isOsc(v.pan);
@@ -217,7 +217,7 @@ function parseRGB(c) {
   }
   return [240, 243, 250];
 }
-// ── OKLab/OKLCH — perceptually-uniform colour, for clean palette interpolation ──
+// ── OKLab/OKLCH, perceptually-uniform colour, for clean palette interpolation ──
 const _lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
 const _gam = (c) => Math.max(0, Math.min(255, Math.round((c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055) * 255)));
 function rgbToLch([r, g, b]) {
@@ -384,7 +384,7 @@ function glResolve(p, minDim, out) {
   out.blend = p.blend;
 }
 
-// resolve an FX parameter against GLOBAL time — FX run per-layer-per-frame, not
+// resolve an FX parameter against GLOBAL time, FX run per-layer-per-frame, not
 // per-glyph, so oscs evaluate at elapsed seconds (not glyph age) and patterns are
 // sampled at the current cycle. Numbers pass through.
 function evalGlobal(param, cycle, elapsed) {
@@ -402,7 +402,7 @@ function evalGlobal(param, cycle, elapsed) {
 
 // resolve the (possibly patterned) background to a CSS colour for this frame.
 // Like a control's colour: number/string/palette = constant, osc = live (elapsed),
-// pattern = sampled at the cycle — so bg("<#000 #103>"), bg(osc(...)) etc. animate.
+// pattern = sampled at the cycle, so bg("<#000 #103>"), bg(osc(...)) etc. animate.
 function bgEval(src, cycle, elapsed) {
   if (isOsc(src)) return oscColor(src.__osc, elapsed, 0);
   if (src instanceof DSL.Pattern) {
@@ -417,7 +417,7 @@ function bgEval(src, cycle, elapsed) {
 // Inputs may be live oscillators, so this is re-run each frame for moving glyphs.
 // Unified layout: position = centre (x/y) + polar offset (radius, angle). x/y
 // default to screen centre; radius defaults to the mandala ring (0.34) only when
-// nothing else is set, else 0 — so you can mix freely: x/y alone = cartesian,
+// nothing else is set, else 0, so you can mix freely: x/y alone = cartesian,
 // radius/angle alone = ring, both = orbit around (x,y).
 function resolvePos(p, minDim, age) {
   const { x, y, radius, angle, gridX, gridY, pan, phase } = p.pin;
@@ -492,7 +492,7 @@ function drawVertices(g, geom, vr) {
 
 // ── 3D path: real perspective for tilted glyphs ─────────────────────────────────
 // Each shape is a list of polylines in its local z=0 plane. We rotate the
-// vertices in 3D (Z then X then Y) and project them through a pinhole camera —
+// vertices in 3D (Z then X then Y) and project them through a pinhole camera,
 // a genuine projective transform, not the affine scale Canvas2D can express.
 function shapeGeom(name, r, open) {
   const pts = (n, star = 0) => { const a = []; for (let i = 0; i < n; i++) { const t = -Math.PI / 2 + (i / n) * TAU, rr = star && i % 2 ? r * star : r; a.push([Math.cos(t) * rr, Math.sin(t) * rr]); } return a; };
@@ -617,7 +617,7 @@ function frame(now) {
 
 function tick(dt) {
   elapsed += dt;   // advances even when paused (like glyph age), so FX keep living
-  bgColor = bgEval(bgSource, cycle, elapsed);   // bg() is patternable — resolve per frame
+  bgColor = bgEval(bgSource, cycle, elapsed);   // bg() is patternable, resolve per frame
   if (glr) glr.setBackground(bgColor);
   // Clean redraw: wipe the buffer completely every frame, then repaint only the
   // live particles. Nothing is ever baked in, so there's no alpha residue/ghosting.
@@ -645,7 +645,7 @@ function tick(dt) {
 
   const minDim = Math.min(W, H);
 
-  // playhead — a faint clock hand sweeping the cycle phase, drawn *behind* the
+  // playhead, a faint clock hand sweeping the cycle phase, drawn *behind* the
   // glyphs. Toggleable, and freezes when paused (it reads `cycle`).
   if (showClock && !USE_GL) {
     ctx.save();
@@ -683,7 +683,7 @@ function tick(dt) {
   particles.length = w;
 
   // trace mode: thread a line through the live points in spawn order, behind
-  // the glyphs — rhythm becomes a connected path / constellation.
+  // the glyphs, rhythm becomes a connected path / constellation.
   if (traceMode && live.length > 1 && !USE_GL) {
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
@@ -720,13 +720,13 @@ function tick(dt) {
   $('#cycle').textContent = Math.floor(cycle).toString();
 }
 
-// debug stepper — lets tooling drive frames when the tab is backgrounded (the
+// debug stepper, lets tooling drive frames when the tab is backgrounded (the
 // browser pauses requestAnimationFrame while hidden). Harmless in production.
 window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); }, particles, setDecay: (v) => { decayScale = v; }, glr };
 
 // ── presets ───────────────────────────────────────────────────────────────────────
 const PRESETS = {
-  // gestural line field — perspective tumble, breathing weight, streaks
+  // gestural line field, perspective tumble, breathing weight, streaks
   'threads': `shape("line")
   .fast("256 128 256 128")
   .radius(
@@ -761,7 +761,7 @@ const PRESETS = {
     .color("#90e0ef").weight(0.004).decay(3)
 )`,
 
-  // euclid + parallel voices — 3-of-8 stars, with a reversed copy panned beside it
+  // euclid + parallel voices, 3-of-8 stars, with a reversed copy panned beside it
   // (jux), plus a recoloured echo a beat later (off)
   'weave': `stack(
   bg("#070512"),
@@ -774,7 +774,7 @@ const PRESETS = {
     .decay(2)
 )`,
 
-  // 3D perspective — polymeter polygons drifting and tumbling (rotateX / rotateY)
+  // 3D perspective, polymeter polygons drifting and tumbling (rotateX / rotateY)
   'lattice': `stack(
   bg("#060309"),
   shape("{square tri hex pent}%9")
@@ -788,7 +788,7 @@ const PRESETS = {
     .decay(1.8).fast(2)
 )`,
 
-  // wandering dots — live oscillators on position, hue, and size
+  // wandering dots, live oscillators on position, hue, and size
   'drift': `stack(
   bg("#05050a"),
   shape("circle*10")
@@ -800,7 +800,7 @@ const PRESETS = {
 )`,
 
   // cross-modulation: the radius oscillator's RATE is itself driven by another
-  // osc (FM), so the spiral warps — speeds up and slows down — as it breathes
+  // osc (FM), so the spiral warps (speeds up and slows down) as it breathes
   'warp': `stack(
   bg("#070310"),
   shape("dot*64")
@@ -824,7 +824,7 @@ const PRESETS = {
 
   // ── shader FX (WebGL): each group() runs a post-process chain on its layer ──
 
-  // feedback tunnel — rings fed back with zoom + rotation leave a spiralling trail
+  // feedback tunnel, rings fed back with zoom + rotation leave a spiralling trail
   'tunnel': `group(stack(
   bg("#03030a"),
   shape("ring*5")
@@ -833,7 +833,7 @@ const PRESETS = {
     .weight(0.008).decay(1.5)
 )).feedback(0.94, 1.05, 0.03)`,
 
-  // kaleidoscopic feedback storm — lines tumbling in perspective, the whole FX
+  // kaleidoscopic feedback storm, lines tumbling in perspective, the whole FX
   // chain (kaleido / feedback / pixelate) stuttered by patterned params
   'vortex': `group(
 shape("line dot")
@@ -862,7 +862,7 @@ shape("line dot")
 .pixelate("[0 | 0 | 32]*8")`,
 };
 
-// a gentle starting point — a rainbow ring of pulsing dots
+// a gentle starting point, a rainbow ring of pulsing dots
 const DEFAULT_PATCH = `shape("circle*6")
   .color(saw.range(0, 1))
   .size(sine.range(0.04, 0.09).fast(2))
@@ -924,7 +924,7 @@ function attachScrub(el, { min, max, step, get, set }) {
   const valEl = el.querySelector('b');
   let dragging = false, sx = 0, sv = 0, moved = false;
   el.addEventListener('pointerdown', (e) => {
-    if (valEl.isContentEditable) return;                 // mid-edit — let the caret work
+    if (valEl.isContentEditable) return;                 // mid-edit, let the caret work
     dragging = true; moved = false; sx = e.clientX; sv = get(); el.setPointerCapture?.(e.pointerId);
     el.classList.add('drag'); document.body.style.userSelect = 'none'; e.preventDefault();
   });
@@ -966,7 +966,7 @@ editor.addEventListener('scroll', () => { hl.scrollTop = editor.scrollTop; hl.sc
 
 let flashT = 0;
 // the wordmark is one solid colour per letter; each run shifts the palette by one
-// — discrete steps that fit the app's solid-colour glyphs better than a gradient.
+// discrete steps that fit the app's solid-colour glyphs better than a gradient.
 const LOGO_COLORS = ['#ff5d73', '#ffd166', '#6df0c2', '#56b6ff', '#b58cff'];
 const logoSpans = [...$('#brand h1').querySelectorAll('span')];
 const LN = LOGO_COLORS.length;
@@ -1073,7 +1073,7 @@ document.addEventListener('pointerdown', (e) => {
   setSide(false);
 });
 
-// resizable sidebar — drag the left-edge grabber; width persists in localStorage
+// resizable sidebar, drag the left-edge grabber; width persists in localStorage
 const sideGrab = $('#sidegrab');
 const SIDE_W_KEY = 'loom.sidewidth';
 const clampSideW = (w) => Math.max(300, Math.min(window.innerWidth * 0.92, w));
@@ -1094,7 +1094,7 @@ sideGrab.addEventListener('pointerup', () => {
   localStorage.setItem(SIDE_W_KEY, parseInt(side.style.width, 10));
 });
 
-// resizable editor — drag the rail's right-edge grabber to set the code column width
+// resizable editor, drag the rail's right-edge grabber to set the code column width
 const railGrab = $('#railgrab');
 const RAIL_W_KEY = 'loom.railwidth';
 const clampRailW = (w) => Math.max(340, Math.min(window.innerWidth - 180, w));
@@ -1132,7 +1132,7 @@ editor.addEventListener('blur', activity);
 document.addEventListener('mouseleave', () => { if (document.activeElement !== editor) setIdle(true); });
 
 // ── boot ────────────────────────────────────────────────────────────────────────────
-// one-time photosensitivity disclosure — shown until acknowledged (saved in localStorage)
+// one-time photosensitivity disclosure, shown until acknowledged (saved in localStorage)
 const warn = $('#warn');
 if (localStorage.getItem('loom.epilepsy') !== '1') warn.hidden = false;
 $('#warnok').addEventListener('click', () => { localStorage.setItem('loom.epilepsy', '1'); warn.hidden = true; });

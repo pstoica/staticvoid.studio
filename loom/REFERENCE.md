@@ -1,4 +1,4 @@
-# Loom — language reference
+# Loom: language reference
 
 Loom is a Tidal/Strudel-style pattern language for drawing. You write an
 expression that evaluates to a **pattern**; the renderer queries it each frame
@@ -18,13 +18,13 @@ to run.
 
 | Syntax | Meaning |
 | --- | --- |
-| `"a b c d"` | sequence — splits the cycle into equal steps |
+| `"a b c d"` | sequence, splits the cycle into equal steps |
 | `"a [b c]"` | subdivide a single step |
 | `"<a b c>"` | one item per cycle (alternation) |
 | `"a*3"` | play a step 3× faster (3 times in its slot) |
 | `"a/2"` | play a step over 2 cycles |
 | `"a!3"` | replicate a into 3 steps |
-| `"a@3 b"` | weighted steps — `a` takes ¾ of the cycle, `b` ¼ |
+| `"a@3 b"` | weighted steps, `a` takes ¾ of the cycle, `b` ¼ |
 | `"a(3,8)"` | euclidean: 3 pulses spread over 8 steps |
 | `"a(3,8,2)"` | …rotated by 2 steps |
 | `"a , b"` | stack in parallel (both at once) |
@@ -55,7 +55,7 @@ Sources turn tokens into glyph events. They are the start of every chain.
 ## Controls
 
 Chain these onto a source to set per-glyph attributes. Structure comes from the
-left, the value is sampled from the right — so the argument can be a number, a
+left, the value is sampled from the right, so the argument can be a number, a
 mini-notation string, **or a pattern/signal**:
 
 ```js
@@ -75,7 +75,7 @@ shape("dot*8").size("0.04 0.08").color(sine.range(0, 1))
 Position is **centre (x/y) + polar offset (radius/angle)**, so they mix freely:
 `x/y` alone → cartesian; `radius/angle` alone → ring; **both → orbit around (x,y)**.
 
-`.grid(cols, rows)` is a third layout — it places events into a `cols×rows` grid
+`.grid(cols, rows)` is a third layout, it places events into a `cols×rows` grid
 by onset (the centre point), and `radius/angle` still offset from each cell.
 
 ## Groups & effects (shader FX)
@@ -93,20 +93,20 @@ stack(
 )
 ```
 
-Effects **chain in call order** — each is a shader pass over the layer's texture:
+Effects **chain in call order**, each is a shader pass over the layer's texture:
 
 | Effect | Params | Does |
 | --- | --- | --- |
 | `.pixelate(block)` | block size (px) | mosaic / blocky downscale |
 | `.blur(radius)` | radius (px) | gaussian blur → soft glow |
-| `.feedback(fade, zoom, rot)` | fade `0..1`, zoom `~1`, rot turns | trails / tunnel — composites over a warped copy of the previous frame |
+| `.feedback(fade, zoom, rot)` | fade `0..1`, zoom `~1`, rot turns | trails / tunnel, composites over a warped copy of the previous frame |
 | `.trails(fade)` | fade `0..1` | feedback with no zoom / rotation |
 | `.hue(t)` | turns | rotate hue |
 | `.brightness(b)` `.contrast(c)` `.saturate(s)` | `1` = identity (`saturate(0)` = grey) | colour grade |
 | `.negative(amount)` `.invert(amount)` | `0..1` (`0` = off) | invert colours |
 | `.displace(amount, scale)` | amount (uv), scale (freq) | warp / melt the layer |
 | `.kaleido(slices)` | n | fold into `n` mirrored wedges |
-| `.mirror()` | — | left/right symmetry |
+| `.mirror()` | (none) | left/right symmetry |
 
 ```js
 group(shape("tri*6").radius(0.24).rotate(saw.range(0,1))
@@ -132,20 +132,20 @@ at its identity (`hue 0`, the rest `1`). So `kaleido("<6 0>")` folds every other
 cycle, `mirror("1 0")` flips on and off, `blur(saw.range(0, 12))` swells in.
 
 > Note: FX live on the group, evaluated per-frame, so per-event combinators like
-> `.sometimes` don't apply to them — pattern the FX param instead (as above).
+> `.sometimes` don't apply to them, pattern the FX param instead (as above).
 
 > The shader FX run on the WebGL renderer (the default). The legacy Canvas2D
 > renderer (append `?gl=0` to the URL) applies only `pixelate`.
 | `.rotate(t)` | turns (`1` = 360°) | static Z rotation |
 | `.rotateX(t)` `.rotateY(t)` | turns | 3D tilt (foreshortening) around the horizontal / vertical axis |
 | `.spin(t)` | turns/second | continuous Z rotation |
-| `.pan(n)` | `0..1` (0=left · .5=centre · 1=right) | horizontal x-shift of the centre (the stereo-pan analog) — mostly a `jux` primitive, not very useful alone |
+| `.pan(n)` | `0..1` (0=left · .5=centre · 1=right) | horizontal x-shift of the centre (the stereo-pan analog), mostly a `jux` primitive, not very useful alone |
 | `.jitter(n)` | `0..0.1` typical | random positional scatter |
 | `.alpha(n)` / `.opacity(n)` | `0..1` | peak opacity (per glyph) |
 
 ### Style
 
-`fill` and `stroke` are **independent, patternable** booleans — a glyph can be
+`fill` and `stroke` are **independent, patternable** booleans, a glyph can be
 filled, outlined, or both. All four are patterns, so `.fill("1 0")`,
 `.weight(sine.range(.002,.02))`, `.cap("<round butt>")` all work.
 
@@ -159,7 +159,7 @@ filled, outlined, or both. All four are patterns, so `.fill("1 0")`,
 | `.join(s)` | corners: `"round"` (default) `"miter"` `"bevel"` |
 
 > Three independent draw modes: fill, stroke, vertex. Outline-only: `.fill(0).stroke()`.
-> Vertices only: `.fill(0).vertex()`. They compose — `.stroke().vertex()` outlines *and* dots.
+> Vertices only: `.fill(0).vertex()`. They compose, `.stroke().vertex()` outlines *and* dots.
 > `ring` / `arc` / `line` / `cross` are outlines (no fill); they stroke by default.
 
 ### Envelope (per glyph, in seconds)
@@ -170,7 +170,7 @@ filled, outlined, or both. All four are patterns, so `.fill("1 0")`,
 | `.decay(s)` | fade-out time / lifetime. default ≈ one cycle. alias: `.life(s)` |
 
 The **decay** slider in the transport is a master multiplier baked into each
-glyph *at spawn* — moving it only affects glyphs drawn afterward, never ones
+glyph *at spawn*, moving it only affects glyphs drawn afterward, never ones
 already on screen. The **clock** button toggles the sweeping cycle playhead, and
 **trace** threads a line through the live glyph points (in spawn order) so the
 rhythm reads as a connected path / constellation.
@@ -230,7 +230,7 @@ a control takes a value.
 ### Live oscillators
 
 A signal is sampled **once at a glyph's onset and frozen**. An **`osc`** keeps
-running over the glyph's whole lifetime — the renderer re-evaluates it every
+running over the glyph's whole lifetime, the renderer re-evaluates it every
 frame against the glyph's age, like `spin` does for rotation. So a dot can keep
 moving, its colour can cycle, its size can breathe, *after* it's drawn.
 
@@ -249,11 +249,11 @@ onset phase`, so the wave spreads *around* a ring/grid (a gradient) and still
 animates: `palette("rainbow").at(osc(0.08).spread(1).range(0,1))` = a rotating
 colour wheel around the ring.
 
-**Cross-modulation:** every osc parameter — `rate`, `phase`, `spread`, and the
-`lo`/`hi` of `range` — may itself be an osc, so you get LFOs modulating LFOs:
+**Cross-modulation:** every osc parameter (`rate`, `phase`, `spread`, and the
+`lo`/`hi` of `range`) may itself be an osc, so you get LFOs modulating LFOs:
 `osc(2).rate(osc(0.1).range(1,4))` (FM, warps the tempo), `.phase(osc(...))` (PM,
 smooth wobble), `.range(osc, osc)` (AM, the band breathes). Oscs also take
-arithmetic — `.add/.sub/.mul/.div(x)`, where `x` is a number or another osc:
+arithmetic, `.add/.sub/.mul/.div(x)`, where `x` is a number or another osc:
 `osc(1).range(0,1).mul(osc(0.2).range(0.5,1))` rings one osc's output with another.
 
 Works on any continuous control: `x` `y` `radius` `pan` `size` `weight` `open`
@@ -278,7 +278,7 @@ shape("dot*16")
 ```
 
 > Arithmetic operates on **numeric** patterns (signals, `n(...)`, mini numbers).
-> Compose them *before* handing them to a control, as above — not after, where
+> Compose them *before* handing them to a control, as above, not after, where
 > the values are control objects.
 
 ---
@@ -293,22 +293,22 @@ palette("#0b3d91", "#1ec8c8", "#7fffd4", "#b58cff").at(x)
 
 `.at(x)` maps a `0..1` position `x` to an interpolated colour, where `x` may be:
 
-- a **number** — a fixed colour at that position,
-- a **pattern/signal** (`saw`, `"0 .5 1"`) — sampled at each glyph's onset (frozen),
-- an **`osc`** — the colour keeps interpolating over the glyph's lifetime (live).
+- a **number**, a fixed colour at that position,
+- a **pattern/signal** (`saw`, `"0 .5 1"`), sampled at each glyph's onset (frozen),
+- an **`osc`**, the colour keeps interpolating over the glyph's lifetime (live).
 
 `x` wraps, so a `saw` sweeps the ramp and repeats. Stops may be hex, names, or
-hue numbers. Interpolation is in **OKLCH** (perceptually uniform — clean, vivid
+hue numbers. Interpolation is in **OKLCH** (perceptually uniform, clean, vivid
 transitions, no muddy grey midpoints). Used in `.color(…)`.
 
-Built-in ramps (use by name — `palette("sunset")`): `sunset` `ember` `ice`
+Built-in ramps (use by name, `palette("sunset")`): `sunset` `ember` `ice`
 `neon` `forest` `candy` `mono` `rainbow` `aurora`.
 
 **Background:** `bg("#101820")` sets the canvas background for the patch. It
 returns `silence`, so stack it in: `stack(bg("#101820"), shape("dot*8")…)`.
 Remove it and the background reverts to the default on the next run.
 
-`bg` is **patternable** — its argument is resolved every frame, so it can move:
+`bg` is **patternable**, its argument is resolved every frame, so it can move:
 a mini-notation string alternates (`bg("<#001018 #100818>")`), an `osc` drifts
 live (`bg(osc(0.05).range(0, 1))`), and a palette interpolates
 (`bg(palette("ice").at(osc(0.03).range(0,1)))`).
@@ -316,11 +316,11 @@ live (`bg(osc(0.05).range(0, 1))`), and a palette interpolates
 ## Layout model
 
 - An event's **onset phase** within the cycle places it on a ring around centre
-  (angle = phase, starting at top). So `"a b c d"` lands at 12/3/6/9 o'clock —
+  (angle = phase, starting at top). So `"a b c d"` lands at 12/3/6/9 o'clock,
   rhythm becomes geometry.
 - `.radius(n)` moves it in/out along that ring; `.x()/.y()` switch to absolute
   cartesian placement and ignore the ring.
-- Glyphs are redrawn fresh every frame and fade via their envelope — nothing is
+- Glyphs are redrawn fresh every frame and fade via their envelope, nothing is
   baked into the canvas, so there is no smear/ghosting.
 
 ---
