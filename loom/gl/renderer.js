@@ -24,7 +24,7 @@ const QUAD_IDX = new Uint16Array([0, 1, 2, 0, 2, 3]);
 // instance attributes: name → component count
 const IATTRS = {
   iPos: 2, iRadius: 1, iRot: 1, iRotX: 1, iRotY: 1, iColor: 3, iAlpha: 1,
-  iWeight: 1, iOpen: 1, iShape: 1, iFill: 1, iStroke: 1, iVertex: 1,
+  iWeight: 1, iOpen: 1, iShape: 1, iFill: 1, iStroke: 1, iVertex: 1, iCap: 1,
 };
 const TRACE_CAP = 8192;         // max points in the trace polyline
 
@@ -45,12 +45,16 @@ attribute float iShape;         // shape id
 attribute float iFill;          // 0/1
 attribute float iStroke;        // 0/1
 attribute float iVertex;        // 0/1 — dot at each vertex
+attribute float iCap;           // line/cross caps: 0 round, 1 butt, 2 square
 varying vec2 vLocal;            // shape-space coordinate, px (un-rotated)
-varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vAlpha;
+varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vAlpha;
 varying vec3 vColor;
 void main() {
   float pad = iWeight * 0.5 + 2.0;          // stroke half-width + AA margin
-  float ext = iRadius + pad;                 // quad half-extent, px
+  // a line's length scales with open ((1-open)*r), and open can exceed 1 (e.g.
+  // .open(5) draws a streak 4x the radius) — size the quad to contain it.
+  float reach = (int(iShape + 0.5) == 9) ? abs(1.0 - iOpen) * iRadius : iRadius;
+  float ext = reach + pad;                   // quad half-extent, px
   vec2 local = position.xy * ext;            // shape-space position, px (flat, z=0)
   vLocal = local;
 
@@ -76,7 +80,7 @@ void main() {
     w
   );
   vR = iRadius; vWeight = iWeight; vOpen = iOpen; vShape = iShape;
-  vFill = iFill; vStroke = iStroke; vVertex = iVertex; vAlpha = iAlpha; vColor = iColor;
+  vFill = iFill; vStroke = iStroke; vVertex = iVertex; vCap = iCap; vAlpha = iAlpha; vColor = iColor;
 }`;
 
 const FRAG = `
@@ -84,7 +88,7 @@ precision highp float;
 #define PI 3.14159265359
 #define TAU 6.28318530718
 varying vec2 vLocal;
-varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vAlpha;
+varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vAlpha;
 varying vec3 vColor;
 
 vec2 rot2(vec2 p, float a){ float c=cos(a), s=sin(a); return vec2(p.x*c-p.y*s, p.x*s+p.y*c); }
@@ -113,6 +117,19 @@ float sdSeg(vec2 p, vec2 a, vec2 b){
   vec2 pa = p-a, ba = b-a;
   float h = clamp(dot(pa,ba)/dot(ba,ba), 0.0, 1.0);
   return length(pa - ba*h);
+}
+// signed distance to a *stroked* segment with caps: 0 round, 1 butt (flat at the
+// endpoint), 2 square (flat, extended by the half-width). Returns the thickened
+// stroke SDF (<0 inside), so caps are real geometry rather than always round.
+float sdSegCap(vec2 p, vec2 a, vec2 b, float hw, int cap){
+  vec2 ba = b - a; float len = max(length(ba), 1e-5); vec2 dir = ba / len;
+  vec2 pa = p - a;
+  float t = dot(pa, dir);
+  if (cap == 0) return length(pa - dir * clamp(t, 0.0, len)) - hw;   // round
+  float ext = (cap == 2) ? hw : 0.0;                                  // square extends, butt doesn't
+  float dx = max(-(t + ext), t - (len + ext));
+  float dy = abs(dot(pa, vec2(-dir.y, dir.x))) - hw;
+  return min(max(dx, dy), 0.0) + length(max(vec2(dx, dy), 0.0));
 }
 // regular convex polygon, flat-topped (an edge perpendicular to +y)
 float sdNgonFlat(vec2 p, float r, float n){
@@ -156,6 +173,8 @@ void main(){
   int id = int(vShape + 0.5);
   float d;               // signed distance: <0 inside (or unsigned for open curves)
   bool openCurve = false;
+  bool capped = false;   // line/cross: d is already the thickened, capped stroke
+  float hw = max(vWeight*0.5, 0.5);      // stroke half-width
   if (id == 0) {                         // circle / dot
     d = length(q) - vR;
   } else if (id == 1) {                  // ring
@@ -184,18 +203,20 @@ void main(){
     d = sdStar(q, vR, 5.0, 2.6);
   } else if (id == 8) {                  // plus
     d = sdPlus(q, vec2(vR, vR*0.38));
-  } else if (id == 9) {                  // line
+  } else if (id == 9) {                  // line (open scales the length; capped)
     float h = (1.0 - vOpen) * vR;
-    d = sdSeg(q, vec2(-h, 0.0), vec2(h, 0.0)); openCurve = true;
-  } else {                               // cross (X)
-    d = min(sdSeg(q, vec2(-vR,-vR), vec2(vR,vR)), sdSeg(q, vec2(vR,-vR), vec2(-vR,vR)));
-    openCurve = true;
+    d = sdSegCap(q, vec2(h, 0.0), vec2(-h, 0.0), hw, int(vCap + 0.5)); capped = true;
+  } else {                               // cross (X; capped)
+    int cp = int(vCap + 0.5);
+    d = min(sdSegCap(q, vec2(-vR,-vR), vec2(vR,vR), hw, cp), sdSegCap(q, vec2(vR,-vR), vec2(-vR,vR), hw, cp));
+    capped = true;
   }
 
   float aa = 1.0;                        // AA half-width in px
-  float hw = max(vWeight*0.5, 0.5);      // stroke half-width
   float cov;
-  if (openCurve) {                       // outline curves: stroke band only
+  if (capped) {                          // line/cross: d is the thickened stroke → fill it
+    cov = vStroke * (1.0 - smoothstep(-aa, aa, d));
+  } else if (openCurve) {                // ring/arc outline: stroke band
     cov = vStroke * (1.0 - smoothstep(hw - aa, hw + aa, d));
   } else {
     float fillCov = vFill * (1.0 - smoothstep(-aa, aa, d));
@@ -555,6 +576,7 @@ export class GLRenderer {
         a.iFill[count] = out.fill;
         a.iStroke[count] = out.stroke;
         a.iVertex[count] = out.vertex;
+        a.iCap[count] = out.cap;
         count++;
       }
       if (!count) continue;

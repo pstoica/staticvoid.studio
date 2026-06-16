@@ -343,6 +343,7 @@ function cssToRGB(s) {
 // Mirrors drawGlyph's mod resolution but emits numbers + float rgb for the GPU.
 const SHAPE_ID = { dot: 0, circle: 0, ring: 1, arc: 2, square: 3, box: 3, tri: 4, pent: 5, hex: 6, star: 7, plus: 8, line: 9, cross: 10 };
 const OUTLINE_IDS = new Set([1, 2, 9, 10]);
+const CAP_ID = { round: 0, butt: 1, square: 2 };   // line/cross caps (spawn defaults cap to 'square')
 function glResolve(p, minDim, out) {
   const age = p.age;
   let sizePx = p.size, rotTurns = p.rotTurns, rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, color = null;
@@ -374,6 +375,7 @@ function glResolve(p, minDim, out) {
   out.stroke = outline ? ((p.stroke || !p.vertex) ? 1 : 0) : (p.stroke ? 1 : 0);
   out.fill = outline ? 0 : (p.fill ? 1 : 0);
   out.vertex = p.vertex ? 1 : 0;
+  out.cap = CAP_ID[p.cap] != null ? CAP_ID[p.cap] : 2;   // default square, matching spawn
   out.blend = p.blend;
 }
 
