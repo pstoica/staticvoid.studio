@@ -96,7 +96,7 @@ const DEFAULT_BG = '#0a0a0a';
 let bgColor = DEFAULT_BG; // resolved canvas background for the current frame
 let bgSource = DEFAULT_BG; // raw bg arg (string/number/pattern/osc) — resolved each frame, so bg() is patternable
 let showClock = localStorage.getItem('loom.clock') !== '0'; // playhead sweep on/off
-let traceMode = localStorage.getItem('loom.trace') === '1'; // connect live points into a path
+let traceMode = false; // trace path — UI toggle removed for now; renderer support stays
 let lastT = performance.now();
 
 const particles = [];
@@ -1026,14 +1026,7 @@ clockBtn.addEventListener('click', () => {
 });
 renderClock();
 
-const traceBtn = $('#tracebtn');
-function renderTrace() { traceBtn.classList.toggle('on', traceMode); traceBtn.classList.toggle('off', !traceMode); }
-traceBtn.addEventListener('click', () => {
-  traceMode = !traceMode;
-  localStorage.setItem('loom.trace', traceMode ? '1' : '0');
-  renderTrace();
-});
-renderTrace();
+// trace button removed for now; the mode stays off (renderer code remains, dormant)
 
 $('#newbtn').addEventListener('click', () => {
   editor.value = DEFAULT_PATCH; refreshHL(); run(); setActive('');
