@@ -72,9 +72,7 @@
 
   /* highlighted editor: a transparent <textarea> sits exactly over a <pre> that
      renders the coloured code, floating directly on the visuals (no box). */
-  /* fixed-height editor (~17 rows) so the controls sit right beneath it, not at
-     the far bottom of the screen. Longer patches scroll inside it. */
-  #editwrap { flex:none; height:min(440px, 54vh); min-height:0; position:relative; margin:2px 22px 0; }
+  #editwrap { flex:1; min-height:0; position:relative; margin:2px 22px 0; }
   #hl, #code { position:absolute; inset:0; margin:0; border:0; background:transparent;
     font:500 15px/1.65 var(--mono); padding:4px 16px; letter-spacing:.01em; tab-size:2;
     white-space:pre-wrap; overflow-wrap:break-word; overflow:auto; }
@@ -92,8 +90,10 @@
     overflow:hidden; opacity:0; transition:.18s var(--ease); }
   #err.show { max-height:64px; opacity:1; padding:8px 0 0; }
 
-  #transport { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  #transport { display:flex; flex-direction:column; align-items:flex-start; gap:10px;
     padding:14px 22px 14px; margin-top:12px; }
+  .trow { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .pair { display:inline-flex; gap:10px; align-items:center; }   /* keeps its buttons together */
   .btn { font:500 13px/1 var(--mono); color:var(--muted); background:rgba(255,255,255,.04);
     border:1px solid var(--line); border-radius:0; padding:12px 16px; cursor:pointer;
     transition:.14s var(--ease); letter-spacing:.02em; }
@@ -121,7 +121,7 @@
     transition:background .16s var(--ease), height .16s var(--ease); }
   #railgrab:hover::before, #railgrab.drag::before { background:var(--ink); height:66px; }
 
-  #meta { margin-top:auto; padding:14px 22px 16px; font:400 11px/1.5 var(--mono); color:var(--muted);
+  #meta { padding:0 22px 16px; font:400 11px/1.5 var(--mono); color:var(--muted);
     display:flex; justify-content:space-between; }
   #meta a { color:var(--muted); text-decoration:none; border-bottom:1px solid var(--line); }
   #meta a:hover { color:var(--ink); }
@@ -176,8 +176,7 @@
     :root { --rail-w:100vw; }
     #rail { top:auto; right:0; bottom:0; width:100vw; height:auto; max-height:56vh;
       border-right:0; border-top:1px solid var(--line); }
-    #editwrap { flex:1; height:auto; min-height:100px; }
-    #meta { margin-top:0; }
+    #editwrap { min-height:120px; }
     #hint { left:50%; bottom:calc(56vh + 14px); }
     /* sidebar = full-screen sheet on mobile: no awkward sliver, sticky header,
        a big obvious close, and no resize grabber (pointless on touch) */
@@ -232,15 +231,23 @@
     <div id="err"></div>
 
     <div id="transport">
-      <button class="btn" id="runbtn" title="Cmd/Ctrl + Enter">run <kbd>⌘⏎</kbd></button>
-      <button class="btn" id="playbtn">❚❚ pause</button>
-      <button class="btn" id="clearbtn">clear</button>
-      <button class="btn" id="clockbtn" title="toggle the cycle playhead">◷ clock</button>
-      <button class="btn" id="tracebtn" title="thread a path through the live points">◇ trace</button>
-      <button class="btn" id="panelbtn" title="presets panel">▤ presets</button>
-      <button class="btn" id="helpbtn" title="guide">? guide</button>
-      <div class="num" id="cpsnum" title="drag ↔ or scroll · double-click to reset">speed <b id="cpsval">0.60</b></div>
-      <div class="num" id="persistnum" title="drag ↔ or scroll · double-click to reset">decay <b id="decayval">1.5</b></div>
+      <div class="trow">
+        <button class="btn" id="runbtn" title="Cmd/Ctrl + Enter">run <kbd>⌘⏎</kbd></button>
+        <button class="btn" id="playbtn">❚❚ pause</button>
+        <button class="btn" id="clearbtn">clear</button>
+        <button class="btn" id="clockbtn" title="toggle the cycle playhead">◷ clock</button>
+        <button class="btn" id="tracebtn" title="thread a path through the live points">◇ trace</button>
+      </div>
+      <div class="trow">
+        <span class="pair">
+          <button class="btn" id="panelbtn" title="presets panel">▤ presets</button>
+          <button class="btn" id="helpbtn" title="guide">? guide</button>
+        </span>
+        <span class="pair">
+          <div class="num" id="cpsnum" title="drag ↔ or scroll · double-click to reset">speed <b id="cpsval">0.60</b></div>
+          <div class="num" id="persistnum" title="drag ↔ or scroll · double-click to reset">decay <b id="decayval">1.5</b></div>
+        </span>
+      </div>
     </div>
 
     <div id="meta">
