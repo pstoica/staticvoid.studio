@@ -228,25 +228,26 @@ uniform sampler2D tMap;
 varying vec2 vUv;
 void main() { gl_FragColor = texture2D(tMap, vUv); }`;
 
-// pixelate: box-average each block (not point-sample its centre — that biases
-// content toward block centres). A 4x4 grid of taps over the block is isotropic,
-// matching the Canvas2D downscale-average look.
-const PIXELATE_FRAG = `
+// pixelate: snap to block centre and sample the mip level whose texel ≈ the block
+// size, i.e. a true hardware area-average per block — isotropic (no bias toward
+// block centres) and temporally stable (no shimmer from sparse manual taps).
+// GLSL3 for textureLod; trilinear keeps it smooth as the block size oscillates.
+const FS_VERT3 = `
+in vec3 position;
+out vec2 vUv;
+void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+const PIXELATE_FRAG3 = `
 precision highp float;
 uniform sampler2D tMap;
 uniform vec2 uTexel;       // 1 / target size, device px
 uniform float uBlock;      // block size, device px
-varying vec2 vUv;
+uniform float uLod;        // log2(uBlock) — mip level to average over
+in vec2 vUv;
+out vec4 fragColor;
 void main() {
-  vec2 origin = floor((vUv / uTexel) / uBlock) * uBlock;   // block top-left, device px
-  vec4 sum = vec4(0.0);
-  for (int y = 0; y < 4; y++) {
-    for (int x = 0; x < 4; x++) {
-      vec2 sub = (vec2(float(x), float(y)) + 0.5) * 0.25;  // 4x4 sub-cell centres
-      sum += texture2D(tMap, (origin + sub * uBlock) * uTexel);
-    }
-  }
-  gl_FragColor = sum * 0.0625;                              // / 16
+  vec2 px = vUv / uTexel;
+  vec2 center = (floor(px / uBlock) + 0.5) * uBlock * uTexel;
+  fragColor = textureLod(tMap, center, uLod);
 }`;
 
 // separable gaussian blur (9 taps); run once horizontal, once vertical
@@ -434,7 +435,7 @@ export class GLRenderer {
     const V2 = () => new THREE.Vector2();
     this.fx = {
       copy: fsMat(COPY_FRAG, { tMap: { value: null } }),
-      pixelate: fsMat(PIXELATE_FRAG, { tMap: { value: null }, uTexel: { value: V2() }, uBlock: { value: 1 } }),
+      pixelate: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: PIXELATE_FRAG3, uniforms: { tMap: { value: null }, uTexel: { value: V2() }, uBlock: { value: 1 }, uLod: { value: 0 } }, depthTest: false, depthWrite: false }),
       blur: fsMat(BLUR_FRAG, { tMap: { value: null }, uTexel: { value: V2() }, uDir: { value: V2() }, uRadius: { value: 4 } }),
       feedback: fsMat(FEEDBACK_FRAG, { tMap: { value: null }, tHist: { value: null }, uFade: { value: 0.92 }, uZoom: { value: 1 }, uRot: { value: 0 } }),
       grade: fsMat(GRADE_FRAG, { tMap: { value: null }, uHue: { value: 0 }, uBright: { value: 1 }, uContrast: { value: 1 }, uSat: { value: 1 } }),
@@ -455,7 +456,7 @@ export class GLRenderer {
     const dw = Math.max(1, Math.round(this.W * this.DPR)), dh = Math.max(1, Math.round(this.H * this.DPR));
     let rt = this.groupRTs.get(gid);
     if (!rt || rt.w !== dw || rt.h !== dh) {
-      if (rt) { rt.a.dispose(); rt.b.dispose(); if (rt.hist) { rt.hist[0].dispose(); rt.hist[1].dispose(); } }
+      if (rt) { rt.a.dispose(); rt.b.dispose(); if (rt.hist) { rt.hist[0].dispose(); rt.hist[1].dispose(); } if (rt.mip) rt.mip.dispose(); }
       const opt = { depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
       rt = { a: new THREE.WebGLRenderTarget(dw, dh, opt), b: new THREE.WebGLRenderTarget(dw, dh, opt), w: dw, h: dh };
       this.groupRTs.set(gid, rt);
@@ -582,8 +583,14 @@ export class GLRenderer {
     for (const e of fx.chain) {
       const t = e.type;
       if (t === 'pixelate') {
-        const m = this.fx.pixelate; texel(m); m.uniforms.uBlock.value = Math.max(1, this._num(e.block, 8) * this.DPR);
-        this._blit(m, read.texture, write); swap();
+        // copy into a mipmapped scratch (Three regenerates its mips on unbind),
+        // then sample the mip level whose texel ≈ the block size = area average.
+        this._ensureMip(rt);
+        this._blit(this.fx.copy, read.texture, rt.mip);
+        const m = this.fx.pixelate; texel(m);
+        const block = Math.max(1, this._num(e.block, 8) * this.DPR);
+        m.uniforms.uBlock.value = block; m.uniforms.uLod.value = Math.log2(block);
+        this._blit(m, rt.mip.texture, write); swap();
       } else if (t === 'blur') {
         const m = this.fx.blur; texel(m); m.uniforms.uRadius.value = this._num(e.radius, 4) * this.DPR;
         m.uniforms.uDir.value.set(1, 0); this._blit(m, read.texture, write); swap();
@@ -625,6 +632,13 @@ export class GLRenderer {
     rt.hist = [new THREE.WebGLRenderTarget(rt.w, rt.h, opt), new THREE.WebGLRenderTarget(rt.w, rt.h, opt)];
     rt.histW = rt.w; rt.histH = rt.h; rt.histCur = 0;
   }
+  // lazily allocate the mipmapped scratch the pixelate pass averages over
+  _ensureMip(rt) {
+    if (rt.mip && rt.mipW === rt.w && rt.mipH === rt.h) return;
+    if (rt.mip) rt.mip.dispose();
+    rt.mip = new THREE.WebGLRenderTarget(rt.w, rt.h, { depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: true });
+    rt.mipW = rt.w; rt.mipH = rt.h;
+  }
   // offscreen pass: replace the target's contents with the shaded result
   _blit(mat, inputTex, target) {
     mat.uniforms.tMap.value = inputTex;
@@ -650,7 +664,7 @@ export class GLRenderer {
     for (const gid of [...this.groupRTs.keys()]) {
       if (!activeGroups || !activeGroups.has(gid)) {
         const rt = this.groupRTs.get(gid);
-        rt.a.dispose(); rt.b.dispose(); if (rt.hist) { rt.hist[0].dispose(); rt.hist[1].dispose(); }
+        rt.a.dispose(); rt.b.dispose(); if (rt.hist) { rt.hist[0].dispose(); rt.hist[1].dispose(); } if (rt.mip) rt.mip.dispose();
         this.groupRTs.delete(gid);
       }
     }
