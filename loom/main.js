@@ -1043,6 +1043,34 @@ const PRESETS = {
       .size(0.014).decay(2.5)
   ).pixelate(osc(0.2).range(3, 26)).saturate(1.4)
 )`,
+
+  // kaleidoscopic feedback storm — lines tumbling in perspective, the whole FX
+  // chain (kaleido / feedback / pixelate) stuttered by patterned params
+  'vortex': `group(
+shape("line dot")
+  .fast("64 | 128 | 256 | 128")
+  .radius(
+    sine.range(0.3, 0.2).fast(10)
+      .add(sine.range(-0.5, 0.3).fast(3))
+  )
+  .angle(saw.range(0, 2))
+  .open(sine.range(0, 5).slow(8))
+  .sometimes(x => x.open(5))
+  .color(
+    palette("rainbow")
+      .at(osc(0.1).spread(2).range(0, 4))
+  )
+  .size(sine.range(0.01, 0.4).slow(4))
+  .decay(sine.range(0.1, 0.5).slow(7))
+  .rotate(saw.range(-1, 9).slow(4))
+  .rotateX(sine.range(-1, 1).slow(9))
+  .rotateY(sine.range(-1, 1).slow(2))
+  .weight(sine.range(0.001, 0.001).slow(8))
+  .cap("square")
+)
+.kaleido("[0 | 4 | 8 | 16 | 32]*8")
+.feedback(0.99, "[0.8 | 0.99]/4")
+.pixelate("[0 | 0 | 32]*8")`,
 };
 
 // a gentle starting point — a rainbow ring of pulsing dots
