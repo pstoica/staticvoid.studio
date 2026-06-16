@@ -109,7 +109,13 @@
   }
   .btn { font:500 13px/1 var(--mono); color:var(--muted); background:rgba(255,255,255,.04);
     border:1px solid var(--line); border-radius:0; padding:12px 16px; cursor:pointer;
-    transition:.14s var(--ease); letter-spacing:.02em; }
+    transition:.14s var(--ease); letter-spacing:.02em;
+    display:inline-flex; align-items:center; gap:7px; }
+  /* every icon sits in the same fixed box, so swapping glyphs never reflows a button */
+  .ico { width:14px; height:14px; flex:none; }
+  #playbtn .ico-play { display:none; }                 /* live (default) shows pause */
+  #playbtn:not(.live) .ico-pause { display:none; }
+  #playbtn:not(.live) .ico-play { display:inline; }
   .btn:hover { color:var(--ink); background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.2); }
   .btn.on { color:var(--bg); background:var(--ink); border-color:var(--ink); }
   .btn.off { color:var(--muted); }
@@ -249,16 +255,23 @@
 
     <div id="transport">
       <div class="trow">
-        <button class="btn" id="runbtn" title="run · Cmd/Ctrl + Enter"><span class="btxt">run </span><kbd>⌘⏎</kbd></button>
-        <button class="btn icon" id="playbtn" title="play / pause">❚❚</button>
-        <button class="btn" id="clearbtn" title="clear"><span class="bico">✕</span><span class="btxt">clear</span></button>
+        <button class="btn" id="runbtn" title="run · Cmd/Ctrl + Enter"><span class="btxt">run</span><kbd>⌘⏎</kbd></button>
+        <button class="btn icon live" id="playbtn" title="pause the animation">
+          <svg class="ico ico-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+          <svg class="ico ico-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="btn" id="clearbtn" title="clear">
+          <svg class="ico bico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg><span class="btxt">clear</span></button>
         <span class="pair">
-          <button class="btn" id="panelbtn" title="presets panel">▤<span class="btxt"> presets</span></button>
-          <button class="btn" id="helpbtn" title="guide">?<span class="btxt"> guide</span></button>
+          <button class="btn" id="panelbtn" title="presets panel">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg><span class="btxt">presets</span></button>
+          <button class="btn" id="helpbtn" title="guide">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.3 2.4c-.8.3-1.3.9-1.3 1.7v.4"/><path d="M12 17h.01"/></svg><span class="btxt">guide</span></button>
         </span>
       </div>
       <div class="trow">
-        <button class="btn" id="clockbtn" title="toggle the cycle playhead">◷<span class="btxt"> clock</span></button>
+        <button class="btn" id="clockbtn" title="toggle the cycle playhead">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg><span class="btxt">clock</span></button>
         <span class="pair">
           <div class="num" id="cpsnum" title="drag ↔ or scroll · double-click to reset">speed <b id="cpsval">0.60</b></div>
           <div class="num" id="persistnum" title="drag ↔ or scroll · double-click to reset">decay <b id="decayval">1.5</b></div>

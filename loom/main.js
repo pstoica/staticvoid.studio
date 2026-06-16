@@ -805,10 +805,10 @@ const PRESETS = {
   bg("#070310"),
   shape("dot*64")
     .angle(saw.range(0, 2))
-    .radius(osc(0.3).rate(osc(0.06).range(0.2, 2.5)).spread(1).range(0.08, 0.45))
-    .color(palette("neon").at(osc(0.1).spread(1).range(0, 1)))
+    .radius(osc(0.1).rate(osc(0.06).range(0.1, 0.5)).spread(3).range(0.08, 0.45))
+    .color(palette("neon").at(osc(0.5).spread(2).range(0, 1)))
     .size(0.013)
-    .decay(3)
+    .decay(1)
 )`,
 
   // a ring whose hue + size form a wave AROUND it (osc .spread by onset phase),
@@ -816,7 +816,7 @@ const PRESETS = {
   'halo': `stack(
   bg("#05060d"),
   shape("circle*32")
-    .radius(sine.range(0.2, 0.34).slow(3))
+    .radius(sine.range(0.1, 0.34).slow(3))
     .color(palette("rainbow").at(osc(0.08).spread(1).range(0, 1)))
     .size(osc(0.5, "sine").spread(2).range(0.01, 0.05))
     .decay(2)
@@ -1009,7 +1009,6 @@ function setPlaying(on) {
   playing = on;
   const b = $('#playbtn');
   b.classList.toggle('live', playing);
-  b.textContent = playing ? '❚❚' : '▶';
   b.title = playing ? 'pause the animation' : 'resume';
 }
 $('#playbtn').addEventListener('click', () => setPlaying(!playing));
