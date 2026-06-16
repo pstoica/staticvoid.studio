@@ -92,7 +92,7 @@ let cycle = 0;          // current position in cycles (fractional)
 let elapsed = 0;        // wall-clock seconds since start, for global-time FX params
 let playing = true;
 let decayScale = 1.5;   // master multiplier on a new glyph's decay (how long it lingers)
-const DEFAULT_BG = '#06070a';
+const DEFAULT_BG = '#0a0a0a';
 let bgColor = DEFAULT_BG; // resolved canvas background for the current frame
 let bgSource = DEFAULT_BG; // raw bg arg (string/number/pattern/osc) — resolved each frame, so bg() is patternable
 let showClock = localStorage.getItem('loom.clock') !== '0'; // playhead sweep on/off
