@@ -139,7 +139,7 @@ cycle, `mirror("1 0")` flips on and off, `blur(saw.range(0, 12))` swells in.
 | `.rotate(t)` | turns (`1` = 360°) | static Z rotation |
 | `.rotateX(t)` `.rotateY(t)` | turns | 3D tilt (foreshortening) around the horizontal / vertical axis |
 | `.spin(t)` | turns/second | continuous Z rotation |
-| `.pan(n)` | `0..1` (0=left, .5=centre, 1=right) | horizontal shift; `jux` uses this |
+| `.pan(n)` | `0..1` (0=left · .5=centre · 1=right) | horizontal x-shift of the centre (the stereo-pan analog) — mostly a `jux` primitive, not very useful alone |
 | `.jitter(n)` | `0..0.1` typical | random positional scatter |
 | `.alpha(n)` / `.opacity(n)` | `0..1` | peak opacity (per glyph) |
 
@@ -196,8 +196,9 @@ Combinators that reshape a pattern. All return a pattern, so they chain.
 | `.every(n, p => …)` | apply a function every `n`th cycle |
 | `.iter(n)` | rotate the pattern by `1/n` each cycle |
 | `.palindrome()` | alternate forward / reversed cycles |
-| `.jux(p => …)` | duplicate; transform one copy; pan the two apart |
-| `.off(t, p => …)` | overlay an echo shifted later by `t` cycles |
+| `.superimpose(p => …)` | overlay a transformed copy in place (parallel voices) |
+| `.jux(p => …)` | superimpose, but pan the two copies apart (left / right) |
+| `.off(t, p => …)` | superimpose, but shift the copy later by `t` cycles (a modifiable echo) |
 | `.degrade()` | drop ~50% of events (seeded by time) |
 | `.degradeBy(p)` | drop a fraction `p` of events |
 | `.sometimes(f)` `.often(f)` `.rarely(f)` | apply `f` to a random share of events |

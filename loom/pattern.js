@@ -92,6 +92,10 @@ class Pattern {
 
   off(t, f) { return stack(this, f(this._late(t))); }
 
+  // overlay a transformed copy in place — stack(this, f(this)). The plain sibling
+  // of jux (superimpose + pan apart) and off (superimpose + delay).
+  superimpose(f) { return stack(this, f(this)); }
+
   // visual `jux`: clone the pattern, transform one copy, pan the two apart.
   jux(f) { return stack(this.set('pan', 0), f(this).set('pan', 1)); }
 

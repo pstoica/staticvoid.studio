@@ -33,7 +33,7 @@ const cpsLabel = $('#cpsval');
 const HL_FN = new Set(['shape','s','n','stack','cat','slowcat','fastcat','seq','sequence','timecat',
   'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand','osc','palette','bg','group']);
 const HL_SIG = new Set(['sine','cosine','saw','isaw','tri','square','rand','perlin','fbm','brown','gauss','white']);
-const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux','off','degrade','degradeBy',
+const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux','superimpose','off','degrade','degradeBy',
   'unDegradeBy','sometimes','sometimesBy','often','rarely','early','late','range','add','sub','mul','div',
   'color','size','x','y','radius','angle','grid','rotate','rotateX','rotateY','spin','blend','alpha','opacity','pan','jitter','fill','stroke','weight','pixelate',
   'blur','feedback','trails','hue','brightness','contrast','saturate','negative','invert','displace','kaleido','mirror',
@@ -998,6 +998,27 @@ $('#helpbtn').addEventListener('click', () => {
   setSide(!onGuide, 'guide');
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setSide(false); });
+
+// resizable sidebar — drag the left-edge grabber; width persists in localStorage
+const sideGrab = $('#sidegrab');
+const SIDE_W_KEY = 'loom.sidewidth';
+const clampSideW = (w) => Math.max(300, Math.min(window.innerWidth * 0.92, w));
+const savedSideW = parseInt(localStorage.getItem(SIDE_W_KEY) || '', 10);
+if (savedSideW) side.style.width = clampSideW(savedSideW) + 'px';
+let sideDragging = false;
+sideGrab.addEventListener('pointerdown', (e) => {
+  sideDragging = true; sideGrab.classList.add('drag'); sideGrab.setPointerCapture(e.pointerId);
+  document.body.style.userSelect = 'none'; e.preventDefault();
+});
+sideGrab.addEventListener('pointermove', (e) => {
+  if (!sideDragging) return;
+  side.style.width = clampSideW(window.innerWidth - e.clientX) + 'px';
+});
+sideGrab.addEventListener('pointerup', () => {
+  if (!sideDragging) return;
+  sideDragging = false; sideGrab.classList.remove('drag'); document.body.style.userSelect = '';
+  localStorage.setItem(SIDE_W_KEY, parseInt(side.style.width, 10));
+});
 
 // ── fade the control overlay when idle, so the drawing has the screen ──
 const rail = $('#rail');
