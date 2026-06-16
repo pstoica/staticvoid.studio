@@ -757,35 +757,7 @@ const PRESETS = {
     .color("#90e0ef").weight(0.004).decay(3)
 )`,
 
-  // rose curve — petals from radius = sine of the angle, twin layers
-  'rose': `stack(
-  bg("#0a0410"),
-  shape("dot*120")
-    .angle(saw.range(0, 1))
-    .radius(sine.range(0.05, 0.42).fast(5))
-    .color(palette("sunset").at(sine.range(0, 1).fast(5)))
-    .size(0.01).decay(2.5),
-  shape("dot*120")
-    .angle(saw.range(0, 1))
-    .radius(sine.range(0.05, 0.3).fast(8))
-    .color(palette("sunset").at(saw.range(0, 1)))
-    .size(0.008).decay(2).blend("lighter")
-)`,
-
-  // concentric euclid arcs orbiting, tipping through 3D, gaps breathing
-  'orbit': `stack(
-  bg("#02040a"),
-  shape("arc(5,8)")
-    .radius("0.16 0.27 0.38 0.47")
-    .angle(osc(0.04, "saw").range(0, 1))
-    .open(sine.range(0.1, 0.7).slow(5))
-    .color(palette("ice").at(saw.range(0, 1)))
-    .weight(0.012)
-    .rotateY(osc(0.06, "tri").range(-0.3, 0.3))
-    .decay(3).fast(1.5)
-)`,
-
-  // polymeter polygons drifting and tumbling in perspective
+  // 3D perspective — polymeter polygons drifting and tumbling (rotateX / rotateY)
   'lattice': `stack(
   bg("#060309"),
   shape("{square tri hex pent}%9")
@@ -799,49 +771,6 @@ const PRESETS = {
     .decay(1.8).fast(2)
 )`,
 
-  // random-pipe rhythm scattering through perlin space, hue cycling live
-  'swarm': `stack(
-  bg("#04040a"),
-  shape("dot | [dot dot] | dot ~ dot")
-    .x(perlin.range(0.05, 0.95).fast(2))
-    .y(perlin.range(0.05, 0.95).fast(3))
-    .color(palette("neon").at(osc(0.2).range(0, 1)))
-    .size(osc(0.8, "tri").range(0.006, 0.04))
-    .fast(8)
-    .decay(sine.range(0.4, 2.5).slow(5))
-)`,
-
-  // euclid star flowers opening over a counter-rotating inner ring
-  'bloom': `stack(
-  bg("#0a0006"),
-  shape("star(5,8)")
-    .radius(sine.range(0.14, 0.4).slow(5))
-    .angle(saw.range(0, 1))
-    .rotate(saw.range(0, 2).slow(3))
-    .rotateX(sine.range(-0.25, 0.25).slow(7))
-    .color(palette("sunset").at(saw.range(0, 1)))
-    .size(sine.range(0.05, 0.13).slow(2))
-    .fill(0).stroke().weight("0.004 0.012")
-    .decay(2).fast(2),
-  shape("ring(3,8)").radius(0.28).angle(saw.range(0, -1))
-    .color("#b5179e").weight(0.003).decay(2)
-)`,
-
-  // named-palette ring with an inner counter-spiral
-  'aurora': `stack(
-  bg("#0a0e1a"),
-  shape("circle*16")
-    .radius(sine.range(0.16, 0.44).slow(3))
-    .angle(saw.range(0, 1))
-    .color(palette("aurora").at(saw.range(0, 1)))
-    .size(sine.range(0.02, 0.07).fast(2))
-    .decay(3),
-  shape("dot*48")
-    .angle(saw.range(0, -3))
-    .radius(saw.range(0.02, 0.32))
-    .color("#7fffd4").size(0.007).decay(2)
-)`,
-
   // wandering dots — live oscillators on position, hue, and size
   'drift': `stack(
   bg("#05050a"),
@@ -851,72 +780,6 @@ const PRESETS = {
     .color(palette("candy").at(osc(0.2).range(0, 1)))
     .size(osc(0.6, "tri").range(0.012, 0.06))
     .decay(5)
-)`,
-
-  // a spiral of clipped lines unspooling, each tilted differently
-  'ribbon': `stack(
-  bg("#05030a"),
-  shape("line*36")
-    .angle(saw.range(0, 2.5))
-    .radius(saw.range(0, 0.45))
-    .rotate(saw.range(0, 1))
-    .open(sine.range(0, 0.7).slow(3))
-    .color(palette("rainbow").at(saw.range(0, 1)))
-    .size(sine.range(0.05, 0.12).slow(5))
-    .weight(sine.range(0.003, 0.012).fast(2))
-    .rotateY(sine.range(-0.35, 0.35).slow(5))
-    .decay(2.2).fast(1.5)
-)`,
-
-  // calm ice arcs spiralling, gaps + weight breathing
-  'tide': `stack(
-  bg("#02040a"),
-  shape("arc*9")
-    .angle(saw.range(0, 2))
-    .radius(saw.range(0.1, 0.44))
-    .open(sine.range(0.2, 0.7).slow(4))
-    .rotate(osc(0.03, "saw").range(0, 1))
-    .color(palette("ice").at(saw.range(0, 1)))
-    .weight(osc(0.4, "tri").range(0.004, 0.012))
-    .decay(4)
-)`,
-
-  // vivid neon spokes, additive, spinning, flickering thickness
-  'neon': `stack(
-  bg("#0a0010"),
-  shape("line(7,12)")
-    .radius(sine.range(0.08, 0.44).fast(3))
-    .angle(saw.range(0, 1))
-    .rotate(saw.range(0, 1))
-    .color(palette("neon").at(rand))
-    .weight(osc(2, "tri").range(0.003, 0.013))
-    .blend("lighter")
-    .fast(2).decay(1.5)
-)`,
-
-  // embers rising, sparks drifting up the screen
-  'embers': `stack(
-  bg("#0c0500"),
-  shape("dot*12")
-    .x(perlin.range(0.15, 0.85).fast(2))
-    .y(osc(0.08, "saw").range(1.05, -0.05))
-    .color(palette("ember").at(osc(0.3).range(0, 1)))
-    .size(osc(0.6, "tri").range(0.008, 0.045))
-    .decay(5),
-  shape("plus*6")
-    .x(rand).y(osc(0.12, "saw").range(1.05, -0.05))
-    .color("#ffd166").size(0.01).rotate(osc(0.5).range(0, 1)).decay(4)
-)`,
-
-  // quantized placement — wandering oscillators snapped to a grid, color stepped
-  'quant': `stack(
-  bg("#06060c"),
-  shape("dot*64")
-    .x(osc(0.12, "perlin").spread(1).range(0.08, 0.92).quantize(12))
-    .y(osc(0.15, "perlin").spread(2).range(0.08, 0.92).quantize(12))
-    .color(palette("neon").at(saw.quantize(6)))
-    .size(0.018)
-    .decay(2.5)
 )`,
 
   // cross-modulation: the radius oscillator's RATE is itself driven by another
@@ -942,42 +805,6 @@ const PRESETS = {
     .decay(2)
 )`,
 
-  // a grid of polygons, each cell hue-shifted, gently tumbling
-  'grid': `stack(
-  bg("#06070c"),
-  shape("<square tri hex>*36")
-    .grid(6, 6)
-    .color(palette("candy").at(saw.range(0, 1)))
-    .size(sine.range(0.02, 0.05).fast(3))
-    .rotate(osc(0.1, "saw").range(0, 1))
-    .fill(0).stroke().weight(0.005)
-    .decay(2)
-)`,
-
-  // a crisp spiral fed through a chunky pixelate layer
-  'mosaic': `group(
-  stack(
-    bg("#080510"),
-    shape("dot*64")
-      .angle(saw.range(0, 4))
-      .radius(saw.range(0.04, 0.45))
-      .color(palette("neon").at(saw.range(0, 1)))
-      .size(sine.range(0.01, 0.03).fast(4))
-      .decay(2.5)
-  )
-).pixelate(14)`,
-
-  // full-spectrum spiral, hue interpolated in OKLCH
-  'spectrum': `stack(
-  bg("#05060a"),
-  shape("circle*96")
-    .angle(saw.range(0, 4))
-    .radius(saw.range(0.03, 0.45))
-    .color(palette("rainbow").at(saw.range(0, 1)))
-    .size(sine.range(0.008, 0.02).fast(6))
-    .decay(2)
-)`,
-
   // ── shader FX (WebGL): each group() runs a post-process chain on its layer ──
 
   // feedback tunnel — rings fed back with zoom + rotation leave a spiralling trail
@@ -988,61 +815,6 @@ const PRESETS = {
     .color(palette("neon").at(saw.range(0, 1)))
     .weight(0.008).decay(1.5)
 )).feedback(0.94, 1.05, 0.03)`,
-
-  // kaleidoscope — a small layer folded into mirrored wedges, feeding back slowly
-  'kaleido': `group(
-  shape("tri*6")
-    .radius(0.24).size(0.05)
-    .rotate(saw.range(0, 1))
-    .color(palette("candy").at(saw.range(0, 1)))
-).kaleido(8).feedback(0.86, 1.0, 0.04)`,
-
-  // bloom — soft glow from a blur pass, brightness lifted
-  'glow': `stack(
-  bg("#04040c"),
-  group(
-    shape("dot*40")
-      .angle(saw.range(0, 2))
-      .radius(saw.range(0.05, 0.42))
-      .color(palette("ember").at(saw.range(0, 1)))
-      .size(0.02).decay(2)
-  ).blur(7).brightness(1.35)
-)`,
-
-  // melt — a grid warped by a moving displacement field
-  'melt': `stack(
-  bg("#070310"),
-  group(
-    shape("square*20").grid(5, 4)
-      .color(palette("ice").at(saw.range(0, 1)))
-      .size(0.045).rotate(saw.range(0, 1))
-  ).displace(0.02, 4)
-)`,
-
-  // mirrored aurora plus-field, folded twice
-  'prism': `stack(
-  bg("#05060d"),
-  group(
-    shape("plus*8")
-      .angle(saw.range(0, 1))
-      .radius(saw.range(0.1, 0.4))
-      .color(palette("aurora").at(saw.range(0, 1)))
-      .size(0.05).rotate(saw.range(0, 1))
-  ).mirror().kaleido(4).hue(osc(0.05).range(0, 1))
-)`,
-
-  // patternable FX — the pixelate block size is itself an oscillator (global time),
-  // so the mosaic breathes; saturation pushed for vivid blocks
-  'pulse': `stack(
-  bg("#08040c"),
-  group(
-    shape("dot*64")
-      .angle(saw.range(0, 3))
-      .radius(saw.range(0.04, 0.44))
-      .color(palette("neon").at(saw.range(0, 1)))
-      .size(0.014).decay(2.5)
-  ).pixelate(osc(0.2).range(3, 26)).saturate(1.4)
-)`,
 
   // kaleidoscopic feedback storm — lines tumbling in perspective, the whole FX
   // chain (kaleido / feedback / pixelate) stuttered by patterned params
