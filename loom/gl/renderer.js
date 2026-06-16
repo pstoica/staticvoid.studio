@@ -634,23 +634,27 @@ export class GLRenderer {
         this._blit(this.fx.mirror, read.texture, write); swap();
       } else if (t === 'feedback') {
         this._ensureHistory(rt);
+        const next = rt.hist[1 - rt.histCur];
         const m = this.fx.feedback;
         m.uniforms.tHist.value = rt.hist[rt.histCur].texture;
         m.uniforms.uFade.value = this._num(e.fade, 0.92);
         m.uniforms.uZoom.value = this._num(e.zoom, 1.0);
         m.uniforms.uRot.value = this._num(e.rot, 0);
-        this._blit(m, read.texture, write); swap();                     // result = current + faded history
-        this._blit(this.fx.copy, read.texture, rt.hist[1 - rt.histCur]); // store as next history
+        this._blit(m, read.texture, next);            // result → next history at full (half-float) precision
         rt.histCur = 1 - rt.histCur;
+        this._blit(this.fx.copy, next.texture, write); swap();   // bring it into a working buffer for the rest of the chain
       }
     }
     return read.texture;
   }
-  // lazily allocate the feedback history pair (persistent across frames, unlike a/b)
+  // lazily allocate the feedback history pair (persistent across frames, unlike
+  // a/b). Half-float so the geometric decay (hist*fade each frame) isn't quantized
+  // to 8-bit — otherwise dim trails floor at a few /255 and never clear (a
+  // permanent ghost), worse the higher the fade.
   _ensureHistory(rt) {
     if (rt.hist && rt.histW === rt.w && rt.histH === rt.h) return;
     if (rt.hist) { rt.hist[0].dispose(); rt.hist[1].dispose(); }
-    const opt = { depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
+    const opt = { depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType };
     rt.hist = [new THREE.WebGLRenderTarget(rt.w, rt.h, opt), new THREE.WebGLRenderTarget(rt.w, rt.h, opt)];
     rt.histW = rt.w; rt.histH = rt.h; rt.histCur = 0;
   }
