@@ -100,6 +100,7 @@
   .btn:hover { color:var(--ink); background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.2); }
   .btn.on { color:var(--bg); background:var(--ink); border-color:var(--ink); }
   .btn.off { color:var(--muted); }
+  .btn.icon { padding:12px 14px; font-size:11px; letter-spacing:.12em; }   /* icon-only buttons stay compact */
   #runbtn { color:var(--ink); border-color:rgba(255,255,255,.22); }
   #runbtn.lit { background:var(--ink); color:var(--bg); border-color:var(--ink); }
   #runbtn kbd { font:inherit; opacity:.5; }
@@ -233,7 +234,7 @@
     <div id="transport">
       <div class="trow">
         <button class="btn" id="runbtn" title="Cmd/Ctrl + Enter">run <kbd>⌘⏎</kbd></button>
-        <button class="btn" id="playbtn">❚❚ pause</button>
+        <button class="btn icon" id="playbtn" title="play / pause">❚❚</button>
         <button class="btn" id="clearbtn">clear</button>
         <span class="pair">
           <button class="btn" id="panelbtn" title="presets panel">▤ presets</button>

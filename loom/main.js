@@ -1004,7 +1004,7 @@ function flash() {
 
 $('#runbtn').addEventListener('click', () => { run(); flash(); });
 $('#playbtn').addEventListener('click', (e) => {
-  playing = !playing; e.target.textContent = playing ? '❚❚ pause' : '▶ play';
+  playing = !playing; e.target.textContent = playing ? '❚❚' : '▶';
 });
 $('#clearbtn').addEventListener('click', () => {
   particles.length = 0; ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H);
