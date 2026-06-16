@@ -384,7 +384,9 @@ function evalGlobal(param, cycle, elapsed) {
   if (param == null) return param;
   if (isOsc(param)) return evalOsc(param.__osc, elapsed, 0);
   if (param instanceof DSL.Pattern) {
-    const hs = param.query(DSL.span(cycle, cycle));
+    // a tiny forward window, not a zero-width span: discrete patterns (mini
+    // sequences) collapse to their first step when sampled at an instant.
+    const hs = param.query(DSL.span(cycle, cycle + 1e-4));
     for (const h of hs) if (h.value != null) return +h.value;
     return 0;
   }

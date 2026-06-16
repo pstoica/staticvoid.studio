@@ -349,7 +349,12 @@ class Group {
   // number, an osc, or a pattern — resolved against *global* time each frame
   // (FX run per-layer-per-frame, not per-glyph). pixelate also keeps a flat
   // `_fx.pixelate` so the legacy Canvas2D renderer still applies it.
-  _push(fx) { this._fx.chain.push(fx); return this; }
+  // string params are mini-notation, like any control arg → reify to a pattern
+  // (sampled at the current cycle by the renderer). Numbers/oscs/patterns pass through.
+  _push(fx) {
+    for (const k in fx) if (k !== 'type' && typeof fx[k] === 'string') fx[k] = mini(fx[k]);
+    this._fx.chain.push(fx); return this;
+  }
   pixelate(n) { this._fx.pixelate = n; return this._push({ type: 'pixelate', block: n }); }      // block size, px
   blur(n = 4) { return this._push({ type: 'blur', radius: n }); }                                  // gaussian radius, px
   feedback(fade = 0.92, zoom = 1.0, rot = 0) { return this._push({ type: 'feedback', fade, zoom, rot }); } // trails/tunnel
