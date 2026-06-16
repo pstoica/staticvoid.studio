@@ -91,9 +91,22 @@
   #err.show { max-height:64px; opacity:1; padding:8px 0 0; }
 
   #transport { display:flex; flex-direction:column; align-items:flex-start; gap:10px;
-    padding:14px 22px 14px; margin-top:12px; }
+    padding:14px 22px 14px; margin-top:12px; container-type:inline-size; }
   .trow { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
   .pair { display:inline-flex; gap:10px; align-items:center; }   /* keeps its buttons together */
+  .bico { display:none; }   /* per-button icon, swapped in for the label when the rail is tight */
+  /* when the rail is too narrow for one row, collapse run/clear to icons (run keeps its ⌘⏎) */
+  @container (max-width: 470px) {
+    #runbtn .btxt, #clearbtn .btxt { display:none; }
+    #clearbtn .bico { display:inline; }
+    #runbtn, #clearbtn { padding:12px 14px; }
+    #runbtn kbd { opacity:.85; }
+  }
+  /* tighter still: drop the presets/guide labels too, leaving their ▤ / ? glyphs */
+  @container (max-width: 380px) {
+    #panelbtn .btxt, #helpbtn .btxt, #clockbtn .btxt { display:none; }
+    #panelbtn, #helpbtn, #clockbtn { padding:12px 14px; }
+  }
   .btn { font:500 13px/1 var(--mono); color:var(--muted); background:rgba(255,255,255,.04);
     border:1px solid var(--line); border-radius:0; padding:12px 16px; cursor:pointer;
     transition:.14s var(--ease); letter-spacing:.02em; }
@@ -233,16 +246,16 @@
 
     <div id="transport">
       <div class="trow">
-        <button class="btn" id="runbtn" title="Cmd/Ctrl + Enter">run <kbd>⌘⏎</kbd></button>
+        <button class="btn" id="runbtn" title="run · Cmd/Ctrl + Enter"><span class="btxt">run </span><kbd>⌘⏎</kbd></button>
         <button class="btn icon" id="playbtn" title="play / pause">❚❚</button>
-        <button class="btn" id="clearbtn">clear</button>
+        <button class="btn" id="clearbtn" title="clear"><span class="bico">✕</span><span class="btxt">clear</span></button>
         <span class="pair">
-          <button class="btn" id="panelbtn" title="presets panel">▤ presets</button>
-          <button class="btn" id="helpbtn" title="guide">? guide</button>
+          <button class="btn" id="panelbtn" title="presets panel">▤<span class="btxt"> presets</span></button>
+          <button class="btn" id="helpbtn" title="guide">?<span class="btxt"> guide</span></button>
         </span>
       </div>
       <div class="trow">
-        <button class="btn" id="clockbtn" title="toggle the cycle playhead">◷ clock</button>
+        <button class="btn" id="clockbtn" title="toggle the cycle playhead">◷<span class="btxt"> clock</span></button>
         <span class="pair">
           <div class="num" id="cpsnum" title="drag ↔ or scroll · double-click to reset">speed <b id="cpsval">0.60</b></div>
           <div class="num" id="persistnum" title="drag ↔ or scroll · double-click to reset">decay <b id="decayval">1.5</b></div>
