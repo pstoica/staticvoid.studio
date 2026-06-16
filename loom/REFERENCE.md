@@ -124,6 +124,15 @@ group(shape("dot*64").angle(saw.range(0,3)).radius(saw.range(0.04,0.44))
   .pixelate(osc(0.2).range(3, 26))             // the block size breathes
 ```
 
+Every effect has an **off value** for its main param, so you can pattern it on
+and off (the pass is skipped, not run as identity): `pixelate(≤1)`, `blur(0)`,
+`displace(0)`, `kaleido(<2)`, `mirror(0)`, `feedback` with fade `0`, and `grade`
+at its identity (`hue 0`, the rest `1`). So `kaleido("<6 0>")` folds every other
+cycle, `mirror("1 0")` flips on and off, `blur(saw.range(0, 12))` swells in.
+
+> Note: FX live on the group, evaluated per-frame, so per-event combinators like
+> `.sometimes` don't apply to them — pattern the FX param instead (as above).
+
 > The shader FX run on the WebGL renderer (the default). The legacy Canvas2D
 > renderer (append `?gl=0` to the URL) applies only `pixelate`.
 | `.rotate(t)` | turns (`1` = 360°) | static Z rotation |
@@ -296,6 +305,11 @@ Built-in ramps (use by name — `palette("sunset")`): `sunset` `ember` `ice`
 **Background:** `bg("#101820")` sets the canvas background for the patch. It
 returns `silence`, so stack it in: `stack(bg("#101820"), shape("dot*8")…)`.
 Remove it and the background reverts to the default on the next run.
+
+`bg` is **patternable** — its argument is resolved every frame, so it can move:
+a mini-notation string alternates (`bg("<#001018 #100818>")`), an `osc` drifts
+live (`bg(osc(0.05).range(0, 1))`), and a palette interpolates
+(`bg(palette("ice").at(osc(0.03).range(0,1)))`).
 
 ## Layout model
 

@@ -602,35 +602,45 @@ export class GLRenderer {
     let read = rt.a, write = rt.b;
     const swap = () => { const t = read; read = write; write = t; };
     const texel = (m) => m.uniforms.uTexel.value.set(1 / rt.w, 1 / rt.h);
+    // Every effect has an "off" value for its main param so it can be patterned
+    // on/off (e.g. .kaleido("<6 0>") or .blur("8 0")); when off, the pass is
+    // skipped (pure passthrough) rather than run as identity.
     for (const e of fx.chain) {
       const t = e.type;
       if (t === 'pixelate') {
+        const block = Math.max(1, this._num(e.block, 8) * this.DPR);
+        if (block <= 1.0) continue;                    // off: 1px blocks = no pixelation
         // copy into a mipmapped scratch (Three regenerates its mips on unbind),
         // then sample the mip level whose texel ≈ the block size = area average.
         this._ensureMip(rt);
         this._blit(this.fx.copy, read.texture, rt.mip);
         const m = this.fx.pixelate; texel(m);
-        const block = Math.max(1, this._num(e.block, 8) * this.DPR);
         m.uniforms.uBlock.value = block; m.uniforms.uLod.value = Math.log2(block);
         this._blit(m, rt.mip.texture, write); swap();
       } else if (t === 'blur') {
-        const m = this.fx.blur; texel(m); m.uniforms.uRadius.value = this._num(e.radius, 4) * this.DPR;
+        const radius = this._num(e.radius, 4) * this.DPR;
+        if (radius <= 0.0) continue;                   // off
+        const m = this.fx.blur; texel(m); m.uniforms.uRadius.value = radius;
         m.uniforms.uDir.value.set(1, 0); this._blit(m, read.texture, write); swap();
         m.uniforms.uDir.value.set(0, 1); this._blit(m, read.texture, write); swap();
       } else if (t === 'grade') {
+        const hue = this._num(e.hue, 0), bri = this._num(e.brightness, 1), con = this._num(e.contrast, 1), sat = this._num(e.saturate, 1);
+        if (hue === 0 && bri === 1 && con === 1 && sat === 1) continue;   // identity → skip
         const m = this.fx.grade;
-        m.uniforms.uHue.value = this._num(e.hue, 0);
-        m.uniforms.uBright.value = this._num(e.brightness, 1);
-        m.uniforms.uContrast.value = this._num(e.contrast, 1);
-        m.uniforms.uSat.value = this._num(e.saturate, 1);
+        m.uniforms.uHue.value = hue; m.uniforms.uBright.value = bri; m.uniforms.uContrast.value = con; m.uniforms.uSat.value = sat;
         this._blit(m, read.texture, write); swap();
       } else if (t === 'displace') {
-        const m = this.fx.displace; m.uniforms.uAmount.value = this._num(e.amount, 0.02); m.uniforms.uScale.value = this._num(e.scale, 3); m.uniforms.uTime.value = this._elapsed * 0.2;
+        const amount = this._num(e.amount, 0.02);
+        if (amount <= 0.0) continue;                   // off
+        const m = this.fx.displace; m.uniforms.uAmount.value = amount; m.uniforms.uScale.value = this._num(e.scale, 3); m.uniforms.uTime.value = this._elapsed * 0.2;
         this._blit(m, read.texture, write); swap();
       } else if (t === 'kaleido') {
-        const m = this.fx.kaleido; m.uniforms.uSlices.value = Math.max(1, this._num(e.slices, 6));
+        const slices = this._num(e.slices, 6);
+        if (slices < 2.0) continue;                    // off: <2 slices = passthrough
+        const m = this.fx.kaleido; m.uniforms.uSlices.value = slices;
         this._blit(m, read.texture, write); swap();
       } else if (t === 'mirror') {
+        if (this._num(e.on, 1) < 0.5) continue;        // off: mirror(0)
         this._blit(this.fx.mirror, read.texture, write); swap();
       } else if (t === 'feedback') {
         this._ensureHistory(rt);

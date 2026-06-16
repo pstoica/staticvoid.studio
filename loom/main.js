@@ -93,7 +93,8 @@ let elapsed = 0;        // wall-clock seconds since start, for global-time FX pa
 let playing = true;
 let decayScale = 1.5;   // master multiplier on a new glyph's decay (how long it lingers)
 const DEFAULT_BG = '#06070a';
-let bgColor = DEFAULT_BG; // canvas background; set per-patch via bg("…")
+let bgColor = DEFAULT_BG; // resolved canvas background for the current frame
+let bgSource = DEFAULT_BG; // raw bg arg (string/number/pattern/osc) — resolved each frame, so bg() is patternable
 let showClock = localStorage.getItem('loom.clock') !== '0'; // playhead sweep on/off
 let traceMode = localStorage.getItem('loom.trace') === '1'; // connect live points into a path
 let lastT = performance.now();
@@ -114,7 +115,7 @@ function compile(code) {
 
 function run() {
   try {
-    bgColor = DEFAULT_BG;                 // bg("…") in the patch overrides this during compile
+    bgSource = DEFAULT_BG;                // bg("…") in the patch overrides this during compile
     pattern = compile(editor.value);
     errBar.textContent = '';
     errBar.classList.remove('show');
@@ -395,6 +396,19 @@ function evalGlobal(param, cycle, elapsed) {
   return param;
 }
 
+// resolve the (possibly patterned) background to a CSS colour for this frame.
+// Like a control's colour: number/string/palette = constant, osc = live (elapsed),
+// pattern = sampled at the cycle — so bg("<#000 #103>"), bg(osc(...)) etc. animate.
+function bgEval(src, cycle, elapsed) {
+  if (isOsc(src)) return oscColor(src.__osc, elapsed, 0);
+  if (src instanceof DSL.Pattern) {
+    const hs = src.query(DSL.span(cycle, cycle + 1e-4));
+    for (const h of hs) if (h.value != null) return resolveColor(h.value, 0);
+    return DEFAULT_BG;
+  }
+  return resolveColor(src, 0);
+}
+
 // place a glyph: explicit x/y (0..1) win, else lay it on a ring by onset phase.
 // Inputs may be live oscillators, so this is re-run each frame for moving glyphs.
 // Unified layout: position = centre (x/y) + polar offset (radius, angle). x/y
@@ -599,6 +613,8 @@ function frame(now) {
 
 function tick(dt) {
   elapsed += dt;   // advances even when paused (like glyph age), so FX keep living
+  bgColor = bgEval(bgSource, cycle, elapsed);   // bg() is patternable — resolve per frame
+  if (glr) glr.setBackground(bgColor);
   // Clean redraw: wipe the buffer completely every frame, then repaint only the
   // live particles. Nothing is ever baked in, so there's no alpha residue/ghosting.
   // "Trails" come from particles fading out over their own lifetime, not from a veil.
@@ -1188,7 +1204,7 @@ editor.addEventListener('blur', activity);
 document.addEventListener('mouseleave', () => { if (document.activeElement !== editor) setIdle(true); });
 
 // ── boot ────────────────────────────────────────────────────────────────────────────
-DSL._setBgSink((c) => { bgColor = resolveColor(c, 0); if (glr) glr.setBackground(bgColor); });   // bg("…") writes here at compile time
+DSL._setBgSink((c) => { bgSource = c; });   // bg("…") stores its (raw) arg here at compile time; resolved per-frame in tick
 resize();
 setCps(cps);
 setDecay(decayScale);

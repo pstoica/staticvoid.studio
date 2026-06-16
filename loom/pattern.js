@@ -335,7 +335,9 @@ function palette(...colors) {
 // can sit inside a stack(...). The renderer reads it through a registered sink.
 let _bgSink = null;
 function _setBgSink(fn) { _bgSink = fn; }
-function bg(color) { if (_bgSink) _bgSink(color); return silence; }
+// the arg is resolved per-frame by the renderer, so bg() is patternable: a string
+// is mini-notation (bg("<#001 #103>")), and oscs / patterns / palettes also work.
+function bg(color) { if (_bgSink) _bgSink(typeof color === 'string' ? mini(color) : color); return silence; }
 
 // ── groups ──────────────────────────────────────────────────────────────────────
 // group(pattern) is a layer rendered to its own buffer, so an effect can be
@@ -364,8 +366,8 @@ class Group {
   contrast(c = 1) { return this._push({ type: 'grade', contrast: c }); }                           // 1 = identity
   saturate(s = 1) { return this._push({ type: 'grade', saturate: s }); }                           // 0 = grayscale
   displace(amount = 0.02, scale = 3) { return this._push({ type: 'displace', amount, scale }); }   // uv warp
-  kaleido(n = 6) { return this._push({ type: 'kaleido', slices: n }); }                            // radial mirror
-  mirror() { return this._push({ type: 'mirror' }); }                                              // left/right symmetry
+  kaleido(n = 6) { return this._push({ type: 'kaleido', slices: n }); }                            // radial mirror (<2 = off)
+  mirror(on = 1) { return this._push({ type: 'mirror', on }); }                                     // left/right symmetry (0 = off)
   query(s) {
     const gid = this._gid, fx = this._fx;
     return this._pat.query(s).map((h) => hap(h.whole, h.part, Object.assign({}, h.value, { _gid: gid, _fx: fx })));
