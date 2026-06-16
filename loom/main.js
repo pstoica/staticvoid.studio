@@ -886,7 +886,7 @@ function rebuildPresetList() {
   const row = (name, val, deletable) => {
     const r = document.createElement('div'); r.className = 'presrow'; r.dataset.val = val;
     const load = document.createElement('button'); load.className = 'load'; load.textContent = name;
-    load.addEventListener('click', () => { applyPreset(val); setActive(val); });
+    load.addEventListener('click', () => { applyPreset(val); setActive(val); if (isMobile()) setSide(false); });
     r.appendChild(load);
     if (deletable) {
       const del = document.createElement('button'); del.className = 'del'; del.textContent = '×'; del.title = 'delete';
@@ -927,9 +927,11 @@ editor.addEventListener('input', refreshHL);
 editor.addEventListener('scroll', () => { hl.scrollTop = editor.scrollTop; hl.scrollLeft = editor.scrollLeft; });
 
 let flashT = 0;
+const brandH1 = $('#brand h1');
 function flash() {
   const el = $('#runbtn'); el.classList.add('lit'); clearTimeout(flashT);
   flashT = setTimeout(() => el.classList.remove('lit'), 220);
+  brandH1.classList.remove('run'); void brandH1.offsetWidth; brandH1.classList.add('run'); // sweep the logo colours
 }
 
 $('#runbtn').addEventListener('click', () => { run(); flash(); });
@@ -1002,6 +1004,13 @@ $('#helpbtn').addEventListener('click', () => {
   setSide(!onGuide, 'guide');
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setSide(false); });
+const isMobile = () => window.matchMedia('(max-width:760px)').matches;
+// tap the canvas (outside the sidebar and the control rail) to close the sidebar
+document.addEventListener('pointerdown', (e) => {
+  if (side.classList.contains('hidden')) return;
+  if (side.contains(e.target) || e.target.closest('#rail, #panelbtn, #helpbtn')) return;
+  setSide(false);
+});
 
 // resizable sidebar — drag the left-edge grabber; width persists in localStorage
 const sideGrab = $('#sidegrab');

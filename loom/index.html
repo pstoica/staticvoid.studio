@@ -44,8 +44,11 @@
 
   #brand { display:flex; align-items:baseline; gap:10px; padding:18px 22px 12px; }
   #brand h1 { font-family:"Unbounded",var(--font); font-weight:700; font-size:19px; margin:0; letter-spacing:-.01em;
-    background:linear-gradient(92deg,#ff5d73,#ffd166,#6df0c2,#56b6ff,#b58cff);
-    -webkit-background-clip:text; background-clip:text; color:transparent; }
+    background:linear-gradient(92deg,#ff5d73,#ffd166,#6df0c2,#56b6ff,#b58cff,#ff5d73);
+    background-size:220% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; }
+  /* sweep the wordmark's colours on run() */
+  @keyframes loomflow { to { background-position:-220% 0; } }
+  #brand h1.run { animation:loomflow .7s var(--ease); }
   #brand .sub { font-size:11px; color:var(--muted); letter-spacing:.02em; }
   /* panel/guide live in the transport row now; styled as .btn (see #transport) */
 
@@ -163,6 +166,14 @@
       border-right:0; border-top:1px solid var(--line); }
     #editwrap { min-height:120px; }
     #hint { left:50%; bottom:calc(56vh + 14px); }
+    /* sidebar = full-screen sheet on mobile: no awkward sliver, sticky header,
+       a big obvious close, and no resize grabber (pointless on touch) */
+    #side { width:100vw !important; max-width:100vw; border-left:0; }   /* override any saved drag-width */
+    #side header { position:sticky; top:0; background:rgba(6,7,10,.96); padding:16px; z-index:1; }
+    #sideclose { width:40px; height:40px; font-size:17px; }
+    .tab { padding:9px 16px; font-size:12px; }
+    .presrow .load { height:42px; font-size:13px; }
+    #sidegrab { display:none; }
   }
 
   /* one-time photosensitivity disclosure (dismissal saved to localStorage) */
