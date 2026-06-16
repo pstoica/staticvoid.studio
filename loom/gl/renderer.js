@@ -335,6 +335,20 @@ void main() {
   gl_FragColor = vec4(col * a, a);
 }`;
 
+// negative: invert the colour (mix lets it fade in / be patterned 0..1)
+const NEGATIVE_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform float uAmount;
+varying vec2 vUv;
+void main() {
+  vec4 t = texture2D(tMap, vUv);
+  float a = t.a;
+  vec3 col = a > 0.0 ? t.rgb / a : t.rgb;     // unpremultiply
+  col = mix(col, 1.0 - col, clamp(uAmount, 0.0, 1.0));
+  gl_FragColor = vec4(col * a, a);            // repremultiply
+}`;
+
 // displacement: warp the sample coordinate with a moving sinusoid field
 const DISPLACE_FRAG = `
 precision highp float;
@@ -460,6 +474,7 @@ export class GLRenderer {
       blur: fsMat(BLUR_FRAG, { tMap: { value: null }, uTexel: { value: V2() }, uDir: { value: V2() }, uRadius: { value: 4 } }),
       feedback: fsMat(FEEDBACK_FRAG, { tMap: { value: null }, tHist: { value: null }, uFade: { value: 0.92 }, uZoom: { value: 1 }, uRot: { value: 0 } }),
       grade: fsMat(GRADE_FRAG, { tMap: { value: null }, uHue: { value: 0 }, uBright: { value: 1 }, uContrast: { value: 1 }, uSat: { value: 1 } }),
+      negative: fsMat(NEGATIVE_FRAG, { tMap: { value: null }, uAmount: { value: 1 } }),
       displace: fsMat(DISPLACE_FRAG, { tMap: { value: null }, uAmount: { value: 0.02 }, uScale: { value: 3 }, uTime: { value: 0 } }),
       kaleido: fsMat(KALEIDO_FRAG, { tMap: { value: null }, uSlices: { value: 6 } }),
       mirror: fsMat(MIRROR_FRAG, { tMap: { value: null } }),
@@ -628,6 +643,11 @@ export class GLRenderer {
         if (hue === 0 && bri === 1 && con === 1 && sat === 1) continue;   // identity → skip
         const m = this.fx.grade;
         m.uniforms.uHue.value = hue; m.uniforms.uBright.value = bri; m.uniforms.uContrast.value = con; m.uniforms.uSat.value = sat;
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'negative') {
+        const amount = this._num(e.amount, 1);
+        if (amount <= 0.0) continue;                   // off
+        const m = this.fx.negative; m.uniforms.uAmount.value = amount;
         this._blit(m, read.texture, write); swap();
       } else if (t === 'displace') {
         const amount = this._num(e.amount, 0.02);

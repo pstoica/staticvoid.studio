@@ -365,6 +365,8 @@ class Group {
   brightness(b = 1) { return this._push({ type: 'grade', brightness: b }); }                       // 1 = identity
   contrast(c = 1) { return this._push({ type: 'grade', contrast: c }); }                           // 1 = identity
   saturate(s = 1) { return this._push({ type: 'grade', saturate: s }); }                           // 0 = grayscale
+  negative(amount = 1) { return this._push({ type: 'negative', amount }); }                         // colour invert (0 = off)
+  invert(amount = 1) { return this._push({ type: 'negative', amount }); }                           // alias for negative
   displace(amount = 0.02, scale = 3) { return this._push({ type: 'displace', amount, scale }); }   // uv warp
   kaleido(n = 6) { return this._push({ type: 'kaleido', slices: n }); }                            // radial mirror (<2 = off)
   mirror(on = 1) { return this._push({ type: 'mirror', on }); }                                     // left/right symmetry (0 = off)

@@ -103,6 +103,7 @@ Effects **chain in call order** — each is a shader pass over the layer's textu
 | `.trails(fade)` | fade `0..1` | feedback with no zoom / rotation |
 | `.hue(t)` | turns | rotate hue |
 | `.brightness(b)` `.contrast(c)` `.saturate(s)` | `1` = identity (`saturate(0)` = grey) | colour grade |
+| `.negative(amount)` `.invert(amount)` | `0..1` (`0` = off) | invert colours |
 | `.displace(amount, scale)` | amount (uv), scale (freq) | warp / melt the layer |
 | `.kaleido(slices)` | n | fold into `n` mirrored wedges |
 | `.mirror()` | — | left/right symmetry |
