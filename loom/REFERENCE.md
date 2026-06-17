@@ -109,6 +109,11 @@ Effects **chain in call order**, each is a shader pass over the layer's texture:
 | `.mirror()` | (none) | left/right symmetry |
 | `.tile(x, y)` | repeats (`y` defaults to `x`) | repeat the layer in an `x × y` grid |
 | `.dots(cell)` `.halftone(cell)` | cell size (px) | halftone screen: dots grow with brightness |
+| `.rgbshift(amount, angle)` `.rgb(…)` | uv offset, turns | split the R / B channels (chromatic aberration) |
+| `.posterize(levels)` | n (≥2) | quantize colours to `n` levels |
+| `.dither(levels)` | n (≥2) | ordered (Bayer) dither + quantize — low-bit look |
+| `.scanlines(amount, period)` | `0..1`, px | periodic horizontal darkening (CRT) |
+| `.slice(count, amount, "h"\|"v"\|"grid")` | bands, uv offset, mode | cut into bands and offset each (pattern `amount` to judder) |
 
 ```js
 group(shape("tri*6").radius(0.24).rotate(saw.range(0,1))
@@ -129,7 +134,8 @@ group(shape("dot*64").angle(saw.range(0,3)).radius(saw.range(0.04,0.44))
 
 Every effect has an **off value** for its main param, so you can pattern it on
 and off (the pass is skipped, not run as identity): `pixelate(≤1)`, `blur(0)`,
-`displace(0)`, `kaleido(<2)`, `mirror(0)`, `tile(1)`, `dots(≤2)`, `feedback` with fade `0`, and `grade`
+`displace(0)`, `kaleido(<2)`, `mirror(0)`, `tile(1)`, `dots(≤2)`, `rgbshift(0)`,
+`posterize(<2)`, `dither(<2)`, `scanlines(0)`, `slice(amount 0)`, `feedback` with fade `0`, and `grade`
 at its identity (`hue 0`, the rest `1`). So `kaleido("<6 0>")` folds every other
 cycle, `mirror("1 0")` flips on and off, `blur(saw.range(0, 12))` swells in.
 

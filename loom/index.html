@@ -389,6 +389,9 @@
         <code>.feedback(fade, zoom, rot) .trails(fade)</code><p>trails / tunnel, warps the previous frame</p>
         <code>.kaleido(n) .mirror()</code><p>radial wedges · left/right symmetry</p>
         <code>.tile(x, y) .dots(n)</code><p>grid repeat · halftone dots (grow with brightness)</p>
+        <code>.rgbshift(amt, ang) .posterize(n)</code><p>channel split · colour quantize</p>
+        <code>.dither(n) .scanlines(amt)</code><p>bayer dither · CRT lines</p>
+        <code>.slice(n, amt, "grid")</code><p>cut into bands &amp; offset — oscillate <code>amt</code> for glitch (modes: h · v · grid)</p>
         <code>.displace(amount, scale)</code><p>warp / melt the layer</p>
         <code>.hue(t) .brightness(b) .contrast(c) .saturate(s)</code><p>colour grade</p>
         <code>.pixelate(osc(0.2).range(3,26))</code><p>FX params take numbers, patterns, or oscs (global time), so the effect itself moves</p>

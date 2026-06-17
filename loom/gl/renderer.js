@@ -423,6 +423,87 @@ void main() {
   fragColor = vec4(col * a, a) * dot;
 }`;
 
+// rgb shift / chromatic aberration: sample R and B at opposite offsets (unpremult,
+// recombine), leaving G centred — the classic split-channel fringe.
+const RGBSHIFT_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform vec2 uOffset;       // channel separation, uv
+varying vec2 vUv;
+void main() {
+  vec4 cr = texture2D(tMap, vUv + uOffset);
+  vec4 cg = texture2D(tMap, vUv);
+  vec4 cb = texture2D(tMap, vUv - uOffset);
+  float ar = cr.a, ag = cg.a, ab = cb.a;
+  vec3 col = vec3(ar > 0.0 ? cr.r / ar : 0.0, ag > 0.0 ? cg.g / ag : 0.0, ab > 0.0 ? cb.b / ab : 0.0);
+  float a = max(ar, max(ag, ab));
+  gl_FragColor = vec4(col * a, a);
+}`;
+
+// posterize: quantize each channel to N levels
+const POSTERIZE_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform float uLevels;
+varying vec2 vUv;
+void main() {
+  vec4 t = texture2D(tMap, vUv);
+  float a = t.a;
+  vec3 col = a > 0.0 ? t.rgb / a : t.rgb;
+  col = clamp(floor(col * uLevels) / max(uLevels - 1.0, 1.0), 0.0, 1.0);
+  gl_FragColor = vec4(col * a, a);
+}`;
+
+// scanlines: periodic horizontal darkening. premultiplied scale, so the dark gaps
+// drop coverage and the background shows through (CRT-ish, not just a grey wash).
+const SCANLINE_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform float uAmount;      // 0..1 darkening
+uniform float uPeriod;      // line spacing, device px
+varying vec2 vUv;
+void main() {
+  vec4 t = texture2D(tMap, vUv);
+  float l = 0.5 + 0.5 * cos(6.28318530718 * gl_FragCoord.y / max(uPeriod, 2.0));
+  gl_FragColor = t * (1.0 - uAmount * l);
+}`;
+
+// ordered (Bayer 4×4) dither + quantize — the low-bit / newsprint look. GLSL3 for
+// the integer matrix lookup.
+const DITHER_FRAG3 = `
+precision highp float;
+uniform sampler2D tMap;
+uniform float uLevels;
+in vec2 vUv;
+out vec4 fragColor;
+const int M[16] = int[16](0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5);
+void main() {
+  vec4 t = texture(tMap, vUv);
+  float a = t.a;
+  vec3 col = a > 0.0 ? t.rgb / a : t.rgb;
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  float th = (float(M[(p.x & 3) + (p.y & 3) * 4]) + 0.5) / 16.0 - 0.5;
+  float n = max(uLevels - 1.0, 1.0);
+  col = clamp(floor(col * n + 0.5 + th) / n, 0.0, 1.0);
+  fragColor = vec4(col * a, a);
+}`;
+
+// slice: cut into bands and offset each by a per-band hash × amount. mode 0 =
+// horizontal bands shifted in x, 1 = vertical bands shifted in y, 2 = both (grid).
+// pattern the amount to make the slices judder with the music.
+const SLICE_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform float uCount, uAmount, uMode;
+varying vec2 vUv;
+float h11(float n) { return fract(sin(n * 12.9898) * 43758.5453) * 2.0 - 1.0; }
+void main() {
+  vec2 uv = vUv;
+  if (uMode < 0.5 || uMode > 1.5) uv.x += h11(floor(uv.y * uCount)) * uAmount;
+  if (uMode > 0.5)                uv.y += h11(floor(uv.x * uCount) + 17.0) * uAmount;
+  gl_FragColor = texture2D(tMap, fract(uv));
+}`;
+
 // blend mode → bucket key. Buckets draw in BLEND_ORDER (additive/screen last so
 // glows sit on top); within a bucket, age order (newest last) is preserved.
 const BLEND_ORDER = ['normal', 'multiply', 'screen', 'additive'];
@@ -515,6 +596,11 @@ export class GLRenderer {
       mirror: fsMat(MIRROR_FRAG, { tMap: { value: null } }),
       tile: fsMat(TILE_FRAG, { tMap: { value: null }, uRepeat: { value: V2() } }),
       dots: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: HALFTONE_FRAG3, uniforms: { tMap: { value: null }, uTexel: { value: V2() }, uCell: { value: 8 }, uLod: { value: 0 } }, depthTest: false, depthWrite: false }),
+      rgbshift: fsMat(RGBSHIFT_FRAG, { tMap: { value: null }, uOffset: { value: V2() } }),
+      posterize: fsMat(POSTERIZE_FRAG, { tMap: { value: null }, uLevels: { value: 4 } }),
+      scanlines: fsMat(SCANLINE_FRAG, { tMap: { value: null }, uAmount: { value: 0.5 }, uPeriod: { value: 3 } }),
+      dither: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: DITHER_FRAG3, uniforms: { tMap: { value: null }, uLevels: { value: 4 } }, depthTest: false, depthWrite: false }),
+      slice: fsMat(SLICE_FRAG, { tMap: { value: null }, uCount: { value: 8 }, uAmount: { value: 0 }, uMode: { value: 0 } }),
     };
     this.fsMesh = new THREE.Mesh(fsGeom, this.fx.copy);
     this.fsMesh.frustumCulled = false;
@@ -713,6 +799,34 @@ export class GLRenderer {
         const m = this.fx.dots; texel(m);
         m.uniforms.uCell.value = cell; m.uniforms.uLod.value = Math.log2(cell);
         this._blit(m, rt.mip.texture, write); swap();
+      } else if (t === 'rgbshift') {
+        const amt = this._num(e.amount, 0.005);
+        if (amt <= 0.0) continue;                      // off
+        const ang = this._num(e.angle, 0) * 6.28318530718;
+        const m = this.fx.rgbshift; m.uniforms.uOffset.value.set(Math.cos(ang) * amt, Math.sin(ang) * amt);
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'posterize') {
+        const lv = this._num(e.levels, 4);
+        if (lv < 2.0) continue;                        // off
+        const m = this.fx.posterize; m.uniforms.uLevels.value = lv;
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'scanlines') {
+        const amt = this._num(e.amount, 0.5);
+        if (amt <= 0.0) continue;                      // off
+        const m = this.fx.scanlines; m.uniforms.uAmount.value = amt;
+        m.uniforms.uPeriod.value = Math.max(2, this._num(e.period, 3)) * this.DPR;
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'dither') {
+        const lv = this._num(e.levels, 4);
+        if (lv < 2.0) continue;                        // off
+        const m = this.fx.dither; m.uniforms.uLevels.value = lv;
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'slice') {
+        const amt = this._num(e.amount, 0.1);
+        if (amt <= 0.0) continue;                      // off
+        const m = this.fx.slice; m.uniforms.uCount.value = Math.max(1, this._num(e.count, 8));
+        m.uniforms.uAmount.value = amt; m.uniforms.uMode.value = this._num(e.mode, 0);
+        this._blit(m, read.texture, write); swap();
       } else if (t === 'feedback') {
         this._ensureHistory(rt);
         const next = rt.hist[1 - rt.histCur];

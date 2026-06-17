@@ -377,6 +377,17 @@ class Group {
   tile(x = 2, y = x) { return this._push({ type: 'tile', x, y }); }                                 // repeat in an x×y grid (1×1 = off)
   dots(n = 8) { return this._push({ type: 'dots', cell: n }); }                                     // halftone: cell px, dots grow with brightness (<2 = off)
   halftone(n = 8) { return this._push({ type: 'dots', cell: n }); }                                 // alias for dots
+  rgbshift(amount = 0.005, angle = 0) { return this._push({ type: 'rgbshift', amount, angle }); }   // chromatic aberration (0 = off)
+  rgb(amount = 0.005, angle = 0) { return this._push({ type: 'rgbshift', amount, angle }); }        // alias for rgbshift
+  posterize(levels = 4) { return this._push({ type: 'posterize', levels }); }                       // quantize colours (<2 = off)
+  dither(levels = 4) { return this._push({ type: 'dither', levels }); }                             // ordered Bayer dither (<2 = off)
+  scanlines(amount = 0.5, period = 3) { return this._push({ type: 'scanlines', amount, period }); } // CRT lines (0 = off)
+  // slice into bands and offset each; mode "h" | "v" | "grid" (amount = off at 0).
+  // pattern/osc the amount to make the slices judder.
+  slice(count = 8, amount = 0.1, mode = 'h') {
+    const m = mode === 'v' ? 1 : (mode === 'grid' || mode === 'both') ? 2 : 0;
+    return this._push({ type: 'slice', count, amount, mode: m });
+  }
   query(s) {
     const gid = this._gid, fx = this._fx;
     return this._pat.query(s).map((h) => hap(h.whole, h.part, Object.assign({}, h.value, { _gid: gid, _fx: fx })));
