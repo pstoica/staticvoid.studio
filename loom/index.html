@@ -18,6 +18,7 @@
     --font:"SF Pro Text","Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
     --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
     --rail-w:580px;
+    --side-w:0px;          /* width of the open right panel, so the toolbar can dock left of it */
     --ease:cubic-bezier(.4,0,.2,1);
     /* syntax-highlight palette */
     --t-com:rgba(238,241,246,.32); --t-str:#ffd166; --t-num:#6df0c2;
@@ -96,18 +97,10 @@
     padding:14px 22px 14px; margin-top:12px; container-type:inline-size; }
   .trow { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
   .pair { display:inline-flex; gap:10px; align-items:center; }   /* keeps its buttons together */
-  .bico { display:none; }   /* per-button icon, swapped in for the label when the rail is tight */
-  /* when the rail is too narrow for one row, collapse run/clear to icons (run keeps its ⌘⏎) */
-  @container (max-width: 470px) {
-    #runbtn .btxt, #clearbtn .btxt { display:none; }
-    #clearbtn .bico { display:inline; }
-    #runbtn, #clearbtn { padding:12px 14px; }
-    #runbtn kbd { opacity:.85; }
-  }
-  /* tighter still: drop the presets/guide labels too, leaving their ▤ / ? glyphs */
-  @container (max-width: 380px) {
-    #panelbtn .btxt, #helpbtn .btxt, #clockbtn .btxt { display:none; }
-    #panelbtn, #helpbtn, #clockbtn { padding:12px 14px; }
+  /* tight rail: drop the clock label, leaving just its glyph */
+  @container (max-width: 330px) {
+    #clockbtn .btxt { display:none; }
+    #clockbtn { padding:12px 14px; }
   }
   .btn { font:500 13px/1 var(--mono); color:var(--muted); background:rgba(255,255,255,.04);
     border:1px solid var(--line); border-radius:0; padding:12px 16px; cursor:pointer;
@@ -122,6 +115,18 @@
   .btn.on { color:var(--bg); background:var(--ink); border-color:var(--ink); }
   .btn.off { color:var(--muted); }
   .btn.icon { padding:12px 14px; font-size:11px; letter-spacing:.12em; }   /* icon-only buttons stay compact */
+  /* top-right floating control cluster (Hydra-style); docks left of the panel via --side-w */
+  #toolbar { position:fixed; top:14px; right:calc(16px + var(--side-w, 0px)); z-index:7;
+    display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px;
+    max-width:calc(100vw - 200px); pointer-events:none;
+    transition:right .28s var(--ease), opacity .55s var(--ease); }
+  #toolbar > * { pointer-events:auto; }
+  #toolbar.idle { opacity:.05; }
+  #toolbar.idle:hover { opacity:1; }
+  #toolbar .btn { color:var(--ink); background:rgba(10,11,14,.55); border-color:rgba(255,255,255,.14);
+    -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); }
+  #toolbar .btn:hover { background:rgba(22,23,28,.82); border-color:rgba(255,255,255,.3); }
+  .tbsep { width:1px; height:22px; background:rgba(255,255,255,.16); flex:none; }
   #runbtn { color:var(--ink); border-color:rgba(255,255,255,.22); }
   #runbtn.lit { background:var(--ink); color:var(--bg); border-color:var(--ink); }
   #runbtn kbd { font:inherit; opacity:.5; }
@@ -257,21 +262,6 @@
 
     <div id="transport">
       <div class="trow">
-        <button class="btn" id="runbtn" title="run · Cmd/Ctrl + Enter"><span class="btxt">run</span><kbd>⌘⏎</kbd></button>
-        <button class="btn icon live" id="playbtn" title="pause the animation">
-          <svg class="ico ico-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
-          <svg class="ico ico-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-        </button>
-        <button class="btn" id="clearbtn" title="clear">
-          <svg class="ico bico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg><span class="btxt">clear</span></button>
-        <span class="pair">
-          <button class="btn" id="panelbtn" title="presets panel">
-            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg><span class="btxt">presets</span></button>
-          <button class="btn" id="helpbtn" title="guide">
-            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.3 2.4c-.8.3-1.3.9-1.3 1.7v.4"/><path d="M12 17h.01"/></svg><span class="btxt">guide</span></button>
-        </span>
-      </div>
-      <div class="trow">
         <button class="btn" id="clockbtn" title="toggle the cycle playhead">
           <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg><span class="btxt">clock</span></button>
         <span class="pair">
@@ -287,6 +277,26 @@
     </div>
   </aside>
 
+  <nav id="toolbar" aria-label="controls">
+    <button class="btn icon" id="runbtn" title="run · ⌘⏎">
+      <svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></button>
+    <button class="btn icon live" id="playbtn" title="pause the animation">
+      <svg class="ico ico-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+      <svg class="ico ico-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
+    <button class="btn icon" id="clearbtn" title="clear the canvas">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg></button>
+    <span class="tbsep"></span>
+    <button class="btn icon" id="newbtn" title="new · fresh default patch">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v5M9.5 14.5h5"/></svg></button>
+    <button class="btn icon" id="savebtn" title="save the current code as a preset">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg></button>
+    <span class="tbsep"></span>
+    <button class="btn icon" id="panelbtn" title="presets">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></button>
+    <button class="btn icon" id="helpbtn" title="guide">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.3 2.4c-.8.3-1.3.9-1.3 1.7v.4"/><path d="M12 17h.01"/></svg></button>
+  </nav>
+
   <div id="hint">edit the pattern · ⌘⏎ to run</div>
 
   <aside id="side">
@@ -300,10 +310,6 @@
     </header>
 
     <div class="tabpane" data-pane="presets">
-      <div id="presbar">
-        <button class="btn mini" id="newbtn" title="start a fresh default patch">+ new</button>
-        <button class="btn mini" id="savebtn" title="save the current code as a preset">save</button>
-      </div>
       <div id="preslist"></div>
     </div>
 

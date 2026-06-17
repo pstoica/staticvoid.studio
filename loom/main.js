@@ -1058,9 +1058,15 @@ function showTab(name) {
   tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   localStorage.setItem('loom.sidetab', name);
 }
+// keep the top-right toolbar docked just left of the panel while it's open
+function syncSideW() {
+  const open = !side.classList.contains('hidden');
+  document.documentElement.style.setProperty('--side-w', open ? side.offsetWidth + 'px' : '0px');
+}
 function setSide(open, tab) {
   if (tab) showTab(tab);
   side.classList.toggle('hidden', !open);
+  syncSideW();
   // highlight only the button for the tab that's actually showing (or neither when closed)
   const onGuide = open && !!side.querySelector('[data-pane="guide"]:not([hidden])');
   $('#panelbtn').classList.toggle('on', open && !onGuide);
@@ -1096,6 +1102,7 @@ sideGrab.addEventListener('pointerdown', (e) => {
 sideGrab.addEventListener('pointermove', (e) => {
   if (!sideDragging) return;
   side.style.width = clampSideW(window.innerWidth - e.clientX) + 'px';
+  syncSideW();
 });
 sideGrab.addEventListener('pointerup', () => {
   if (!sideDragging) return;
@@ -1126,8 +1133,9 @@ railGrab.addEventListener('pointerup', railEnd); railGrab.addEventListener('poin
 // ── fade the control overlay when idle, so the drawing has the screen ──
 const rail = $('#rail');
 const hintEl = $('#hint');
+const toolbar = $('#toolbar');
 let idleTimer;
-function setIdle(on) { rail.classList.toggle('idle', on); hintEl.classList.toggle('idle', on); }
+function setIdle(on) { rail.classList.toggle('idle', on); hintEl.classList.toggle('idle', on); toolbar.classList.toggle('idle', on); }
 function activity() {
   setIdle(false);
   clearTimeout(idleTimer);
