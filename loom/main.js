@@ -1156,8 +1156,18 @@ document.addEventListener('mouseleave', () => { if (document.activeElement !== e
 // ── boot ────────────────────────────────────────────────────────────────────────────
 // one-time photosensitivity disclosure, shown until acknowledged (saved in localStorage)
 const warn = $('#warn');
-if (localStorage.getItem('loom.epilepsy') !== '1') warn.hidden = false;
-$('#warnok').addEventListener('click', () => { localStorage.setItem('loom.epilepsy', '1'); warn.hidden = true; });
+const needsWarning = localStorage.getItem('loom.epilepsy') !== '1';
+let engineStarted = false;
+// only compile + start animating once the photosensitivity disclosure is acknowledged,
+// so there's never an active (flashing) canvas behind the warning.
+function startEngine() {
+  if (engineStarted) return;
+  engineStarted = true;
+  run();
+  activity();   // start the idle countdown
+  requestAnimationFrame((t) => { lastT = t; frame(t); });
+}
+$('#warnok').addEventListener('click', () => { localStorage.setItem('loom.epilepsy', '1'); warn.hidden = true; startEngine(); });
 
 DSL._setBgSink((c) => { bgSource = c; });   // bg("…") stores its (raw) arg here at compile time; resolved per-frame in tick
 resize();
@@ -1178,6 +1188,6 @@ if (!_booted) {
   if (!saved) setActive('b:threads');
 }
 refreshHL();
-run();
-activity();   // start the idle countdown
-requestAnimationFrame((t) => { lastT = t; frame(t); });
+// hold the engine behind the photosensitivity warning; startEngine() runs on ack
+if (needsWarning) warn.hidden = false;
+else startEngine();
