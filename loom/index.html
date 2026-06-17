@@ -188,7 +188,8 @@
   .tab:hover { color:var(--ink); }
   .tab.active { color:var(--ink); background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.16); }
   #sideclose { width:30px; height:30px; flex:none; border-radius:0; border:1px solid var(--line);
-    background:rgba(255,255,255,.04); color:var(--ink); cursor:pointer; font-size:13px; }
+    background:rgba(255,255,255,.04); color:var(--ink); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; }
   #sideclose:hover { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.2); }
   .tabpane { flex:1; min-height:0; overflow:auto; padding:16px 18px 40px; }
   .tabpane[hidden] { display:none; }
@@ -206,7 +207,7 @@
   #side h3 span { color:var(--muted); text-transform:none; font-weight:400; }
   #side code { font:500 12px/1.5 var(--mono); color:var(--ink);
     background:rgba(255,255,255,.045); border:1px solid var(--line); border-radius:6px;
-    padding:1px 6px; white-space:pre-wrap; }
+    padding:1px 6px; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; }
   #side section > code { display:block; padding:5px 9px; margin:6px 0 2px; }
   #side p code { background:rgba(255,255,255,.08); }
   #side p { font:400 11.5px/1.45 var(--font); color:var(--muted); margin:0 0 6px 2px; }
@@ -409,7 +410,7 @@
       </section>
       <section class="lineage">
         <h3>lineage</h3>
-        <p>Loom takes its pattern language from <a href="https://strudel.cc" target="_blank" rel="noopener">Strudel</a> / TidalCycles, and its live-coded visual-feedback spirit from <a href="https://hydra.ojack.xyz" target="_blank" rel="noopener">Hydra</a>.</p>
+        <p>Loom takes its pattern language from <a href="https://strudel.cc" target="_blank" rel="noopener">Strudel</a> / <a href="https://tidalcycles.org/" target="_blank" rel="noopener">TidalCycles</a>, and its live-coded visual-feedback spirit from <a href="https://hydra.ojack.xyz" target="_blank" rel="noopener">Hydra</a>.</p>
       </section>
     </div>
     </div>
