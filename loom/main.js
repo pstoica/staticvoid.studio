@@ -904,7 +904,10 @@ function rebuildPresetList() {
     presList.appendChild(r);
   };
   label('built-in');
-  for (const name of Object.keys(PRESETS)) row(name, 'b:' + name, false);
+  // feature a few favourites at the top, then the rest in definition order
+  const featured = ['threads', 'vortex', 'halo'].filter((n) => n in PRESETS);
+  const ordered = [...featured, ...Object.keys(PRESETS).filter((n) => !featured.includes(n))];
+  for (const name of ordered) row(name, 'b:' + name, false);
   const names = Object.keys(user);
   if (names.length) { label('saved'); for (const name of names) row(name, 'u:' + name, true); }
   setActive(activeVal);
@@ -1109,7 +1112,7 @@ const isMobile = () => window.matchMedia('(max-width:760px)').matches;
 // tap the canvas (outside the sidebar and the control rail) to close the sidebar
 document.addEventListener('pointerdown', (e) => {
   if (side.classList.contains('hidden')) return;
-  if (side.contains(e.target) || e.target.closest('#rail, #panelbtn, #helpbtn')) return;
+  if (side.contains(e.target) || e.target.closest('#rail, #toolbar')) return;
   setSide(false);
 });
 
