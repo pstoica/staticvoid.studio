@@ -126,6 +126,7 @@ function run() {
     errBar.textContent = '';
     errBar.classList.remove('show');
     localStorage.setItem('loom.code', editor.value);
+    syncURL();
   } catch (e) {
     errBar.textContent = String(e.message || e);
     errBar.classList.add('show');
@@ -917,6 +918,17 @@ function applyPreset(val) {
   editor.value = code; refreshHL(); run();
 }
 
+// ── shareable URLs: ?p=<name> for a built-in preset, ?c=<base64> for any custom
+// code. The address bar is the share link — it updates on every run/load. ──
+const b64e = (s) => btoa(encodeURIComponent(s)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const b64d = (s) => decodeURIComponent(atob(s.replace(/-/g, '+').replace(/_/g, '/')));
+const builtinFor = (code) => Object.keys(PRESETS).find((n) => PRESETS[n].trim() === code.trim()) || null;
+function syncURL() {
+  const name = builtinFor(editor.value);
+  const qs = name ? 'p=' + encodeURIComponent(name) : 'c=' + b64e(editor.value);
+  try { history.replaceState(null, '', location.pathname + '?' + qs); } catch { /* ignore */ }
+}
+
 // ── wiring ──────────────────────────────────────────────────────────────────────────
 function setCps(v) { cps = Math.max(0.1, Math.min(2, v)); cpsLabel.textContent = cps.toFixed(2); }
 // a number field: drag horizontally, scroll-wheel, or click to type a value.
@@ -1047,7 +1059,7 @@ $('#savebtn').addEventListener('click', () => {
   const name = (prompt('Save preset as:', cur) || '').trim();
   if (!name) return;
   const user = loadUser(); user[name] = editor.value; saveUser(user);
-  rebuildPresetList(); setActive('u:' + name);
+  rebuildPresetList(); setActive('u:' + name); syncURL();
 });
 
 // ── right sidebar (swappable presets / guide) ──
@@ -1173,9 +1185,17 @@ setDecay(decayScale);
 rebuildPresetList();
 showTab(localStorage.getItem('loom.sidetab') || 'presets');
 setSide(localStorage.getItem('loom.side') !== '0');
-const saved = localStorage.getItem('loom.code');   // restore last-worked-on patch; threads if none
-editor.value = saved || PRESETS.threads;
-if (!saved) setActive('b:threads');
+// boot source priority: ?c=<custom> → ?p=<built-in> → last-worked-on → threads
+const _params = new URLSearchParams(location.search);
+const _urlC = _params.get('c'), _urlP = _params.get('p');
+let _booted = false;
+if (_urlC) { try { editor.value = b64d(_urlC); _booted = true; } catch { /* malformed link */ } }
+else if (_urlP && PRESETS[_urlP]) { editor.value = PRESETS[_urlP]; setActive('b:' + _urlP); _booted = true; }
+if (!_booted) {
+  const saved = localStorage.getItem('loom.code');   // restore last-worked-on patch; threads if none
+  editor.value = saved || PRESETS.threads;
+  if (!saved) setActive('b:threads');
+}
 refreshHL();
 run();
 activity();   // start the idle countdown
