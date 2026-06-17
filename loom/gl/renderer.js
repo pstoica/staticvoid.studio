@@ -526,6 +526,37 @@ uniform float uAlpha;
 varying vec2 vUv;
 void main() { gl_FragColor = texture2D(tMap, vUv) * clamp(uAlpha, 0.0, 1.0); }`;
 
+// transform: scale (zoom about centre), rotate, translate the whole layer — the
+// composition controls. samples outside the frame read transparent, so a shrunk
+// or moved layer reveals the background around it.
+const XFORM_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform float uScale, uAngle;
+uniform vec2 uOffset;
+varying vec2 vUv;
+void main() {
+  vec2 p = (vUv - 0.5 - uOffset) / max(uScale, 0.0001);
+  float c = cos(uAngle), s = sin(uAngle);
+  vec2 uv = vec2(c * p.x - s * p.y, s * p.x + c * p.y) + 0.5;
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { gl_FragColor = vec4(0.0); return; }
+  gl_FragColor = texture2D(tMap, uv);
+}`;
+
+// aspect: keep a centred rectangle of the target ratio (w/h) and clear the rest —
+// letterbox / pillarbox the layer into a fixed aspect.
+const ASPECT_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform float uAspect;     // target w/h
+uniform float uCanvas;     // canvas w/h
+varying vec2 vUv;
+void main() {
+  vec2 keep = uAspect < uCanvas ? vec2(uAspect / uCanvas, 1.0) : vec2(1.0, uCanvas / uAspect);
+  if (abs(vUv.x - 0.5) > keep.x * 0.5 || abs(vUv.y - 0.5) > keep.y * 0.5) { gl_FragColor = vec4(0.0); return; }
+  gl_FragColor = texture2D(tMap, vUv);
+}`;
+
 // blend mode → bucket key. Buckets draw in BLEND_ORDER (additive/screen last so
 // glows sit on top); within a bucket, age order (newest last) is preserved.
 const BLEND_ORDER = ['normal', 'multiply', 'screen', 'additive'];
@@ -625,6 +656,8 @@ export class GLRenderer {
       slice: fsMat(SLICE_FRAG, { tMap: { value: null }, uCount: { value: 8 }, uAmount: { value: 0 }, uMode: { value: 0 } }),
       lens: fsMat(LENS_FRAG, { tMap: { value: null }, uAmount: { value: 0 } }),
       opacity: fsMat(OPACITY_FRAG, { tMap: { value: null }, uAlpha: { value: 1 } }),
+      transform: fsMat(XFORM_FRAG, { tMap: { value: null }, uScale: { value: 1 }, uAngle: { value: 0 }, uOffset: { value: V2() } }),
+      aspect: fsMat(ASPECT_FRAG, { tMap: { value: null }, uAspect: { value: 0 }, uCanvas: { value: 1 } }),
     };
     this.fsMesh = new THREE.Mesh(fsGeom, this.fx.copy);
     this.fsMesh.frustumCulled = false;
@@ -860,6 +893,18 @@ export class GLRenderer {
         const a = this._num(e.alpha, 1);
         if (a >= 0.999) continue;                      // off: full opacity = identity
         const m = this.fx.opacity; m.uniforms.uAlpha.value = a;
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'transform') {
+        const sc = this._num(e.scale, 1), ang = this._num(e.angle, 0) * 6.28318530718;
+        const ox = this._num(e.x, 0), oy = this._num(e.y, 0);
+        if (sc === 1 && ang === 0 && ox === 0 && oy === 0) continue;   // identity
+        const m = this.fx.transform;
+        m.uniforms.uScale.value = sc; m.uniforms.uAngle.value = ang; m.uniforms.uOffset.value.set(ox, oy);
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'aspect') {
+        const ar = this._num(e.ratio, 0);
+        if (ar <= 0.0) continue;                       // off
+        const m = this.fx.aspect; m.uniforms.uAspect.value = ar; m.uniforms.uCanvas.value = rt.w / rt.h;
         this._blit(m, read.texture, write); swap();
       } else if (t === 'feedback') {
         this._ensureHistory(rt);

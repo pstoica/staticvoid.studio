@@ -391,6 +391,15 @@ class Group {
   lens(amount = 0.4) { return this._push({ type: 'lens', amount }); }                                // barrel (+) / pincushion (-) (0 = off)
   opacity(alpha = 1) { return this._push({ type: 'opacity', alpha }); }                              // fade the whole group (1 = off)
   alpha(a = 1) { return this._push({ type: 'opacity', alpha: a }); }                                 // alias for opacity
+  // ── layer composition: scale / translate / rotate the whole group, crop to a ratio ──
+  scale(s = 1) { return this._push({ type: 'transform', scale: s, angle: 0, x: 0, y: 0 }); }         // zoom about centre (s<1 shrinks, bg shows; 1 = off)
+  move(x = 0, y = 0) { return this._push({ type: 'transform', scale: 1, angle: 0, x, y }); }         // translate the layer (uv; 0,0 = off)
+  turn(t = 0) { return this._push({ type: 'transform', scale: 1, angle: t, x: 0, y: 0 }); }          // rotate the whole layer, turns (0 = off)
+  aspect(ratio = 1) {                                                                                 // crop to a centred w/h ratio (letterbox); ≤0 = off
+    let r = ratio;
+    if (typeof ratio === 'string' && ratio.includes(':')) { const [w, h] = ratio.split(':'); r = parseFloat(w) / parseFloat(h); }
+    return this._push({ type: 'aspect', ratio: r });
+  }
   query(s) {
     const gid = this._gid, fx = this._fx;
     return this._pat.query(s).map((h) => hap(h.whole, h.part, Object.assign({}, h.value, { _gid: gid, _fx: fx })));

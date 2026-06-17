@@ -383,6 +383,8 @@
         <code>.dither(n) .scanlines(amt)</code><p>bayer dither · CRT lines</p>
         <code>.slice(n, amt, "grid")</code><p>cut into bands &amp; offset — oscillate <code>amt</code> for glitch (modes: h · v · grid)</p>
         <code>.lens(amt) .opacity(a)</code><p>barrel/pincushion · fade the whole group (modulate <code>a</code> to pulse)</p>
+        <code>.scale(s) .move(x, y) .turn(t)</code><p>compose the whole layer: zoom · translate · rotate</p>
+        <code>.aspect(16/9) .aspect("9:16")</code><p>crop to an aspect ratio (letterbox; bg shows in the bars)</p>
         <code>.displace(amount, scale)</code><p>warp / melt the layer</p>
         <code>.hue(t) .brightness(b) .contrast(c) .saturate(s)</code><p>colour grade</p>
         <code>.pixelate(osc(0.2).range(3,26))</code><p>FX params take numbers, patterns, or oscs (global time), so the effect itself moves</p>
