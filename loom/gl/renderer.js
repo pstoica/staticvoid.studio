@@ -388,6 +388,41 @@ void main() {
   gl_FragColor = texture2D(tMap, uv);
 }`;
 
+// tile: repeat the layer in an nx × ny grid (fract wraps each cell's uv)
+const TILE_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform vec2 uRepeat;
+varying vec2 vUv;
+void main() {
+  gl_FragColor = texture2D(tMap, fract(vUv * uRepeat));
+}`;
+
+// halftone / dots: snap to a cell grid, area-average the cell (mipped, like
+// pixelate), then mask it into a dot whose area grows with the cell's coverage ×
+// brightness. Premultiplied; gaps between dots fall to transparent.
+const HALFTONE_FRAG3 = `
+precision highp float;
+uniform sampler2D tMap;
+uniform vec2 uTexel;       // 1 / target size, device px
+uniform float uCell;       // cell size, device px
+uniform float uLod;        // log2(uCell) — mip level = the cell's area average
+in vec2 vUv;
+out vec4 fragColor;
+void main() {
+  vec2 px = vUv / uTexel;
+  vec2 center = (floor(px / uCell) + 0.5) * uCell;
+  vec4 c = textureLod(tMap, center * uTexel, uLod);
+  float a = c.a;
+  vec3 col = a > 0.0 ? c.rgb / a : c.rgb;
+  float lum = dot(col, vec3(0.299, 0.587, 0.114));
+  float amt = clamp(a * mix(0.25, 1.0, lum), 0.0, 1.0);
+  float radius = sqrt(amt) * 0.5 * uCell;          // dot area ∝ coverage
+  float d = length(px - center);
+  float dot = 1.0 - smoothstep(radius - 1.0, radius + 1.0, d);
+  fragColor = vec4(col * a, a) * dot;
+}`;
+
 // blend mode → bucket key. Buckets draw in BLEND_ORDER (additive/screen last so
 // glows sit on top); within a bucket, age order (newest last) is preserved.
 const BLEND_ORDER = ['normal', 'multiply', 'screen', 'additive'];
@@ -478,6 +513,8 @@ export class GLRenderer {
       displace: fsMat(DISPLACE_FRAG, { tMap: { value: null }, uAmount: { value: 0.02 }, uScale: { value: 3 }, uTime: { value: 0 } }),
       kaleido: fsMat(KALEIDO_FRAG, { tMap: { value: null }, uSlices: { value: 6 } }),
       mirror: fsMat(MIRROR_FRAG, { tMap: { value: null } }),
+      tile: fsMat(TILE_FRAG, { tMap: { value: null }, uRepeat: { value: V2() } }),
+      dots: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: HALFTONE_FRAG3, uniforms: { tMap: { value: null }, uTexel: { value: V2() }, uCell: { value: 8 }, uLod: { value: 0 } }, depthTest: false, depthWrite: false }),
     };
     this.fsMesh = new THREE.Mesh(fsGeom, this.fx.copy);
     this.fsMesh.frustumCulled = false;
@@ -662,6 +699,20 @@ export class GLRenderer {
       } else if (t === 'mirror') {
         if (this._num(e.on, 1) < 0.5) continue;        // off: mirror(0)
         this._blit(this.fx.mirror, read.texture, write); swap();
+      } else if (t === 'tile') {
+        const nx = Math.max(1, Math.round(this._num(e.x, 2)));
+        const ny = Math.max(1, Math.round(this._num(e.y, nx)));
+        if (nx <= 1 && ny <= 1) continue;              // off: 1×1 = passthrough
+        const m = this.fx.tile; m.uniforms.uRepeat.value.set(nx, ny);
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'dots') {
+        const cell = Math.max(2, this._num(e.cell, 8) * this.DPR);
+        if (cell <= 2.0) continue;                     // off: tiny cells = no halftone
+        this._ensureMip(rt);
+        this._blit(this.fx.copy, read.texture, rt.mip);
+        const m = this.fx.dots; texel(m);
+        m.uniforms.uCell.value = cell; m.uniforms.uLod.value = Math.log2(cell);
+        this._blit(m, rt.mip.texture, write); swap();
       } else if (t === 'feedback') {
         this._ensureHistory(rt);
         const next = rt.hist[1 - rt.histCur];
