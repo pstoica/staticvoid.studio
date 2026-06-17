@@ -1135,26 +1135,6 @@ sideGrab.addEventListener('pointerup', () => {
   localStorage.setItem(SIDE_W_KEY, parseInt(side.style.width, 10));
 });
 
-// resizable editor, drag the rail's right-edge grabber to set the code column width
-const railGrab = $('#railgrab');
-const RAIL_W_KEY = 'loom.railwidth';
-const clampRailW = (w) => Math.max(340, Math.min(window.innerWidth - 180, w));
-const setRailW = (w) => document.documentElement.style.setProperty('--rail-w', clampRailW(w) + 'px');
-const savedRailW = parseInt(localStorage.getItem(RAIL_W_KEY) || '', 10);
-if (savedRailW) setRailW(savedRailW);
-let railDragging = false;
-railGrab.addEventListener('pointerdown', (e) => {
-  railDragging = true; railGrab.classList.add('drag'); railGrab.setPointerCapture?.(e.pointerId);
-  document.body.style.userSelect = 'none'; e.preventDefault();
-});
-railGrab.addEventListener('pointermove', (e) => { if (railDragging) setRailW(e.clientX); });
-const railEnd = () => {
-  if (!railDragging) return;
-  railDragging = false; railGrab.classList.remove('drag'); document.body.style.userSelect = '';
-  localStorage.setItem(RAIL_W_KEY, parseInt(getComputedStyle(document.documentElement).getPropertyValue('--rail-w'), 10));
-};
-railGrab.addEventListener('pointerup', railEnd); railGrab.addEventListener('pointercancel', railEnd);
-
 // ── fade the control overlay when idle, so the drawing has the screen ──
 const rail = $('#rail');
 const hintEl = $('#hint');
