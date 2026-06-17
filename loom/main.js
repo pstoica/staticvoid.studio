@@ -61,7 +61,9 @@ function highlight(code) {
     out += cls ? `<span class="${cls}">${escHtml(tok)}</span>` : escHtml(tok);
     last = m.index + tok.length;
   }
-  return out + escHtml(code.slice(last)) + '\n'; // trailing newline keeps the last line aligned
+  // wrap in an inline span so a per-line background hugs the text (box-decoration-break),
+  // legible over busy art without washing the whole panel dark. trailing \n stays outside.
+  return `<span class="hlwrap">${out}${escHtml(code.slice(last))}</span>\n`;
 }
 function refreshHL() {
   hl.innerHTML = highlight(editor.value);

@@ -36,7 +36,6 @@
      gradient area lets pointer events fall through to the canvas. ── */
   #rail { position:fixed; top:0; left:0; bottom:0; width:var(--rail-w); z-index:2;
     display:flex; flex-direction:column; min-height:0; pointer-events:none;
-    background:linear-gradient(102deg, rgba(3,4,7,.6) 0%, rgba(3,4,7,.22) 48%, transparent 92%);
     transition:opacity .55s var(--ease); }
   #rail > * { pointer-events:auto; }     /* but the controls/editor stay interactive */
   #rail.idle { opacity:.05; }            /* mousemove / typing brings it back */
@@ -76,8 +75,11 @@
   #hl, #code { position:absolute; inset:0; margin:0; border:0; background:transparent;
     font:500 15px/1.65 var(--mono); padding:4px 16px; letter-spacing:.01em; tab-size:2;
     white-space:pre-wrap; overflow-wrap:break-word; overflow:auto; }
-  #hl { color:var(--ink); pointer-events:none; z-index:0;
-    text-shadow:0 0 9px rgba(0,0,0,.92), 0 1px 3px rgba(0,0,0,.96); } /* legible over busy art */
+  #hl { color:var(--ink); pointer-events:none; z-index:0; }
+  /* per-line dark box that hugs only the text (ragged right), so the rest of the
+     canvas stays clean — no full-panel wash, no text-shadow. */
+  #hl .hlwrap { background:rgba(7,8,11,.72); box-decoration-break:clone;
+    -webkit-box-decoration-break:clone; border-radius:2px; }
   #code { color:transparent; -webkit-text-fill-color:transparent; caret-color:var(--ink);
     resize:none; outline:none; z-index:1; }
   #code::selection { background:rgba(255,255,255,.18); }
@@ -294,7 +296,7 @@
         <button class="tab" data-tab="presets">presets</button>
         <button class="tab" data-tab="guide">guide</button>
       </div>
-      <button id="sideclose" title="hide panel">✕</button>
+      <button id="sideclose" title="hide panel"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </header>
 
     <div class="tabpane" data-pane="presets">
