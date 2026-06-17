@@ -41,12 +41,17 @@
   #rail > * { pointer-events:auto; }     /* but the controls/editor stay interactive */
   #rail.idle { opacity:.05; }            /* mousemove / typing brings it back */
   #rail.idle:hover { opacity:1; }
+  /* ⌘/Ctrl+Shift+H (or ⌘/Ctrl+.) hides every bit of chrome — just the drawing */
+  body.chrome-hidden #rail, body.chrome-hidden #toolbar, body.chrome-hidden #side,
+  body.chrome-hidden #hint { opacity:0; pointer-events:none; transition:opacity .35s var(--ease); }
 
   #brand { display:flex; align-items:baseline; gap:10px; padding:18px 22px 12px; }
   #brand h1 { font-family:"Unbounded",var(--font); font-weight:700; font-size:19px; margin:0;
     letter-spacing:-.01em; display:inline-flex; }
   #brand h1 span { transition:color .55s var(--ease); }   /* per-letter solid colours, shifted on run() via JS */
-  #brand .sub { font-size:11px; color:var(--muted); letter-spacing:.02em; }
+  #brand .sub { font-size:11px; color:var(--muted); letter-spacing:.02em;
+    transition:opacity .3s var(--ease); }
+  body.editing #brand .sub { opacity:0; }   /* declutter the tagline while you're in the editor */
   /* panel/guide live in the transport row now; styled as .btn (see #transport) */
 
   /* preset list (lives in the sidebar's presets tab) */
@@ -79,9 +84,8 @@
   #hl { color:var(--ink); pointer-events:none; z-index:0; }
   /* per-line dark box that hugs only the text (ragged right), so the rest of the
      canvas stays clean — no full-panel wash, no text-shadow. */
-  #hl .hlwrap { background:rgba(7,8,11,.5); box-decoration-break:clone;
-    -webkit-box-decoration-break:clone; border-radius:2px;
-    -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); }
+  #hl .hlwrap { background:rgba(7,8,11,.72); box-decoration-break:clone;
+    -webkit-box-decoration-break:clone; border-radius:2px; }
   #code { color:transparent; -webkit-text-fill-color:transparent; caret-color:var(--ink);
     resize:none; outline:none; z-index:1; }
   #code::selection { background:rgba(255,255,255,.18); }
@@ -125,17 +129,25 @@
   #toolbar.idle { opacity:.05; }
   #toolbar.idle:hover { opacity:1; }
   /* light floating icons (Hydra-style): no box, a soft shadow keeps them legible
-     over any art. active/live states get a dark chip so they read over bright art too. */
+     over any art. active/live states get a dark chip PLUS a light inset ring, so one
+     of the two always contrasts whether the art behind is dark or bright. */
   #toolbar .btn { color:var(--ink); background:transparent; border-color:transparent; padding:9px;
     filter:drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
   #toolbar .btn:hover { background:rgba(255,255,255,.12); border-color:transparent; }
-  #toolbar .btn.on { background:rgba(0,0,0,.5); color:var(--ink); filter:none; }
+  #toolbar .btn.on, #playbtn.live { color:var(--ink); background:rgba(0,0,0,.5); filter:none;
+    box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.65); }
+  #toolbar .btn.on:hover, #playbtn.live:hover { background:rgba(0,0,0,.68);
+    box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.85); }
   #runbtn.lit { background:rgba(255,255,255,.24); filter:none; }   /* brief flash on run */
   .tbsep { width:1px; height:18px; background:rgba(255,255,255,.14); flex:none; margin:0 1px; }
   #runbtn kbd { font:inherit; opacity:.5; }
-  /* play doubles as the "stop now" button: a dark chip while the animation is live */
-  #playbtn.live { color:var(--ink); background:rgba(0,0,0,.55); border-color:transparent; filter:none; }
-  #playbtn.live:hover { background:rgba(0,0,0,.7); }
+  /* instant styled tooltip under each icon button (replaces the slow native title) */
+  #toolbar .btn[data-tip] { position:relative; }
+  #toolbar .btn[data-tip]::after { content:attr(data-tip); position:absolute; top:calc(100% + 8px);
+    left:50%; transform:translateX(-50%); background:rgba(0,0,0,.88); color:var(--ink);
+    font:500 10.5px/1 var(--mono); letter-spacing:.04em; padding:6px 8px; white-space:nowrap;
+    border:1px solid var(--line); pointer-events:none; opacity:0; transition:opacity .12s var(--ease); z-index:20; }
+  #toolbar .btn[data-tip]:hover::after { opacity:1; }
 
   /* draggable / scrollable number field (replaces the cps + decay sliders) */
   .num { font:500 13px/1 var(--mono); color:var(--muted); background:rgba(255,255,255,.04);
@@ -163,9 +175,10 @@
   #meta a { color:var(--muted); text-decoration:none; border-bottom:1px solid var(--line); }
   #meta a:hover { color:var(--ink); }
 
-  #hint { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); z-index:1;
+  /* onboarding tip: sits just below the editor and above the controls; gone after first run */
+  #hint { align-self:flex-start; margin:6px 22px 2px; padding:6px 10px;
     font:400 11px/1 var(--mono); color:var(--muted); pointer-events:none; white-space:nowrap;
-    background:rgba(0,0,0,.32); padding:7px 12px; border:1px solid var(--line);
+    background:rgba(0,0,0,.3); border:1px solid var(--line);
     letter-spacing:.05em; transition:opacity .55s var(--ease); }
   #hint.idle { opacity:0; }
 
@@ -206,6 +219,9 @@
   #side p code { background:rgba(255,255,255,.08); }
   #side p { font:400 11.5px/1.45 var(--font); color:var(--muted); margin:0 0 6px 2px; }
   #side p.shapes { font-family:var(--mono); color:rgba(238,241,246,.7); margin-top:8px; }
+  #side p a { color:var(--ink); text-decoration:none; border-bottom:1px solid var(--accent-dim); }
+  #side p a:hover { border-bottom-color:var(--ink); }
+  #side .lineage { margin-top:18px; padding-top:14px; border-top:1px solid var(--line); }
   #side em { color:var(--ok); font-style:normal; }
 
   @media (max-width:760px) {
@@ -213,7 +229,6 @@
     #rail { top:auto; right:0; bottom:0; width:100vw; height:auto; max-height:56vh;
       border-right:0; border-top:1px solid var(--line); }
     #editwrap { min-height:120px; }
-    #hint { left:50%; bottom:calc(56vh + 14px); }
     /* sidebar = full-screen sheet on mobile: no awkward sliver, sticky header,
        a big obvious close, and no resize grabber (pointless on touch) */
     #side { width:100vw !important; max-width:100vw; border-left:0; }   /* override any saved drag-width */
@@ -265,6 +280,7 @@
     </div>
     <div id="railgrab" title="drag to resize the editor"></div>
     <div id="err"></div>
+    <div id="hint">edit the pattern · ⌘⏎ to run</div>
 
     <div id="transport">
       <div class="trow">
@@ -284,26 +300,24 @@
   </aside>
 
   <nav id="toolbar" aria-label="controls">
-    <button class="btn icon" id="runbtn" title="run · ⌘⏎">
+    <button class="btn icon" id="runbtn" aria-label="run" data-tip="run · ⌘⏎">
       <svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></button>
-    <button class="btn icon live" id="playbtn" title="pause the animation">
+    <button class="btn icon live" id="playbtn" aria-label="pause" data-tip="pause the animation">
       <svg class="ico ico-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
       <svg class="ico ico-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
-    <button class="btn icon" id="clearbtn" title="clear the canvas">
+    <button class="btn icon" id="clearbtn" aria-label="clear" data-tip="clear the canvas">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg></button>
     <span class="tbsep"></span>
-    <button class="btn icon" id="newbtn" title="new · fresh default patch">
+    <button class="btn icon" id="newbtn" aria-label="new" data-tip="new · fresh default patch">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v5M9.5 14.5h5"/></svg></button>
-    <button class="btn icon" id="savebtn" title="save the current code as a preset">
+    <button class="btn icon" id="savebtn" aria-label="save" data-tip="save as preset">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg></button>
     <span class="tbsep"></span>
-    <button class="btn icon" id="panelbtn" title="presets">
+    <button class="btn icon" id="panelbtn" aria-label="presets" data-tip="presets">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></button>
-    <button class="btn icon" id="helpbtn" title="guide">
+    <button class="btn icon" id="helpbtn" aria-label="guide" data-tip="guide">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.3 2.4c-.8.3-1.3.9-1.3 1.7v.4"/><path d="M12 17h.01"/></svg></button>
   </nav>
-
-  <div id="hint">edit the pattern · ⌘⏎ to run</div>
 
   <aside id="side">
     <div id="sidegrab" title="drag to resize"></div>
@@ -396,6 +410,10 @@
         <h3>palettes <span>(named ramps)</span></h3>
         <code>palette("sunset").at(saw.range(0,1))</code>
         <p class="shapes">sunset · ember · ice · neon · forest · candy · mono · rainbow · aurora</p>
+      </section>
+      <section class="lineage">
+        <h3>lineage</h3>
+        <p>Loom takes its pattern language from <a href="https://strudel.cc" target="_blank" rel="noopener">Strudel</a> / TidalCycles, and its live-coded visual-feedback spirit from <a href="https://hydra.ojack.xyz" target="_blank" rel="noopener">Hydra</a>.</p>
       </section>
     </div>
     </div>

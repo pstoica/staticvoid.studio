@@ -1011,7 +1011,8 @@ function setPlaying(on) {
   playing = on;
   const b = $('#playbtn');
   b.classList.toggle('live', playing);
-  b.title = playing ? 'pause the animation' : 'resume';
+  b.dataset.tip = playing ? 'pause the animation' : 'resume';
+  b.setAttribute('aria-label', playing ? 'pause' : 'play');
 }
 $('#playbtn').addEventListener('click', () => setPlaying(!playing));
 setPlaying(playing);
@@ -1079,7 +1080,18 @@ $('#sideclose').addEventListener('click', () => setSide(false));
 const onTab = (name) => !side.classList.contains('hidden') && side.querySelector(`[data-pane="${name}"]:not([hidden])`);
 $('#panelbtn').addEventListener('click', () => setSide(!onTab('presets'), 'presets'));
 $('#helpbtn').addEventListener('click', () => setSide(!onTab('guide'), 'guide'));
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setSide(false); });
+// fully hide all chrome (⌘/Ctrl+Shift+H or ⌘/Ctrl+.) so the drawing has the whole
+// screen; any of Escape / the same combo brings it back.
+function setChromeHidden(on) { document.body.classList.toggle('chrome-hidden', on); }
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && (e.key === '.' || ((e.shiftKey) && (e.key === 'H' || e.key === 'h')))) {
+    e.preventDefault(); setChromeHidden(!document.body.classList.contains('chrome-hidden')); return;
+  }
+  if (e.key === 'Escape') {
+    if (document.body.classList.contains('chrome-hidden')) { setChromeHidden(false); return; }
+    setSide(false);
+  }
+});
 const isMobile = () => window.matchMedia('(max-width:760px)').matches;
 // tap the canvas (outside the sidebar and the control rail) to close the sidebar
 document.addEventListener('pointerdown', (e) => {
@@ -1143,8 +1155,8 @@ function activity() {
 }
 ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart'].forEach((ev) =>
   window.addEventListener(ev, activity, { passive: true }));
-editor.addEventListener('focus', activity);
-editor.addEventListener('blur', activity);
+editor.addEventListener('focus', () => { document.body.classList.add('editing'); activity(); });
+editor.addEventListener('blur', () => { document.body.classList.remove('editing'); activity(); });
 // mouse leaving the window → fade right away (unless we're mid-edit)
 document.addEventListener('mouseleave', () => { if (document.activeElement !== editor) setIdle(true); });
 
