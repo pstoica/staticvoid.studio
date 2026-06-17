@@ -504,6 +504,28 @@ void main() {
   gl_FragColor = texture2D(tMap, fract(uv));
 }`;
 
+// lens: radial barrel (amount > 0, bulge) / pincushion (amount < 0) distortion
+// about the centre. samples clamp at the edges.
+const LENS_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform float uAmount;
+varying vec2 vUv;
+void main() {
+  vec2 p = vUv - 0.5;
+  vec2 uv = p * (1.0 + uAmount * dot(p, p) * 4.0) + 0.5;
+  gl_FragColor = texture2D(tMap, clamp(uv, 0.0, 1.0));
+}`;
+
+// opacity: scale the whole layer's alpha (premultiplied → scale rgb and a together).
+// patternable, so you can fade or pulse a group as a unit.
+const OPACITY_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform float uAlpha;
+varying vec2 vUv;
+void main() { gl_FragColor = texture2D(tMap, vUv) * clamp(uAlpha, 0.0, 1.0); }`;
+
 // blend mode → bucket key. Buckets draw in BLEND_ORDER (additive/screen last so
 // glows sit on top); within a bucket, age order (newest last) is preserved.
 const BLEND_ORDER = ['normal', 'multiply', 'screen', 'additive'];
@@ -601,6 +623,8 @@ export class GLRenderer {
       scanlines: fsMat(SCANLINE_FRAG, { tMap: { value: null }, uAmount: { value: 0.5 }, uPeriod: { value: 3 } }),
       dither: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: DITHER_FRAG3, uniforms: { tMap: { value: null }, uLevels: { value: 4 } }, depthTest: false, depthWrite: false }),
       slice: fsMat(SLICE_FRAG, { tMap: { value: null }, uCount: { value: 8 }, uAmount: { value: 0 }, uMode: { value: 0 } }),
+      lens: fsMat(LENS_FRAG, { tMap: { value: null }, uAmount: { value: 0 } }),
+      opacity: fsMat(OPACITY_FRAG, { tMap: { value: null }, uAlpha: { value: 1 } }),
     };
     this.fsMesh = new THREE.Mesh(fsGeom, this.fx.copy);
     this.fsMesh.frustumCulled = false;
@@ -826,6 +850,16 @@ export class GLRenderer {
         if (amt <= 0.0) continue;                      // off
         const m = this.fx.slice; m.uniforms.uCount.value = Math.max(1, this._num(e.count, 8));
         m.uniforms.uAmount.value = amt; m.uniforms.uMode.value = this._num(e.mode, 0);
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'lens') {
+        const amt = this._num(e.amount, 0.4);
+        if (amt === 0) continue;                       // off: no distortion
+        const m = this.fx.lens; m.uniforms.uAmount.value = amt;
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'opacity') {
+        const a = this._num(e.alpha, 1);
+        if (a >= 0.999) continue;                      // off: full opacity = identity
+        const m = this.fx.opacity; m.uniforms.uAlpha.value = a;
         this._blit(m, read.texture, write); swap();
       } else if (t === 'feedback') {
         this._ensureHistory(rt);

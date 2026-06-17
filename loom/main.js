@@ -1079,6 +1079,7 @@ function syncSideW() {
 function setSide(open, tab) {
   if (tab) showTab(tab);
   side.classList.toggle('hidden', !open);
+  document.body.classList.toggle('side-open', open);
   syncSideW();
   // highlight only the button for the tab that's actually showing (or neither when closed)
   const onGuide = open && !!side.querySelector('[data-pane="guide"]:not([hidden])');

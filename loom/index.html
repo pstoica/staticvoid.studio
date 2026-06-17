@@ -51,7 +51,7 @@
   #brand h1 span { transition:color .55s var(--ease); }   /* per-letter solid colours, shifted on run() via JS */
   #brand .sub { font-size:11px; color:var(--muted); letter-spacing:.02em;
     transition:opacity .3s var(--ease); }
-  body.editing #brand .sub { opacity:0; }   /* declutter the tagline while you're in the editor */
+  body.editing #brand .sub, body.side-open #brand .sub { opacity:0; }   /* declutter the tagline while editing or with the panel open */
   /* panel/guide live in the transport row now; styled as .btn (see #transport) */
 
   /* preset list (lives in the sidebar's presets tab) */
@@ -392,6 +392,7 @@
         <code>.rgbshift(amt, ang) .posterize(n)</code><p>channel split · colour quantize</p>
         <code>.dither(n) .scanlines(amt)</code><p>bayer dither · CRT lines</p>
         <code>.slice(n, amt, "grid")</code><p>cut into bands &amp; offset — oscillate <code>amt</code> for glitch (modes: h · v · grid)</p>
+        <code>.lens(amt) .opacity(a)</code><p>barrel/pincushion · fade the whole group (modulate <code>a</code> to pulse)</p>
         <code>.displace(amount, scale)</code><p>warp / melt the layer</p>
         <code>.hue(t) .brightness(b) .contrast(c) .saturate(s)</code><p>colour grade</p>
         <code>.pixelate(osc(0.2).range(3,26))</code><p>FX params take numbers, patterns, or oscs (global time), so the effect itself moves</p>

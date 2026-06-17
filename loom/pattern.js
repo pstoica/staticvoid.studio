@@ -388,6 +388,9 @@ class Group {
     const m = mode === 'v' ? 1 : (mode === 'grid' || mode === 'both') ? 2 : 0;
     return this._push({ type: 'slice', count, amount, mode: m });
   }
+  lens(amount = 0.4) { return this._push({ type: 'lens', amount }); }                                // barrel (+) / pincushion (-) (0 = off)
+  opacity(alpha = 1) { return this._push({ type: 'opacity', alpha }); }                              // fade the whole group (1 = off)
+  alpha(a = 1) { return this._push({ type: 'opacity', alpha: a }); }                                 // alias for opacity
   query(s) {
     const gid = this._gid, fx = this._fx;
     return this._pat.query(s).map((h) => hap(h.whole, h.part, Object.assign({}, h.value, { _gid: gid, _fx: fx })));
