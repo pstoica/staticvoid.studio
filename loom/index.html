@@ -79,8 +79,9 @@
   #hl { color:var(--ink); pointer-events:none; z-index:0; }
   /* per-line dark box that hugs only the text (ragged right), so the rest of the
      canvas stays clean — no full-panel wash, no text-shadow. */
-  #hl .hlwrap { background:rgba(7,8,11,.72); box-decoration-break:clone;
-    -webkit-box-decoration-break:clone; border-radius:2px; }
+  #hl .hlwrap { background:rgba(7,8,11,.5); box-decoration-break:clone;
+    -webkit-box-decoration-break:clone; border-radius:2px;
+    -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); }
   #code { color:transparent; -webkit-text-fill-color:transparent; caret-color:var(--ink);
     resize:none; outline:none; z-index:1; }
   #code::selection { background:rgba(255,255,255,.18); }
@@ -123,16 +124,18 @@
   #toolbar > * { pointer-events:auto; }
   #toolbar.idle { opacity:.05; }
   #toolbar.idle:hover { opacity:1; }
-  #toolbar .btn { color:var(--ink); background:rgba(10,11,14,.55); border-color:rgba(255,255,255,.14);
-    -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); }
-  #toolbar .btn:hover { background:rgba(22,23,28,.82); border-color:rgba(255,255,255,.3); }
-  .tbsep { width:1px; height:22px; background:rgba(255,255,255,.16); flex:none; }
-  #runbtn { color:var(--ink); border-color:rgba(255,255,255,.22); }
-  #runbtn.lit { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  /* light floating icons (Hydra-style): no box, a soft shadow keeps them legible
+     over any art. active/live states get a dark chip so they read over bright art too. */
+  #toolbar .btn { color:var(--ink); background:transparent; border-color:transparent; padding:9px;
+    filter:drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+  #toolbar .btn:hover { background:rgba(255,255,255,.12); border-color:transparent; }
+  #toolbar .btn.on { background:rgba(0,0,0,.5); color:var(--ink); filter:none; }
+  #runbtn.lit { background:rgba(255,255,255,.24); filter:none; }   /* brief flash on run */
+  .tbsep { width:1px; height:18px; background:rgba(255,255,255,.14); flex:none; margin:0 1px; }
   #runbtn kbd { font:inherit; opacity:.5; }
-  /* play doubles as the "stop now" button: solid/inverted while the animation is live */
-  #playbtn.live { color:var(--bg); background:var(--ink); border-color:var(--ink); }
-  #playbtn.live:hover { background:var(--ink); color:var(--bg); box-shadow:0 0 0 2px var(--accent-dim); }
+  /* play doubles as the "stop now" button: a dark chip while the animation is live */
+  #playbtn.live { color:var(--ink); background:rgba(0,0,0,.55); border-color:transparent; filter:none; }
+  #playbtn.live:hover { background:rgba(0,0,0,.7); }
 
   /* draggable / scrollable number field (replaces the cps + decay sliders) */
   .num { font:500 13px/1 var(--mono); color:var(--muted); background:rgba(255,255,255,.04);
@@ -143,6 +146,10 @@
   .num b { color:var(--ink); font-weight:500; min-width:34px; text-align:right; }
   .num b.editing { cursor:text; outline:none; user-select:text; -webkit-user-select:text;
     background:rgba(255,255,255,.14); padding:0 2px; }
+  /* live cycle counter: a quiet readout that sits with the playback controls */
+  .cyc { font:500 12px/1 var(--mono); color:var(--muted); letter-spacing:.06em;
+    padding:0 4px; white-space:nowrap; }
+  .cyc b { color:var(--ink); font-weight:500; }
 
   /* drag the editor's right edge to resize the code column */
   #railgrab { position:absolute; top:0; bottom:0; right:-6px; width:12px; z-index:3; cursor:ew-resize;
@@ -156,11 +163,10 @@
   #meta a { color:var(--muted); text-decoration:none; border-bottom:1px solid var(--line); }
   #meta a:hover { color:var(--ink); }
 
-  #hint { position:fixed; left:calc(var(--rail-w) + (100vw - var(--rail-w)) / 2); bottom:22px;
-    transform:translateX(-50%); z-index:1;
-    font:400 11px/1 var(--mono); color:var(--muted); pointer-events:none;
-    background:rgba(0,0,0,.4); padding:7px 12px; border-radius:0; border:1px solid var(--line);
-    letter-spacing:.03em; transition:opacity .55s var(--ease); }
+  #hint { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); z-index:1;
+    font:400 11px/1 var(--mono); color:var(--muted); pointer-events:none; white-space:nowrap;
+    background:rgba(0,0,0,.32); padding:7px 12px; border:1px solid var(--line);
+    letter-spacing:.05em; transition:opacity .55s var(--ease); }
   #hint.idle { opacity:0; }
 
   /* right sidebar, swappable presets / guide */
@@ -268,12 +274,12 @@
           <div class="num" id="cpsnum" title="drag ↔ or scroll · double-click to reset">speed <b id="cpsval">0.60</b></div>
           <div class="num" id="persistnum" title="drag ↔ or scroll · double-click to reset">decay <b id="decayval">1.5</b></div>
         </span>
+        <span class="cyc">cycle <b id="cycle">0</b></span>
       </div>
     </div>
 
     <div id="meta">
       <a href="/">staticvoid.studio</a>
-      <span>cycle <b id="cycle">0</b></span>
     </div>
   </aside>
 
