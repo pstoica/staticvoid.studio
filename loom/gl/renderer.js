@@ -64,7 +64,7 @@ void main() {
   if (vShade > 0.001) {
     vec3 N = normalize(cross(dFdx(vWPos), dFdy(vWPos)));
     if (N.z < 0.0) N = -N;                                // face the camera (DoubleSide)
-    float diff = 0.4 + 0.6 * max(dot(N, normalize(vec3(0.4, -0.55, 0.75))), 0.0);
+    float diff = 0.5 + 0.5 * max(dot(N, normalize(vec3(0.25, -0.35, 0.9))), 0.0);
     shade = mix(1.0, diff, clamp(vShade, 0.0, 1.0));      // 0 = flat/unlit
   }
   float a = clamp(vTint.a, 0.0, 1.0);
@@ -286,8 +286,10 @@ void main(){
       map3(id, pp + vec3(0.0,0.0,e), vR) - map3(id, pp - vec3(0.0,0.0,e), vR)));
     vec3 nw = R * n;                                      // object normal → world
     // flat by default (shade 0 = solid colour). shade > 0 mixes in a faceted
-    // diffuse term (no rim/specular), so it's matte/poster, never glossy.
-    float shade = mix(1.0, 0.4 + 0.6 * max(dot(nw, normalize(vec3(0.4, 0.55, 0.75))), 0.0), clamp(vShade, 0.0, 1.0));
+    // diffuse term (no rim/specular), so it's matte/poster, never glossy. lit from
+    // the front so the camera-facing surface stays ~full brightness (only edges
+    // dim) — keeps it from looking globally darker than a flat shape when faded.
+    float shade = mix(1.0, 0.5 + 0.5 * max(dot(nw, normalize(vec3(0.25, 0.35, 0.9))), 0.0), clamp(vShade, 0.0, 1.0));
     // fill(0).stroke(1) → wireframe: edges for the polyhedra (cube/octa), the
     // grazing silhouette for the smooth ones (sphere/torus). visible (front) faces.
     float cov = 1.0;
