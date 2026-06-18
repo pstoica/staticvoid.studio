@@ -123,7 +123,7 @@ Effects **chain in call order**, each is a shader pass over the layer's texture:
 | `.mirror()` | (none) | left/right symmetry |
 | `.tile(x, y)` | repeats (`y` defaults to `x`) | repeat the layer in an `x × y` grid |
 | `.dots(cell)` `.halftone(cell)` | cell size (px) | halftone screen: dots grow with brightness |
-| `.rgbshift(amount, angle)` `.rgb(…)` | uv offset, turns | split the R / B channels (chromatic aberration) |
+| `.rgbshift(amount, angle)` `.rgb(…)` | uv offset, turns | prism split — keeps the shape's colour, adds pure red/blue edge ghosts |
 | `.posterize(levels)` | n (≥2) | quantize colours to `n` levels |
 | `.dither(levels)` | n (≥2) | ordered (Bayer) dither + quantize — low-bit look |
 | `.scanlines(amount, period)` | `0..1`, px | periodic horizontal darkening (CRT) |

@@ -635,26 +635,28 @@ void main() {
   fragColor = vec4(col * a, a) * dot;
 }`;
 
-// rgb shift / chromatic aberration: shift the premultiplied channels — red from +offset,
-// green centred, blue from -offset — the classic split-channel fringe. The output alpha
-// follows where colour ACTUALLY is: a tap contributes coverage only where it carries its
-// channel, so a colourless tap (e.g. the red tap landing inside a blue shape) can't stamp
-// a black premultiplied hole that darkens the background — and a coloured tap isn't
-// clipped to the centre silhouette (which made green dominate the edges). The min() term
-// keeps the shared interior fully covered so dark/opaque shapes keep their alpha.
+// rgb shift / "prism split": keep the shape's OWN colour in the body, then add pure-
+// primary ghosts where a shifted channel's coverage sticks out past the centre — a red
+// ghost from +offset, a blue ghost from -offset, each at the ghost's own brightness. So a
+// blue shape stays blue with clean red/blue edge fringes instead of revealing its muddy
+// mid-channels (the olive crescent of a true chromatic split). Premultiplied throughout;
+// the alpha covers body + ghosts without stamping a black hole where there's no colour.
 const RGBSHIFT_FRAG = `
 precision highp float;
 uniform sampler2D tMap;
 uniform vec2 uOffset;       // channel separation, uv
 varying vec2 vUv;
-const float E = 0.0039;     // ~1/255: "this channel carries visible colour"
+const float E = 0.0039;
 void main() {
-  vec4 cr = texture2D(tMap, vUv + uOffset);
-  vec4 cg = texture2D(tMap, vUv);
-  vec4 cb = texture2D(tMap, vUv - uOffset);
-  vec3 pm = vec3(cr.r, cg.g, cb.b);   // premultiplied, channel-shifted
-  float a = max(min(cr.a, min(cg.a, cb.a)),
-                max(cr.r > E ? cr.a : 0.0, max(cg.g > E ? cg.a : 0.0, cb.b > E ? cb.a : 0.0)));
+  vec4 cr = texture2D(tMap, vUv + uOffset);   // red ghost tap
+  vec4 cg = texture2D(tMap, vUv);             // centre — the shape's own colour
+  vec4 cb = texture2D(tMap, vUv - uOffset);   // blue ghost tap
+  float vr = cr.a > E ? max(cr.r, max(cr.g, cr.b)) / cr.a : 0.0;   // straight brightness
+  float vb = cb.a > E ? max(cb.r, max(cb.g, cb.b)) / cb.a : 0.0;
+  float rb = max(0.0, cr.a - cg.a) * vr;      // red ghost where it sticks out past centre
+  float bb = max(0.0, cb.a - cg.a) * vb;      // blue ghost likewise
+  vec3 pm = cg.rgb + vec3(rb, 0.0, bb);
+  float a = max(cg.a, max(pm.r, max(pm.g, pm.b)));
   gl_FragColor = vec4(pm, a);
 }`;
 
