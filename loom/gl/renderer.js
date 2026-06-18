@@ -28,29 +28,27 @@ const MAX_MESH = 1024;
 const MESH_VERT = `
 precision highp float;
 uniform vec2 uResolution;
+uniform mat4 uModel;       // per-instance model matrix (rendered one instance at a time)
+uniform vec4 uTint;        // rgb + alpha
+uniform float uShade;      // 0 = flat/unlit, 1 = faceted lighting
 in vec3 position;
-in mat4 instanceMatrix;
 in vec3 normal;
-in vec4 aTint;             // rgb + alpha
-in float aShade;          // 0 = flat/unlit, 1 = faceted lighting
 out vec4 vTint;
 out float vShade;
 out vec3 vN;               // world-space (flat) normal for shading
 void main() {
-  vShade = aShade;
-  vec4 wp = instanceMatrix * vec4(position, 1.0);
-  vN = mat3(instanceMatrix) * normal;   // uniform instance scale → normalize in the fragment
-  // depth: each instance gets its own band (higher id = newer = nearer) so
-  // overlapping meshes don't interleave/z-fight; within the band, normalize by the
-  // instance scale so a small mesh keeps full self-occlusion precision.
-  float scale = max(length(instanceMatrix[0].xyz), 1.0);
+  vShade = uShade;
+  vec4 wp = uModel * vec4(position, 1.0);
+  vN = mat3(uModel) * normal;            // uniform model scale → normalize in the fragment
+  // depth is only used to resolve THIS instance's own front/back faces (one pass per
+  // instance, depth cleared between them) so a single mesh shows one surface; instances
+  // composite in paint order like 2D glyphs instead of occluding each other.
+  float scale = max(length(uModel[0].xyz), 1.0);
   float zl = clamp(wp.z / scale, -1.0, 1.0);          // +1 front .. -1 back, within the mesh
-  float inv = 1.0 / 512.0;
-  float z = -float(gl_InstanceID) * 2.0 * inv - zl * inv;
   gl_Position = vec4(2.0 * wp.x / uResolution.x - 1.0,
                      1.0 - 2.0 * wp.y / uResolution.y,
-                     clamp(z, -0.999, 0.999), 1.0);
-  vTint = aTint;
+                     -zl * 0.5, 1.0);                 // front nearer; LessEqual picks it
+  vTint = uTint;
 }`;
 const MESH_FRAG = `
 precision highp float;
@@ -792,10 +790,10 @@ export class GLRenderer {
     this.mesh.frustumCulled = false;
     this.scene.add(this.mesh);
 
-    // imported-mesh path (instanced, depth-tested). meshes load async; until a
-    // model arrives its glyphs simply don't draw.
+    // imported-mesh path (one draw per instance, depth-tested). meshes load async;
+    // until a model arrives its glyphs simply don't draw.
     this.meshScene = new THREE.Scene();
-    this.meshObjs = {};          // id → THREE.InstancedMesh
+    this.meshObjs = {};          // id → THREE.Mesh
     this._m4 = new THREE.Matrix4();
     this._euler = new THREE.Euler();
     this._v3 = new THREE.Vector3();
@@ -981,7 +979,8 @@ export class GLRenderer {
   }
 
   // load imported FBX meshes → position-only, centred, normalized to unit radius,
-  // wrapped in an instanced + depth-tested flat material.
+  // wrapped in a depth-tested flat material. Rendered one instance at a time (see
+  // _drawMeshes) so instances composite like 2D glyphs instead of occluding each other.
   _loadMeshes() {
     const loader = new FBXLoader();
     for (const [name, url] of Object.entries(MESH_URLS)) {
@@ -1004,64 +1003,61 @@ export class GLRenderer {
         geo.scale(1 / rad, 1 / rad, 1 / rad);
         geo.deleteAttribute('normal');         // drop any imported normals…
         geo.computeVertexNormals();            // …rebuild per-face (non-indexed → flat)
-        geo.setAttribute('aTint', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH * 4), 4));
-        geo.setAttribute('aShade', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH), 1));
         const mat = new THREE.RawShaderMaterial({
-          glslVersion: THREE.GLSL3, uniforms: this.uniforms, vertexShader: MESH_VERT, fragmentShader: MESH_FRAG,
+          glslVersion: THREE.GLSL3,
+          uniforms: {
+            uResolution: this.uniforms.uResolution,   // shared, kept in sync on resize
+            uModel: { value: new THREE.Matrix4() },
+            uTint: { value: new THREE.Vector4(1, 1, 1, 1) },
+            uShade: { value: 0 },
+          },
+          vertexShader: MESH_VERT, fragmentShader: MESH_FRAG,
           transparent: true, depthTest: true, depthWrite: true, side: THREE.DoubleSide,
           blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
           blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
         });
-        const im = new THREE.InstancedMesh(geo, mat, MAX_MESH);
-        im.frustumCulled = false; im.count = 0; im.visible = false;
-        this.meshScene.add(im);
-        this.meshObjs[MESH_ID[name]] = im;
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.frustumCulled = false; mesh.visible = false;
+        this.meshScene.add(mesh);
+        this.meshObjs[MESH_ID[name]] = mesh;
       }, undefined, (err) => console.warn('Loom: failed to load mesh', name, err));
     }
   }
 
-  // draw all imported-mesh glyphs in `parts` into the current target (depth-tested
-  // for correct self-occlusion; the target keeps its colour, depth is cleared here).
+  // draw all imported-mesh glyphs in `parts` into the current target. Each instance is
+  // rendered on its own (depth cleared between them) so a single mesh resolves to one
+  // surface per pixel (no see-through when alpha < 1) while instances composite in paint
+  // order — translucent, blending through each other and the background like 2D glyphs,
+  // instead of hard-occluding via a shared depth buffer.
   _drawMeshes(parts, target) {
     if (!parts.length) return;
-    const ids = Object.keys(this.meshObjs);
-    if (!ids.length) return;
+    if (!Object.keys(this.meshObjs).length) return;
     const r = this.renderer, out = this._scratch, minDim = this._minDim, resolve = this._resolve;
-    for (const im of this.meshScene.children) { im.count = 0; im.visible = false; }
-    let any = false;
-    for (let i = 0; i < parts.length; i++) {
-      const p = parts[i];
-      resolve(p, minDim, out);
-      const im = this.meshObjs[out.shape];
-      if (!im || im.count >= MAX_MESH) continue;
-      const n = im.count;
+    for (const k in this.meshObjs) this.meshObjs[k].visible = false;
+    r.setRenderTarget(target);
+    let drew = 0;
+    for (let i = 0; i < parts.length && drew < MAX_MESH; i++) {
+      resolve(parts[i], minDim, out);
+      const mesh = this.meshObjs[out.shape];
+      if (!mesh) continue;
       this._euler.set(out.rotX, out.rotY, out.rot, 'XYZ');
       this._m4.makeRotationFromEuler(this._euler);
       this._m4.scale(this._v3.set(out.r, out.r, out.r));
       this._m4.setPosition(out.x, out.y, 0);
-      im.setMatrixAt(n, this._m4);
-      const t = im.geometry.getAttribute('aTint');
-      t.array[n * 4] = out.rgb[0]; t.array[n * 4 + 1] = out.rgb[1]; t.array[n * 4 + 2] = out.rgb[2]; t.array[n * 4 + 3] = out.alpha;
-      im.geometry.getAttribute('aShade').array[n] = out.shade;
-      im.count = n + 1; im.visible = true; any = true;
+      const u = mesh.material.uniforms;
+      u.uModel.value.copy(this._m4);
+      u.uTint.value.set(out.rgb[0], out.rgb[1], out.rgb[2], out.alpha);
+      u.uShade.value = out.shade;
+      mesh.visible = true;
+      r.clear(false, true, false);            // clear depth only (accumulated colour kept)
+      const m = mesh.material;
+      m.colorWrite = false; m.depthWrite = true; m.depthFunc = THREE.LessEqualDepth;
+      r.render(this.meshScene, this.camera);  // depth pre-pass: this instance's nearest faces
+      m.colorWrite = true; m.depthWrite = false; m.depthFunc = THREE.EqualDepth;
+      r.render(this.meshScene, this.camera);  // one premultiplied layer over the accumulator
+      mesh.visible = false;
+      drew++;
     }
-    if (!any) return;
-    for (const im of this.meshScene.children) {
-      if (!im.count) continue;
-      im.instanceMatrix.needsUpdate = true;
-      im.geometry.getAttribute('aTint').needsUpdate = true;
-      im.geometry.getAttribute('aShade').needsUpdate = true;
-    }
-    r.setRenderTarget(target);
-    r.clear(false, true, false);              // clear depth only (colour preserved)
-    // two passes so a translucent mesh shows ONE face per pixel (no see-through
-    // when alpha < 1): 1) depth pre-pass (no colour) lays down the nearest surface;
-    // 2) colour only where depth == that nearest depth.
-    const kids = this.meshScene.children;
-    for (const im of kids) { const m = im.material; m.colorWrite = false; m.depthWrite = true; m.depthFunc = THREE.LessEqualDepth; }
-    r.render(this.meshScene, this.camera);
-    for (const im of kids) { const m = im.material; m.colorWrite = true; m.depthWrite = false; m.depthFunc = THREE.EqualDepth; }
-    r.render(this.meshScene, this.camera);
   }
 
   // resolve an FX param against global time (number / osc / pattern) via main.js
