@@ -350,7 +350,9 @@ function cssToRGB(s) {
 
 // ── pack a particle into the WebGL instance scratch (live oscillators applied).
 // Mirrors drawGlyph's mod resolution but emits numbers + float rgb for the GPU.
-const SHAPE_ID = { dot: 0, circle: 0, ring: 1, arc: 2, square: 3, box: 3, tri: 4, pent: 5, hex: 6, star: 7, plus: 8, line: 9, cross: 10 };
+const SHAPE_ID = { dot: 0, circle: 0, ring: 1, arc: 2, square: 3, box: 3, tri: 4, pent: 5, hex: 6, star: 7, plus: 8, line: 9, cross: 10,
+  // 3D raymarched shapes (normal-shaded, tumbled by rotateX/rotateY/spin)
+  cube: 11, box3: 11, sphere: 12, ball: 12, torus: 13, donut: 13, octa: 14, octahedron: 14 };
 const OUTLINE_IDS = new Set([1, 2, 9, 10]);
 const CAP_ID = { round: 0, butt: 1, square: 2 };   // line/cross caps (spawn defaults cap to 'square')
 const JOIN_ID = { miter: 0, round: 1, bevel: 2 };  // polygon corners (default miter = sharp)

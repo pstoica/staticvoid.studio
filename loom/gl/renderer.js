@@ -49,8 +49,21 @@ in float iCap;           // line/cross caps: 0 round, 1 butt, 2 square
 in float iJoin;          // polygon corners: 0 miter, 1 round, 2 bevel
 out vec2 vLocal;            // shape-space coordinate, px (un-rotated)
 out float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha;
+out float vRot, vRotX, vRotY;   // angles forwarded to the fragment 3D raymarch
 out vec3 vColor;
 void main() {
+  vR = iRadius; vWeight = iWeight; vOpen = iOpen; vShape = iShape;
+  vFill = iFill; vStroke = iStroke; vVertex = iVertex; vCap = iCap; vJoin = iJoin; vAlpha = iAlpha; vColor = iColor;
+  vRot = iRot; vRotX = iRotX; vRotY = iRotY;
+  // 3D raymarched shapes (id >= 11): a screen-aligned billboard sized to the
+  // bounding sphere; the tumble happens inside the fragment raymarch.
+  if (int(iShape + 0.5) >= 11) {
+    vec2 local3 = position.xy * (iRadius * 1.15 + 2.0);
+    vLocal = local3;
+    vec2 P3 = local3 + iPos;
+    gl_Position = vec4(2.0 * P3.x / uResolution.x - 1.0, 1.0 - 2.0 * P3.y / uResolution.y, 0.0, 1.0);
+    return;
+  }
   float pad = iWeight * 0.5 + 2.0;          // stroke half-width + AA margin
   // a line's length scales with open ((1-open)*r), and open can exceed 1 (e.g.
   // .open(5) draws a streak 4x the radius) — size the quad to contain it.
@@ -80,8 +93,6 @@ void main() {
     0.0,
     w
   );
-  vR = iRadius; vWeight = iWeight; vOpen = iOpen; vShape = iShape;
-  vFill = iFill; vStroke = iStroke; vVertex = iVertex; vCap = iCap; vJoin = iJoin; vAlpha = iAlpha; vColor = iColor;
 }`;
 
 const FRAG = `
@@ -90,6 +101,7 @@ precision highp float;
 #define TAU 6.28318530718
 in vec2 vLocal;
 in float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha;
+in float vRot, vRotX, vRotY;
 in vec3 vColor;
 out vec4 fragColor;
 
@@ -179,10 +191,52 @@ float sdPlus(vec2 p, vec2 b){
   return sign(k)*length(max(w, 0.0));
 }
 
+// ── 3D shapes: raymarched SDFs, tumbled by rotateX/rotateY/spin, normal-shaded ──
+mat3 rotX3(float a){ float c=cos(a), s=sin(a); return mat3(1.0,0.0,0.0, 0.0,c,s, 0.0,-s,c); }
+mat3 rotY3(float a){ float c=cos(a), s=sin(a); return mat3(c,0.0,-s, 0.0,1.0,0.0, s,0.0,c); }
+mat3 rotZ3(float a){ float c=cos(a), s=sin(a); return mat3(c,s,0.0, -s,c,0.0, 0.0,0.0,1.0); }
+float map3(int id, vec3 p, float r){
+  if (id == 12) return length(p) - r*0.9;                                       // sphere
+  if (id == 13) { vec2 t = vec2(length(p.xz) - r*0.6, p.y); return length(t) - r*0.28; } // torus
+  if (id == 14) { p = abs(p); return (p.x+p.y+p.z - r*1.1) * 0.5773; }          // octahedron
+  vec3 b = abs(p) - vec3(r*0.58);                                               // cube (id 11)
+  return length(max(b, 0.0)) + min(max(b.x, max(b.y, b.z)), 0.0);
+}
+
 void main(){
   // work in maths space (y up) so polygon "up" matches the 2D vertex-up look
   vec2 q = vec2(vLocal.x, -vLocal.y);
   int id = int(vShape + 0.5);
+
+  // 3D shapes (id >= 11): orthographic raymarch in the glyph's tumbled object space
+  if (id >= 11) {
+    mat3 R = rotZ3(vRot) * rotY3(vRotY) * rotX3(vRotX);   // object → world
+    mat3 Ri = transpose(R);                               // world → object (orthonormal)
+    vec3 ro = Ri * vec3(q, vR * 2.2);
+    vec3 rd = Ri * vec3(0.0, 0.0, -1.0);
+    float t = 0.0; bool hit = false;
+    for (int i = 0; i < 44; i++) {
+      float dd = map3(id, ro + rd * t, vR);
+      if (dd < 0.0015 * vR) { hit = true; break; }
+      t += dd;
+      if (t > vR * 5.0) break;
+    }
+    if (!hit) discard;
+    vec3 pp = ro + rd * t;
+    float e = max(vR * 0.012, 0.3);
+    vec3 n = normalize(vec3(
+      map3(id, pp + vec3(e,0.0,0.0), vR) - map3(id, pp - vec3(e,0.0,0.0), vR),
+      map3(id, pp + vec3(0.0,e,0.0), vR) - map3(id, pp - vec3(0.0,e,0.0), vR),
+      map3(id, pp + vec3(0.0,0.0,e), vR) - map3(id, pp - vec3(0.0,0.0,e), vR)));
+    vec3 nw = R * n;                                      // object normal → world
+    float diff = max(dot(nw, normalize(vec3(0.4, 0.55, 0.75))), 0.0);
+    float rim = pow(1.0 - max(nw.z, 0.0), 3.0) * 0.3;
+    float shade = 0.30 + 0.72 * diff + rim;
+    float a = clamp(vAlpha, 0.0, 1.0);
+    fragColor = vec4(clamp(vColor * shade, 0.0, 1.0) * a, a);
+    return;
+  }
+
   float d;               // signed distance: <0 inside (or unsigned for open curves)
   bool openCurve = false;
   bool capped = false;   // line/cross: d is already the thickened, capped stroke
