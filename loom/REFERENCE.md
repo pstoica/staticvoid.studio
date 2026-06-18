@@ -171,7 +171,7 @@ filled, outlined, or both. All four are patterns, so `.fill("1 0")`,
 | `.vertex(on)` | draw a dot at each of the shape's vertices |
 | `.weight(w)` | stroke / line / vertex-dot size (`0..0.1` of `min(w,h)`) |
 | `.cap(s)` | line ends: `"round"` (default) `"butt"` `"square"` |
-| `.join(s)` | corners: `"round"` (default) `"miter"` `"bevel"` |
+| `.join(s)` | corners: `"miter"` (default, sharp) `"round"` `"bevel"` |
 
 > Three independent draw modes: fill, stroke, vertex. Outline-only: `.fill(0).stroke()`.
 > Vertices only: `.fill(0).vertex()`. They compose, `.stroke().vertex()` outlines *and* dots.

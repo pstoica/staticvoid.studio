@@ -24,7 +24,7 @@ const QUAD_IDX = new Uint16Array([0, 1, 2, 0, 2, 3]);
 // instance attributes: name → component count
 const IATTRS = {
   iPos: 2, iRadius: 1, iRot: 1, iRotX: 1, iRotY: 1, iColor: 3, iAlpha: 1,
-  iWeight: 1, iOpen: 1, iShape: 1, iFill: 1, iStroke: 1, iVertex: 1, iCap: 1,
+  iWeight: 1, iOpen: 1, iShape: 1, iFill: 1, iStroke: 1, iVertex: 1, iCap: 1, iJoin: 1,
 };
 const TRACE_CAP = 8192;         // max points in the trace polyline
 
@@ -46,8 +46,9 @@ attribute float iFill;          // 0/1
 attribute float iStroke;        // 0/1
 attribute float iVertex;        // 0/1 — dot at each vertex
 attribute float iCap;           // line/cross caps: 0 round, 1 butt, 2 square
+attribute float iJoin;          // polygon corners: 0 miter, 1 round, 2 bevel
 varying vec2 vLocal;            // shape-space coordinate, px (un-rotated)
-varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vAlpha;
+varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha;
 varying vec3 vColor;
 void main() {
   float pad = iWeight * 0.5 + 2.0;          // stroke half-width + AA margin
@@ -80,7 +81,7 @@ void main() {
     w
   );
   vR = iRadius; vWeight = iWeight; vOpen = iOpen; vShape = iShape;
-  vFill = iFill; vStroke = iStroke; vVertex = iVertex; vCap = iCap; vAlpha = iAlpha; vColor = iColor;
+  vFill = iFill; vStroke = iStroke; vVertex = iVertex; vCap = iCap; vJoin = iJoin; vAlpha = iAlpha; vColor = iColor;
 }`;
 
 const FRAG = `
@@ -88,7 +89,7 @@ precision highp float;
 #define PI 3.14159265359
 #define TAU 6.28318530718
 varying vec2 vLocal;
-varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vAlpha;
+varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha;
 varying vec3 vColor;
 
 vec2 rot2(vec2 p, float a){ float c=cos(a), s=sin(a); return vec2(p.x*c-p.y*s, p.x*s+p.y*c); }
@@ -145,6 +146,16 @@ float sdNgonFlat(vec2 p, float r, float n){
 }
 // vertex-topped regular polygon (matches the 2D poly(): first vertex at top)
 float sdNgon(vec2 p, float r, float n){ return sdNgonFlat(rot2(p, PI/n), r, n); }
+// signed perpendicular distance to the nearest EDGE LINE of a vertex-up n-gon.
+// the edge lines extend past the vertices, so a stroke band around this gives
+// sharp mitered corners instead of the Euclidean SDF's rounded ones.
+float ngonEdge(vec2 p, float r, float n){
+  p = rot2(p, PI/n);
+  float ap = PI/n;
+  float a = atan(p.x, p.y);
+  a = mod(a + ap, 2.0*ap) - ap;
+  return length(p)*cos(a) - r*cos(ap);
+}
 // iq star: n points, m in [2,n] controls pointiness
 float sdStar(vec2 p, float r, float n, float m){
   float an = PI/n;
@@ -219,8 +230,17 @@ void main(){
   } else if (openCurve) {                // ring/arc outline: stroke band
     cov = vStroke * (1.0 - smoothstep(hw - aa, hw + aa, d));
   } else {
+    // stroke band distance. for the convex polygons, miter/bevel the corners
+    // (the Euclidean SDF rounds them); join 0 miter, 1 round, 2 bevel.
+    float dStroke = abs(d);
+    if (id == 3 || id == 4 || id == 5 || id == 6) {
+      float dEdge = (id == 3) ? max(abs(q.x), abs(q.y)) - vR
+                              : ngonEdge(q, vR, (id == 4) ? 3.0 : (id == 5) ? 5.0 : 6.0);
+      if (vJoin < 0.5)       dStroke = abs(dEdge);                    // miter (sharp)
+      else if (vJoin > 1.5)  dStroke = max(abs(dEdge), abs(d) - hw * 0.6);  // bevel (chamfer)
+    }
     float fillCov = vFill * (1.0 - smoothstep(-aa, aa, d));
-    float strokeCov = vStroke * (1.0 - smoothstep(hw - aa, hw + aa, abs(d)));
+    float strokeCov = vStroke * (1.0 - smoothstep(hw - aa, hw + aa, dStroke));
     cov = max(fillCov, strokeCov);
   }
   if (vVertex > 0.5) {                    // dot at each vertex (filled)
@@ -772,6 +792,7 @@ export class GLRenderer {
         a.iStroke[count] = out.stroke;
         a.iVertex[count] = out.vertex;
         a.iCap[count] = out.cap;
+        a.iJoin[count] = out.join;
         count++;
       }
       if (!count) continue;
