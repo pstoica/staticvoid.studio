@@ -32,8 +32,10 @@ in vec3 position;
 in mat4 instanceMatrix;
 in vec4 aTint;             // rgb + alpha
 out vec4 vTint;
+out vec3 vWPos;            // transformed position → per-face normal in the fragment
 void main() {
   vec4 wp = instanceMatrix * vec4(position, 1.0);
+  vWPos = wp.xyz;
   gl_Position = vec4(2.0 * wp.x / uResolution.x - 1.0,
                      1.0 - 2.0 * wp.y / uResolution.y,
                      clamp(-wp.z * 0.001, -0.999, 0.999), 1.0);   // z → depth (self-occlusion)
@@ -42,10 +44,16 @@ void main() {
 const MESH_FRAG = `
 precision highp float;
 in vec4 vTint;
+in vec3 vWPos;
 out vec4 fragColor;
 void main() {
+  // flat (per-face) normal from screen-space derivatives — no vertex normals needed.
+  // y is screen-down here, so light from "above" is -y; matte, no specular.
+  vec3 N = normalize(cross(dFdx(vWPos), dFdy(vWPos)));
+  if (N.z < 0.0) N = -N;                                  // face the camera (DoubleSide)
+  float diff = 0.4 + 0.6 * max(dot(N, normalize(vec3(0.4, -0.55, 0.75))), 0.0);
   float a = clamp(vTint.a, 0.0, 1.0);
-  fragColor = vec4(vTint.rgb * a, a);    // flat, premultiplied
+  fragColor = vec4(clamp(vTint.rgb * diff, 0.0, 1.0) * a, a);   // premultiplied
 }`;
 
 // shape name → SDF id (kept in sync with the switch in the fragment shader and
