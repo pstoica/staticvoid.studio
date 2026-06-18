@@ -23,7 +23,7 @@ const QUAD_IDX = new Uint16Array([0, 1, 2, 0, 2, 3]);
 
 // instance attributes: name → component count
 const IATTRS = {
-  iPos: 2, iRadius: 1, iRot: 1, iRotX: 1, iRotY: 1, iColor: 3, iAlpha: 1,
+  iPos: 2, iRadius: 1, iRot: 1, iRotX: 1, iRotY: 1, iColor: 4, iAlpha: 1,   // iColor.a = 3D shade (packed; we're at the 16-attribute limit)
   iWeight: 1, iOpen: 1, iShape: 1, iFill: 1, iStroke: 1, iVertex: 1, iCap: 1, iJoin: 1,
 };
 const TRACE_CAP = 8192;         // max points in the trace polyline
@@ -37,7 +37,7 @@ in float iRadius;        // glyph radius, px
 in float iRot;           // z rotation / spin, radians
 in float iRotX;          // 3D tilt around horizontal axis, radians
 in float iRotY;          // 3D tilt around vertical axis, radians
-in vec3 iColor;          // rgb 0..1 (sRGB)
+in vec4 iColor;          // rgb 0..1 (sRGB); .a carries the 3D shade amount
 in float iAlpha;         // 0..1, envelope already folded in
 in float iWeight;        // stroke width (full), px
 in float iOpen;          // arc/line gap 0..1
@@ -49,12 +49,12 @@ in float iCap;           // line/cross caps: 0 round, 1 butt, 2 square
 in float iJoin;          // polygon corners: 0 miter, 1 round, 2 bevel
 out vec2 vLocal;            // shape-space coordinate, px (un-rotated)
 out float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha;
-out float vRot, vRotX, vRotY;   // angles forwarded to the fragment 3D raymarch
+out float vRot, vRotX, vRotY, vShade;   // angles + 3D shade forwarded to the fragment
 out vec3 vColor;
 void main() {
   vR = iRadius; vWeight = iWeight; vOpen = iOpen; vShape = iShape;
-  vFill = iFill; vStroke = iStroke; vVertex = iVertex; vCap = iCap; vJoin = iJoin; vAlpha = iAlpha; vColor = iColor;
-  vRot = iRot; vRotX = iRotX; vRotY = iRotY;
+  vFill = iFill; vStroke = iStroke; vVertex = iVertex; vCap = iCap; vJoin = iJoin; vAlpha = iAlpha; vColor = iColor.rgb;
+  vRot = iRot; vRotX = iRotX; vRotY = iRotY; vShade = iColor.a;
   // 3D raymarched shapes (id >= 11): a screen-aligned billboard sized to the
   // bounding sphere; the tumble happens inside the fragment raymarch.
   if (int(iShape + 0.5) >= 11) {
@@ -101,7 +101,7 @@ precision highp float;
 #define TAU 6.28318530718
 in vec2 vLocal;
 in float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha;
-in float vRot, vRotX, vRotY;
+in float vRot, vRotX, vRotY, vShade;
 in vec3 vColor;
 out vec4 fragColor;
 
@@ -222,16 +222,20 @@ void main(){
       if (t > vR * 5.0) break;
     }
     if (!hit) discard;
-    vec3 pp = ro + rd * t;
-    float e = max(vR * 0.012, 0.3);
-    vec3 n = normalize(vec3(
-      map3(id, pp + vec3(e,0.0,0.0), vR) - map3(id, pp - vec3(e,0.0,0.0), vR),
-      map3(id, pp + vec3(0.0,e,0.0), vR) - map3(id, pp - vec3(0.0,e,0.0), vR),
-      map3(id, pp + vec3(0.0,0.0,e), vR) - map3(id, pp - vec3(0.0,0.0,e), vR)));
-    vec3 nw = R * n;                                      // object normal → world
-    float diff = max(dot(nw, normalize(vec3(0.4, 0.55, 0.75))), 0.0);
-    float rim = pow(1.0 - max(nw.z, 0.0), 3.0) * 0.3;
-    float shade = 0.30 + 0.72 * diff + rim;
+    // flat by default (shade 0 = solid colour). shade > 0 mixes in a faceted
+    // diffuse term (no rim/specular), so it's matte/poster, never glossy.
+    float shade = 1.0;
+    if (vShade > 0.001) {
+      vec3 pp = ro + rd * t;
+      float e = max(vR * 0.012, 0.3);
+      vec3 n = normalize(vec3(
+        map3(id, pp + vec3(e,0.0,0.0), vR) - map3(id, pp - vec3(e,0.0,0.0), vR),
+        map3(id, pp + vec3(0.0,e,0.0), vR) - map3(id, pp - vec3(0.0,e,0.0), vR),
+        map3(id, pp + vec3(0.0,0.0,e), vR) - map3(id, pp - vec3(0.0,0.0,e), vR)));
+      vec3 nw = R * n;                                    // object normal → world
+      float diff = 0.4 + 0.6 * max(dot(nw, normalize(vec3(0.4, 0.55, 0.75))), 0.0);
+      shade = mix(1.0, diff, clamp(vShade, 0.0, 1.0));
+    }
     float a = clamp(vAlpha, 0.0, 1.0);
     fragColor = vec4(clamp(vColor * shade, 0.0, 1.0) * a, a);
     return;
@@ -841,7 +845,7 @@ export class GLRenderer {
         a.iRadius[count] = out.r;
         a.iRot[count] = out.rot;
         a.iRotX[count] = out.rotX; a.iRotY[count] = out.rotY;
-        a.iColor[count * 3] = out.rgb[0]; a.iColor[count * 3 + 1] = out.rgb[1]; a.iColor[count * 3 + 2] = out.rgb[2];
+        a.iColor[count * 4] = out.rgb[0]; a.iColor[count * 4 + 1] = out.rgb[1]; a.iColor[count * 4 + 2] = out.rgb[2]; a.iColor[count * 4 + 3] = out.shade;
         a.iAlpha[count] = out.alpha;
         a.iWeight[count] = out.weight;
         a.iOpen[count] = out.open;

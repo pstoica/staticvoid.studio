@@ -50,9 +50,10 @@ Sources turn tokens into glyph events. They are the start of every chain.
 **Shape names:** `dot` `circle` `ring` `square` `box` `tri` `pent` `hex`
 `star` `plus` `line` `cross`. (`ring`/`line`/`cross` are always stroked.)
 
-**3D shapes** (raymarched, normal-shaded, tumbled by `rotateX`/`rotateY`/`spin`):
-`cube` `sphere` `torus` `octa`. Solid only — `fill`/`stroke`/`weight` don't apply;
-drive `size` + the rotations, e.g. `shape("cube").rotateX(saw.range(0,1).slow(8))`.
+**3D shapes** (raymarched, tumbled by `rotateX`/`rotateY`/`spin`): `cube` `sphere`
+`torus` `octa`. Solid only — `fill`/`stroke`/`weight` don't apply; drive `size` +
+the rotations, e.g. `shape("cube").rotateX(saw.range(0,1).slow(8))`. **Flat/unlit
+by default**; `.shade(n)` (`0..1`) mixes in matte faceted lighting (no gloss).
 
 ---
 
