@@ -767,6 +767,30 @@ const PRESETS = {
   .weight(sine.range(0.001, 0.01).slow(8))
   .cap("square")`,
 
+  // tumbling rainbow bongs over a segmented rainbow wash; random burst density,
+  // drifting tumble, square-wave flat/shaded flicker, halftone-dotted layer
+  'bong': `group(
+stack(
+  bg(palette("rainbow")
+    .at(tri.fast(0.5).segment(4).range(0, 1))),
+  shape("bong").fast("10 | 30 | 60")
+    .radius(perlin.range(0.1, 0.3).slow(10))
+    .color(palette("rainbow")
+      .at(osc(0.01).spread(1).range(0, 1)))
+    .rotate(osc(0.1, "saw")
+      .range(0, 1).slow(0.5).drift(0.1))
+    .rotateY(osc(0.5, "saw")
+      .range(0, 1).slow(1).drift(0.1))
+    .rotateX(osc(0.2, "sine")
+      .range(0, 1).slow(2).drift(0.1))
+    .size(osc(0.5, "sine").spread(3).range(0.1, 0.3))
+    .fill(1).stroke(0)
+    .decay(1)
+    .shade(osc(0.5, "square").range(0, 1).drift(0.5))
+)
+)
+.dots("[1 | 1 | 1 | 1 | 32]*4")`,
+
   // a five-turn spiral of dots over a slow pulsing ring (angle winds the ring)
   'spiral': `stack(
   bg("#04060d"),
