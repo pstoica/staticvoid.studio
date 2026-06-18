@@ -119,10 +119,14 @@ function run() {
   try {
     bgSource = DEFAULT_BG;                // bg("…") in the patch overrides this during compile
     pattern = compile(editor.value);
-    // re-run starts fresh: drop glyphs from the previous patch so their (now
-    // stale) group FX (feedback history especially) don't linger after you
-    // remove an effect. Old group render targets are pruned once their glyphs go.
-    particles.length = 0;
+    // Soft re-run: keep the live glyphs so editing the patch doesn't blank the
+    // screen — they finish the envelope/FX they were born under while the new
+    // patch's glyphs take over (a live-coding cross-fade). Safe because every
+    // compile() mints fresh group ids, so old and new groups never share a render
+    // target / feedback history, and a group's RT is pruned once its last glyph
+    // dies. A hard reset is still a click away (the clear and new buttons), and
+    // switching preset/new wipes explicitly. On a compile error we keep running
+    // the old patch untouched (the catch below leaves `pattern` and glyphs alone).
     errBar.textContent = '';
     errBar.classList.remove('show');
     localStorage.setItem('loom.code', editor.value);
@@ -959,7 +963,7 @@ function applyPreset(val) {
   const i = val.indexOf(':'); const kind = val.slice(0, i), name = val.slice(i + 1);
   const code = kind === 'u' ? loadUser()[name] : PRESETS[name];
   if (code == null) return;
-  editor.value = code; refreshHL(); run();
+  editor.value = code; refreshHL(); particles.length = 0; run();   // preset switch = clean slate
 }
 
 // ── shareable URLs: ?p=<name> for a built-in preset, ?c=<base64> for any custom
@@ -1095,7 +1099,7 @@ renderClock();
 // trace button removed for now; the mode stays off (renderer code remains, dormant)
 
 function newPatch() {
-  editor.value = DEFAULT_PATCH; refreshHL(); run(); setActive('');
+  editor.value = DEFAULT_PATCH; refreshHL(); particles.length = 0; run(); setActive('');   // new = clean slate
   if (isMobile()) setSide(false);
 }
 $('#newbtn').addEventListener('click', newPatch);
