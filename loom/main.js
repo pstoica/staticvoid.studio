@@ -386,7 +386,6 @@ function glResolve(p, minDim, out) {
   out.rotX = rotX; out.rotY = rotY;
   out.rgb = color;
   out.alpha = Math.max(0, Math.min(1, alpha * p._env));
-  out.baseAlpha = Math.max(0, Math.min(1, alpha));   // authored alpha (no envelope) — meshes batch when ≈1
   out.weight = olw != null ? Math.max(0.75, olw * sizePx) : Math.max(0.75, weight * minDim);
   out.shade = shade;
   out.open = open;

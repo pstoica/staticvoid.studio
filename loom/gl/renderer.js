@@ -1090,7 +1090,12 @@ export class GLRenderer {
       this._m4.makeRotationFromEuler(this._euler);
       this._m4.scale(this._v3.set(out.r, out.r, out.r));
       this._m4.setPosition(out.x, out.y, 0);
-      if (out.baseAlpha >= 0.999) {            // opaque → instanced batch
+      // Partition by the ACTUAL (enveloped) alpha: the attack/decay envelope makes a
+      // mesh genuinely translucent while it fades, and the batch's depth pre-pass ignores
+      // alpha — so a near-transparent instance batched as "opaque" would claim the depth
+      // as frontmost yet paint nothing, punching a dark hole over the meshes behind it.
+      // Only fully-opaque instances (sustained, no envelope) go in the batch.
+      if (out.alpha >= 0.996) {                // opaque → instanced batch
         const b = entry.batch, n = b.count;
         if (n >= MAX_MESH) continue;
         b.setMatrixAt(n, this._m4);
