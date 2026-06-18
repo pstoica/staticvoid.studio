@@ -402,6 +402,7 @@
         <code>choose("a","b") irand(8)</code><p>random pick / integer per onset</p>
         <code>osc(rate, "sine").range(lo, hi)</code><p>live LFO, keeps moving over a glyph's life (vs signals, frozen at spawn). shapes: sine saw tri square rand perlin fbm</p>
         <code>osc(…).spread(n)</code><p>per-glyph phase offset = n × onset phase, spreads the wave <em>around a ring/grid</em> instead of every glyph in lockstep</p>
+        <code>osc(…).drift(r)</code><p>starting phase advances over time = r × spawn seconds, so the pattern keeps <em>evolving</em> instead of repeating</p>
         <code>osc(2).rate(osc(0.1).range(1,4))</code><p>any osc param (rate · phase · range) can itself be an osc → cross-modulation (FM · PM · AM)</p>
         <code>.x(osc(0.2, "perlin").range(0, 1))</code><p>← a wandering dot</p>
         <code>.range(lo, hi)</code><p>remap a 0..1 signal, lo/hi may be numbers, patterns, or oscs</p>

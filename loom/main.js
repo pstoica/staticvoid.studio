@@ -184,6 +184,7 @@ function spawn(value, onset) {
     // each glyph keeps the decay it was born with.
     decay: ((v.decay != null ? v.decay : 1.0) / cps) * decayScale,
     mods: mods.length ? mods : null,
+    spawnT: elapsed,           // global seconds at spawn → osc().drift() reads this
     gid: v._gid || 0,          // group layer id (0 = ungrouped, drawn to main canvas)
     fx: v._fx || null,         // group effect params (e.g. { pixelate })
   };
@@ -268,11 +269,12 @@ const MOD_FIELDS = ['size', 'color', 'rotate', 'rotateX', 'rotateY', 'open', 'al
 const _h1 = (x) => { const s = Math.sin((x + 0.123) * 12.9898) * 43758.5453; return s - Math.floor(s); };
 const _snoise = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return _h1(i) * (1 - u) + _h1(i + 1) * u; };
 const _fbm = (x) => { let s = 0, a = 1, fr = 1, n = 0; for (let o = 0; o < 4; o++) { s += _snoise(x * fr) * a; n += a; fr *= 2; a *= 0.5; } return s / n; };
-function evalOsc(d, age, gp = 0) {
+function evalOsc(d, age, gp = 0, st = 0) {
   // every parameter may itself be an oscillator → cross-modulation (FM via rate,
-  // PM via phase, AM via range lo/hi). gp = the glyph's onset phase.
-  const rate = numAt(d.rate, age, gp);
-  const t = age * rate + numAt(d.phase || 0, age, gp) + numAt(d.spread || 0, age, gp) * gp;
+  // PM via phase, AM via range lo/hi). gp = the glyph's onset phase, st = the
+  // glyph's spawn time (seconds) → .drift() advances the starting phase over time.
+  const rate = numAt(d.rate, age, gp, st);
+  const t = age * rate + numAt(d.phase || 0, age, gp, st) + numAt(d.spread || 0, age, gp, st) * gp + numAt(d.drift || 0, age, gp, st) * st;
   const f = t - Math.floor(t);
   let v;
   switch (d.shape) {
@@ -285,17 +287,17 @@ function evalOsc(d, age, gp = 0) {
     case 'fbm': v = _fbm(t); break;                       // organic, multi-octave
     default: v = (Math.sin(TAU * t) + 1) / 2;             // sine
   }
-  const lo = numAt(d.lo, age, gp), hi = numAt(d.hi, age, gp);
+  const lo = numAt(d.lo, age, gp, st), hi = numAt(d.hi, age, gp, st);
   let r = lo + v * (hi - lo);
   if (d.ops) for (const [op, x] of d.ops) {            // .add/.sub/.mul/.div/.quantize (x may be an osc)
-    const y = numAt(x, age, gp);
+    const y = numAt(x, age, gp, st);
     r = op === '*' ? r * y : op === '+' ? r + y : op === '-' ? r - y : op === '/' ? r / y : op === 'q' ? Math.round(r * y) / y : r;
   }
   return r;
 }
-const numAt = (a, age, gp = 0) => (isOsc(a) ? evalOsc(a.__osc, age, gp) : a);
+const numAt = (a, age, gp = 0, st = 0) => (isOsc(a) ? evalOsc(a.__osc, age, gp, st) : a);
 // resolve an oscillator-driven colour: through a palette if attached, else as hue
-const oscColor = (d, age, gp) => (d.pal ? interpPal(d.pal, evalOsc(d, age, gp)) : resolveColor(evalOsc(d, age, gp), gp));
+const oscColor = (d, age, gp, st = 0) => (d.pal ? interpPal(d.pal, evalOsc(d, age, gp, st)) : resolveColor(evalOsc(d, age, gp, st), gp));
 
 // ── colour → rgb float triples (0..1), for the WebGL renderer ──────────────────
 // The Canvas2D path works in CSS colour strings; WebGL wants float rgb. These
@@ -340,7 +342,7 @@ function resolveColorRGB(c, phase) {
   if (typeof c === 'number') { const rgb = hslRGB(((c * 360) % 360 + 360) % 360, 0.82, 0.64); return [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255]; }
   const rgb = hexToRGB01(PALETTE[Math.floor(phase * PALETTE.length) % PALETTE.length]); return rgb;
 }
-const oscColorRGB = (d, age, gp) => (d.pal ? interpPalRGB(d.pal, evalOsc(d, age, gp)) : resolveColorRGB(evalOsc(d, age, gp), gp));
+const oscColorRGB = (d, age, gp, st = 0) => (d.pal ? interpPalRGB(d.pal, evalOsc(d, age, gp, st)) : resolveColorRGB(evalOsc(d, age, gp, st), gp));
 // parse a captured CSS colour string (resolveColor output: '#…', 'rgb(…)', 'hsl(h s% l%)')
 function cssToRGB(s) {
   if (typeof s !== 'string') return [1, 1, 1];
@@ -365,9 +367,9 @@ function glResolve(p, minDim, out) {
   const age = p.age;
   let sizePx = p.size, rotTurns = p.rotTurns, rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline, shade = p.shade, color = null;
   if (p.mods) for (const m of p.mods) {
-    const val = evalOsc(m.osc, age, p.phase);
+    const val = evalOsc(m.osc, age, p.phase, p.spawnT);
     if (m.field === 'size') sizePx = val * minDim;
-    else if (m.field === 'color') color = oscColorRGB(m.osc, age, p.phase);
+    else if (m.field === 'color') color = oscColorRGB(m.osc, age, p.phase, p.spawnT);
     else if (m.field === 'rotate') rotTurns = val;
     else if (m.field === 'rotateX') rotX = val * TAU;
     else if (m.field === 'rotateY') rotY = val * TAU;
@@ -437,25 +439,26 @@ function bgEval(src, cycle, elapsed) {
 // radius/angle alone = ring, both = orbit around (x,y).
 function resolvePos(p, minDim, age) {
   const { x, y, radius, angle, gridX, gridY, pan, phase } = p.pin;
+  const st = p.spawnT || 0;                            // spawn time → osc().drift()
   let px, py;
   if (gridX != null) {                                 // grid: cell from onset phase
-    const cols = Math.max(1, Math.round(numAt(gridX, age)));
-    const rows = Math.max(1, Math.round(numAt(gridY != null ? gridY : gridX, age)));
+    const cols = Math.max(1, Math.round(numAt(gridX, age, phase, st)));
+    const rows = Math.max(1, Math.round(numAt(gridY != null ? gridY : gridX, age, phase, st)));
     const cell = Math.min(cols * rows - 1, Math.floor((((phase % 1) + 1) % 1) * cols * rows));
     px = ((cell % cols) + 0.5) / cols * W;
     py = ((Math.floor(cell / cols) % rows) + 0.5) / rows * H;
   } else {
-    px = (x != null ? numAt(x, age, phase) : 0.5) * W;
-    py = (y != null ? numAt(y, age, phase) : 0.5) * H;
+    px = (x != null ? numAt(x, age, phase, st) : 0.5) * W;
+    py = (y != null ? numAt(y, age, phase, st) : 0.5) * H;
   }
   const defR = (gridX == null && x == null && y == null && radius == null) ? 0.34 : 0;
-  const rad = (radius != null ? numAt(radius, age, phase) : defR) * minDim;
+  const rad = (radius != null ? numAt(radius, age, phase, st) : defR) * minDim;
   if (rad !== 0) {
-    const ang = (angle != null ? numAt(angle, age, phase) : phase) * TAU - Math.PI / 2;
+    const ang = (angle != null ? numAt(angle, age, phase, st) : phase) * TAU - Math.PI / 2;
     px += Math.cos(ang) * rad;
     py += Math.sin(ang) * rad;
   }
-  if (pan != null) px += (numAt(pan, age, phase) - 0.5) * W * 0.42;
+  if (pan != null) px += (numAt(pan, age, phase, st) - 0.5) * W * 0.42;
   return [px + p.jx * minDim, py + p.jy * minDim];
 }
 
@@ -562,9 +565,9 @@ function drawGlyph(g, p, minDim) {
   let sizePx = p.size, color = p.color, rotTurns = p.rotTurns,
       rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline;
   if (p.mods) for (const m of p.mods) {
-    const val = evalOsc(m.osc, age, p.phase);
+    const val = evalOsc(m.osc, age, p.phase, p.spawnT);
     if (m.field === 'size') sizePx = val * minDim;
-    else if (m.field === 'color') color = oscColor(m.osc, age, p.phase);
+    else if (m.field === 'color') color = oscColor(m.osc, age, p.phase, p.spawnT);
     else if (m.field === 'rotate') rotTurns = val;
     else if (m.field === 'rotateX') rotX = val * TAU;
     else if (m.field === 'rotateY') rotY = val * TAU;

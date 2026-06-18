@@ -267,14 +267,20 @@ osc(rate, "sine").range(lo, hi)   // rate in cycles/sec; default range 0..1
 
 Shapes: `sine` `saw` `tri` `square` `rand` `perlin` `fbm` (perlin/fbm are the
 smooth, organic, livelier ones). Chainable: `.range(lo, hi)` `.rate(r)`
-`.phase(p)` `.spread(n)` `.fast(n)` `.slow(n)`. The `lo`/`hi` of an osc's `.range`
-may themselves be oscs, so the range can move: `osc(2).range(0, osc(0.1).range(0.4, 1))`.
+`.phase(p)` `.spread(n)` `.drift(r)` `.fast(n)` `.slow(n)`. The `lo`/`hi` of an osc's
+`.range` may themselves be oscs, so the range can move: `osc(2).range(0, osc(0.1).range(0.4, 1))`.
 
 By default glyphs only differ by **age** (birth time), so simultaneous onsets move
 in lockstep. **`.spread(n)`** adds a per-glyph phase offset of `n × the glyph's
 onset phase`, so the wave spreads *around* a ring/grid (a gradient) and still
 animates: `palette("rainbow").at(osc(0.08).spread(1).range(0,1))` = a rotating
 colour wheel around the ring.
+
+**`.drift(r)`** advances the *starting* phase by `r × the glyph's spawn time
+(seconds)`. `.phase()`/`.spread()` reset every onset, so the pattern repeats;
+`.drift` makes it keep evolving — each new glyph picks up a later phase, e.g.
+`shape("circle*24").angle(saw.range(0,1)).radius(osc(0).spread(3).drift(0.05).range(0.1,0.45))`
+slowly winds the ring over the whole run.
 
 **Cross-modulation:** every osc parameter (`rate`, `phase`, `spread`, and the
 `lo`/`hi` of `range`) may itself be an osc, so you get LFOs modulating LFOs:

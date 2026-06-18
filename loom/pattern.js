@@ -292,6 +292,7 @@ function makeOsc(o) {
     rate(r) { return makeOsc({ ...o, rate: r }); },
     phase(p) { return makeOsc({ ...o, phase: p }); },
     spread(n = 1) { return makeOsc({ ...o, spread: n }); }, // per-glyph phase offset = n × onset phase
+    drift(r = 0.1) { return makeOsc({ ...o, drift: r }); }, // starting phase advances over global time = r × spawn seconds
     fast(n) { return makeOsc({ ...o, rate: o.rate * n }); },
     slow(n) { return makeOsc({ ...o, rate: o.rate / n }); },
     // arithmetic on the osc's output (x may be a number or another osc), applied
