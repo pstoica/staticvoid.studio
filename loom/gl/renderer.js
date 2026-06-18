@@ -635,25 +635,27 @@ void main() {
   fragColor = vec4(col * a, a) * dot;
 }`;
 
-// rgb shift / chromatic aberration: sample R and B at opposite offsets (unpremult,
-// recombine), leaving G centred — the classic split-channel fringe. The output keeps
-// the ORIGINAL (centre) alpha, so the hue separates WITHIN the existing silhouette
-// instead of the alpha expanding to the union of the three samples. (Using the union
-// stamped coverage where a channel carried no colour — e.g. the red sample landing
-// inside a blue shape — premultiplying to a near-black pixel that darkened whatever
-// was behind it.)
+// rgb shift / chromatic aberration: shift the premultiplied channels — red from +offset,
+// green centred, blue from -offset — the classic split-channel fringe. The output alpha
+// follows where colour ACTUALLY is: a tap contributes coverage only where it carries its
+// channel, so a colourless tap (e.g. the red tap landing inside a blue shape) can't stamp
+// a black premultiplied hole that darkens the background — and a coloured tap isn't
+// clipped to the centre silhouette (which made green dominate the edges). The min() term
+// keeps the shared interior fully covered so dark/opaque shapes keep their alpha.
 const RGBSHIFT_FRAG = `
 precision highp float;
 uniform sampler2D tMap;
 uniform vec2 uOffset;       // channel separation, uv
 varying vec2 vUv;
+const float E = 0.0039;     // ~1/255: "this channel carries visible colour"
 void main() {
   vec4 cr = texture2D(tMap, vUv + uOffset);
   vec4 cg = texture2D(tMap, vUv);
   vec4 cb = texture2D(tMap, vUv - uOffset);
-  float ar = cr.a, ag = cg.a, ab = cb.a;
-  vec3 col = vec3(ar > 0.0 ? cr.r / ar : 0.0, ag > 0.0 ? cg.g / ag : 0.0, ab > 0.0 ? cb.b / ab : 0.0);
-  gl_FragColor = vec4(col * ag, ag);   // keep the centre (original) alpha
+  vec3 pm = vec3(cr.r, cg.g, cb.b);   // premultiplied, channel-shifted
+  float a = max(min(cr.a, min(cg.a, cb.a)),
+                max(cr.r > E ? cr.a : 0.0, max(cg.g > E ? cg.a : 0.0, cb.b > E ? cb.a : 0.0)));
+  gl_FragColor = vec4(pm, a);
 }`;
 
 // posterize: quantize each channel to N levels
