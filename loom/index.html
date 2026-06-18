@@ -123,7 +123,7 @@
   #toolbar { position:fixed; top:14px; right:calc(16px + var(--side-w, 0px)); z-index:7;
     display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px;
     max-width:calc(100vw - 200px); pointer-events:none;
-    transition:right .28s var(--ease), opacity .55s var(--ease); }
+    transition:opacity .55s var(--ease); }
   #toolbar > * { pointer-events:auto; }
   #toolbar.idle { opacity:.05; }
   #toolbar.idle:hover { opacity:1; }
@@ -177,8 +177,7 @@
   /* right sidebar, swappable presets / guide */
   #side { position:fixed; top:0; right:0; bottom:0; width:380px; max-width:92vw; z-index:6;
     display:flex; flex-direction:column; background:rgba(13,13,14,.96); backdrop-filter:blur(10px);
-    border-left:1px solid var(--line); box-shadow:-22px 0 60px rgba(0,0,0,.5);
-    transition:transform .28s var(--ease), opacity .28s var(--ease); }
+    border-left:1px solid var(--line); box-shadow:-22px 0 60px rgba(0,0,0,.5); }
   #side.hidden { transform:translateX(100%); opacity:0; pointer-events:none; }
   #side header { display:flex; align-items:center; justify-content:space-between; gap:10px;
     padding:13px 16px 12px; border-bottom:1px solid var(--line); }
