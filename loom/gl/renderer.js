@@ -30,15 +30,16 @@ precision highp float;
 uniform vec2 uResolution;
 in vec3 position;
 in mat4 instanceMatrix;
+in vec3 normal;
 in vec4 aTint;             // rgb + alpha
 in float aShade;          // 0 = flat/unlit, 1 = faceted lighting
 out vec4 vTint;
 out float vShade;
-out vec3 vWPos;            // transformed position → per-face normal in the fragment
+out vec3 vN;               // world-space (flat) normal for shading
 void main() {
   vShade = aShade;
   vec4 wp = instanceMatrix * vec4(position, 1.0);
-  vWPos = wp.xyz;
+  vN = mat3(instanceMatrix) * normal;   // uniform instance scale → normalize in the fragment
   // depth: each instance gets its own band (higher id = newer = nearer) so
   // overlapping meshes don't interleave/z-fight; within the band, normalize by the
   // instance scale so a small mesh keeps full self-occlusion precision.
@@ -55,14 +56,16 @@ const MESH_FRAG = `
 precision highp float;
 in vec4 vTint;
 in float vShade;
-in vec3 vWPos;
+in vec3 vN;
 out vec4 fragColor;
 void main() {
-  // flat (per-face) normal from screen-space derivatives — no vertex normals needed.
+  // flat (per-face) normal from the geometry — robust to overlapping instances. (A
+  // screen-space derivative normal corrupts where the depth pre-pass lets a 2x2 quad
+  // survive from different faces, which turned stacked meshes near-black.)
   // y is screen-down here, so light from "above" is -y; matte, no specular.
   float shade = 1.0;
   if (vShade > 0.001) {
-    vec3 N = normalize(cross(dFdx(vWPos), dFdy(vWPos)));
+    vec3 N = normalize(vN);
     if (N.z < 0.0) N = -N;                                // face the camera (DoubleSide)
     float diff = 0.5 + 0.5 * max(dot(N, normalize(vec3(0.25, -0.35, 0.9))), 0.0);
     shade = mix(1.0, diff, clamp(vShade, 0.0, 1.0));      // 0 = flat/unlit
@@ -999,6 +1002,8 @@ export class GLRenderer {
         const c = geo.boundingSphere.center, rad = geo.boundingSphere.radius || 1;
         geo.translate(-c.x, -c.y, -c.z);
         geo.scale(1 / rad, 1 / rad, 1 / rad);
+        geo.deleteAttribute('normal');         // drop any imported normals…
+        geo.computeVertexNormals();            // …rebuild per-face (non-indexed → flat)
         geo.setAttribute('aTint', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH * 4), 4));
         geo.setAttribute('aShade', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH), 1));
         const mat = new THREE.RawShaderMaterial({
