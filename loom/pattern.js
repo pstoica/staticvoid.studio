@@ -371,9 +371,15 @@ function bg(color) { if (_bgSink) _bgSink(typeof color === 'string' ? mini(color
 // group(pattern) is a layer rendered to its own buffer, so an effect can be
 // applied to the whole layer before it's composited. group(...).pixelate(n) is the
 // first supported fx. It quacks like a Pattern (has .query) so it stacks normally.
+// gids are assigned by creation order and RESET each compile (see _resetGroups), so the
+// Nth group() in a patch keeps the same id across edits — that's what lets the renderer
+// recognise "the same group" and apply edited FX to glyphs already on screen. _groupFx is
+// the live id→fx registry for the current compile.
 let _gid = 0;
+const _groupFx = new Map();
+function _resetGroups() { _gid = 0; _groupFx.clear(); }
 class Group {
-  constructor(pat) { this._pat = reify(pat); this._gid = ++_gid; this._fx = { chain: [] }; }
+  constructor(pat) { this._pat = reify(pat); this._gid = ++_gid; this._fx = { chain: [] }; _groupFx.set(this._gid, this._fx); }
   // Each effect appends to an ordered chain; the renderer runs them in call order
   // as post-process passes on the group's render target. Every param may be a
   // number, an osc, or a pattern, resolved against *global* time each frame
@@ -622,4 +628,5 @@ export const DSL = {
   shape, s, n, choose, irand, osc, palette, bg, group, _setBgSink,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   hasOnset, span, isOsc,
+  _groupFx, _resetGroups,
 };

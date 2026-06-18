@@ -89,6 +89,7 @@ new ResizeObserver(resize).observe(activeCanvas);
 
 // ── the pattern + clock ──────────────────────────────────────────────────────────
 let pattern = DSL.silence;
+let activeGroupFx = new Map();   // gid → fx for the running patch; live glyphs read their group's CURRENT fx
 let cps = 0.6;          // cycles per second
 let cycle = 0;          // current position in cycles (fractional)
 let elapsed = 0;        // wall-clock seconds since start, for global-time FX params
@@ -105,6 +106,7 @@ const particles = [];
 
 // ── compile user code into a Pattern ──────────────────────────────────────────────
 function compile(code) {
+  DSL._resetGroups();                    // stable group ids by creation order (live-FX diffing)
   const names = Object.keys(DSL);
   const vals = names.map((k) => DSL[k]);
   // Wrap as an expression so a bare `stack(...)` evaluates to a value.
@@ -119,14 +121,15 @@ function run() {
   try {
     bgSource = DEFAULT_BG;                // bg("…") in the patch overrides this during compile
     pattern = compile(editor.value);
-    // Soft re-run: keep the live glyphs so editing the patch doesn't blank the
-    // screen — they finish the envelope/FX they were born under while the new
-    // patch's glyphs take over (a live-coding cross-fade). Safe because every
-    // compile() mints fresh group ids, so old and new groups never share a render
-    // target / feedback history, and a group's RT is pruned once its last glyph
-    // dies. A hard reset is still a click away (the clear and new buttons), and
-    // switching preset/new wipes explicitly. On a compile error we keep running
-    // the old patch untouched (the catch below leaves `pattern` and glyphs alone).
+    // Soft re-run: keep the live glyphs so editing the patch doesn't blank the screen.
+    // Group ids are stable by creation order, so each frame the live glyphs re-read their
+    // group's CURRENT fx (see the tick loop) — editing/removing an effect line applies to
+    // glyphs already on screen, no wipe and no waiting for them to decay. Their CONTENT
+    // (shape/colour/…) stays as captured at spawn, so it still cross-fades as new glyphs
+    // take over. A hard reset is still a click away (clear/new buttons), and switching
+    // preset/new wipes explicitly. On a compile error we keep the old patch + its fx map
+    // untouched (the snapshot below and `pattern` are only updated on success).
+    activeGroupFx = new Map(DSL._groupFx);
     errBar.textContent = '';
     errBar.classList.remove('show');
     localStorage.setItem('loom.code', editor.value);
@@ -706,6 +709,12 @@ function tick(dt) {
     live.push(p);
   }
   particles.length = w;
+
+  // Live FX: re-point each glyph's group fx to the running patch's CURRENT fx for its gid
+  // (stable by group order). Editing an effect line updates what the on-screen glyphs
+  // render with; a removed group → no fx. Content stays as captured, so it still
+  // cross-fades. Cheap: one map lookup per live glyph.
+  for (let i = 0; i < live.length; i++) { const p = live[i]; p.fx = p.gid ? (activeGroupFx.get(p.gid) || null) : null; }
 
   // trace mode: thread a line through the live points in spawn order, behind
   // the glyphs, rhythm becomes a connected path / constellation.
