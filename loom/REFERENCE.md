@@ -276,17 +276,34 @@ smooth, organic, livelier ones). Chainable: `.range(lo, hi)` `.rate(r)`
 `.phase(p)` `.spread(n)` `.drift(r)` `.fast(n)` `.slow(n)`. The `lo`/`hi` of an osc's
 `.range` may themselves be oscs, so the range can move: `osc(2).range(0, osc(0.1).range(0.4, 1))`.
 
-By default glyphs only differ by **age** (birth time), so simultaneous onsets move
-in lockstep. **`.spread(n)`** adds a per-glyph phase offset of `n × the glyph's
-onset phase`, so the wave spreads *around* a ring/grid (a gradient) and still
-animates: `palette("rainbow").at(osc(0.08).spread(1).range(0,1))` = a rotating
-colour wheel around the ring.
+**Phase offsets — `phase` / `spread` / `drift`.** An osc's phase is one sum of
+four terms:
 
-**`.drift(r)`** advances the *starting* phase by `r × the glyph's spawn time
-(seconds)`. `.phase()`/`.spread()` reset every onset, so the pattern repeats;
-`.drift` makes it keep evolving — each new glyph picks up a later phase, e.g.
-`shape("circle*24").angle(saw.range(0,1)).radius(osc(0).spread(3).drift(0.05).range(0.1,0.45))`
-slowly winds the ring over the whole run.
+```
+phase = age·rate  +  .phase(p)  +  .spread(n)·gp  +  .drift(r)·st
+        └ running ┘  └ constant ┘  └ structural   ┘  └ temporal   ┘
+```
+
+`gp` = the glyph's **onset phase** (0..1 position *within* its cycle — which glyph
+in the pattern; repeats every cycle). `st` = the glyph's **spawn time** in seconds
+(absolute, grows forever). So the three offsets are independent axes, none
+derivable from the others:
+
+| Method | × | does |
+| --- | --- | --- |
+| `.phase(p)` | `1` | same offset for every glyph, always — a fixed rotation |
+| `.spread(n)` | `gp` | offset ∝ position in the pattern → fans the wave *around* a ring/grid |
+| `.drift(r)` | `st` | offset ∝ spawn time → the pattern keeps *evolving* instead of repeating |
+
+`palette("rainbow").at(osc(0.08).spread(1).range(0,1))` = a colour wheel spread
+around the ring; add `.drift(0.05)` and the wheel slowly winds over the whole run.
+Two glyphs at the *same onset* but different spawn times share a `spread` offset
+(locked) but differ in `drift` (separate) — that's the whole distinction.
+
+`spread` is **not** `range` or `fast`/`slow`: those change the swing (amplitude)
+and the frequency, same for every glyph. `spread` is the only one that adds a
+*per-glyph phase*. You could hand-roll it as `.phase("0 0.125 … 0.875")` (a phase
+per onset) — `spread(n)` is just sugar for `n × onset phase`.
 
 **Cross-modulation:** every osc parameter (`rate`, `phase`, `spread`, and the
 `lo`/`hi` of `range`) may itself be an osc, so you get LFOs modulating LFOs:
