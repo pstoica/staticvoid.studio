@@ -31,9 +31,12 @@ uniform vec2 uResolution;
 in vec3 position;
 in mat4 instanceMatrix;
 in vec4 aTint;             // rgb + alpha
+in float aShade;          // 0 = flat/unlit, 1 = faceted lighting
 out vec4 vTint;
+out float vShade;
 out vec3 vWPos;            // transformed position → per-face normal in the fragment
 void main() {
+  vShade = aShade;
   vec4 wp = instanceMatrix * vec4(position, 1.0);
   vWPos = wp.xyz;
   // depth: each instance gets its own band (higher id = newer = nearer) so
@@ -51,16 +54,21 @@ void main() {
 const MESH_FRAG = `
 precision highp float;
 in vec4 vTint;
+in float vShade;
 in vec3 vWPos;
 out vec4 fragColor;
 void main() {
   // flat (per-face) normal from screen-space derivatives — no vertex normals needed.
   // y is screen-down here, so light from "above" is -y; matte, no specular.
-  vec3 N = normalize(cross(dFdx(vWPos), dFdy(vWPos)));
-  if (N.z < 0.0) N = -N;                                  // face the camera (DoubleSide)
-  float diff = 0.4 + 0.6 * max(dot(N, normalize(vec3(0.4, -0.55, 0.75))), 0.0);
+  float shade = 1.0;
+  if (vShade > 0.001) {
+    vec3 N = normalize(cross(dFdx(vWPos), dFdy(vWPos)));
+    if (N.z < 0.0) N = -N;                                // face the camera (DoubleSide)
+    float diff = 0.4 + 0.6 * max(dot(N, normalize(vec3(0.4, -0.55, 0.75))), 0.0);
+    shade = mix(1.0, diff, clamp(vShade, 0.0, 1.0));      // 0 = flat/unlit
+  }
   float a = clamp(vTint.a, 0.0, 1.0);
-  fragColor = vec4(clamp(vTint.rgb * diff, 0.0, 1.0) * a, a);   // premultiplied
+  fragColor = vec4(clamp(vTint.rgb * shade, 0.0, 1.0) * a, a);   // premultiplied
 }`;
 
 // shape name → SDF id (kept in sync with the switch in the fragment shader and
@@ -270,21 +278,33 @@ void main(){
       if (t > vR * 5.0) break;
     }
     if (!hit) discard;
+    vec3 pp = ro + rd * t;
+    float e = max(vR * 0.012, 0.3);
+    vec3 n = normalize(vec3(
+      map3(id, pp + vec3(e,0.0,0.0), vR) - map3(id, pp - vec3(e,0.0,0.0), vR),
+      map3(id, pp + vec3(0.0,e,0.0), vR) - map3(id, pp - vec3(0.0,e,0.0), vR),
+      map3(id, pp + vec3(0.0,0.0,e), vR) - map3(id, pp - vec3(0.0,0.0,e), vR)));
+    vec3 nw = R * n;                                      // object normal → world
     // flat by default (shade 0 = solid colour). shade > 0 mixes in a faceted
     // diffuse term (no rim/specular), so it's matte/poster, never glossy.
-    float shade = 1.0;
-    if (vShade > 0.001) {
-      vec3 pp = ro + rd * t;
-      float e = max(vR * 0.012, 0.3);
-      vec3 n = normalize(vec3(
-        map3(id, pp + vec3(e,0.0,0.0), vR) - map3(id, pp - vec3(e,0.0,0.0), vR),
-        map3(id, pp + vec3(0.0,e,0.0), vR) - map3(id, pp - vec3(0.0,e,0.0), vR),
-        map3(id, pp + vec3(0.0,0.0,e), vR) - map3(id, pp - vec3(0.0,0.0,e), vR)));
-      vec3 nw = R * n;                                    // object normal → world
-      float diff = 0.4 + 0.6 * max(dot(nw, normalize(vec3(0.4, 0.55, 0.75))), 0.0);
-      shade = mix(1.0, diff, clamp(vShade, 0.0, 1.0));
+    float shade = mix(1.0, 0.4 + 0.6 * max(dot(nw, normalize(vec3(0.4, 0.55, 0.75))), 0.0), clamp(vShade, 0.0, 1.0));
+    // fill(0).stroke(1) → wireframe: edges for the polyhedra (cube/octa), the
+    // grazing silhouette for the smooth ones (sphere/torus). visible (front) faces.
+    float cov = 1.0;
+    if (vFill < 0.5 && vStroke > 0.5) {
+      float lw = max(vWeight, 1.0);
+      vec3 ap = abs(pp);
+      if (id == 11) {                                    // cube: near a face-pair seam
+        float m1 = max(ap.x, max(ap.y, ap.z)), m3 = min(ap.x, min(ap.y, ap.z));
+        cov = 1.0 - smoothstep(lw - 1.0, lw + 1.0, vR * 0.58 - (ap.x + ap.y + ap.z - m1 - m3));
+      } else if (id == 14) {                             // octahedron: edge where a coord → 0
+        cov = 1.0 - smoothstep(lw - 1.0, lw + 1.0, min(ap.x, min(ap.y, ap.z)));
+      } else {                                           // sphere/torus: silhouette rim
+        cov = 1.0 - smoothstep(0.0, 0.42, abs(nw.z));
+      }
+      if (cov <= 0.002) discard;
     }
-    float a = clamp(vAlpha, 0.0, 1.0);
+    float a = clamp(vAlpha * cov, 0.0, 1.0);
     fragColor = vec4(clamp(vColor * shade, 0.0, 1.0) * a, a);
     return;
   }
@@ -978,6 +998,7 @@ export class GLRenderer {
         geo.translate(-c.x, -c.y, -c.z);
         geo.scale(1 / rad, 1 / rad, 1 / rad);
         geo.setAttribute('aTint', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH * 4), 4));
+        geo.setAttribute('aShade', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH), 1));
         const mat = new THREE.RawShaderMaterial({
           glslVersion: THREE.GLSL3, uniforms: this.uniforms, vertexShader: MESH_VERT, fragmentShader: MESH_FRAG,
           transparent: true, depthTest: true, depthWrite: true, side: THREE.DoubleSide,
@@ -1014,6 +1035,7 @@ export class GLRenderer {
       im.setMatrixAt(n, this._m4);
       const t = im.geometry.getAttribute('aTint');
       t.array[n * 4] = out.rgb[0]; t.array[n * 4 + 1] = out.rgb[1]; t.array[n * 4 + 2] = out.rgb[2]; t.array[n * 4 + 3] = out.alpha;
+      im.geometry.getAttribute('aShade').array[n] = out.shade;
       im.count = n + 1; im.visible = true; any = true;
     }
     if (!any) return;
@@ -1021,6 +1043,7 @@ export class GLRenderer {
       if (!im.count) continue;
       im.instanceMatrix.needsUpdate = true;
       im.geometry.getAttribute('aTint').needsUpdate = true;
+      im.geometry.getAttribute('aShade').needsUpdate = true;
     }
     r.setRenderTarget(target);
     r.clear(false, true, false);              // clear depth only (colour preserved)

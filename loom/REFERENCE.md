@@ -51,14 +51,16 @@ Sources turn tokens into glyph events. They are the start of every chain.
 `star` `plus` `line` `cross`. (`ring`/`line`/`cross` are always stroked.)
 
 **3D shapes** (raymarched, tumbled by `rotateX`/`rotateY`/`spin`): `cube` `sphere`
-`torus` `octa`. Solid only — `fill`/`stroke`/`weight` don't apply; drive `size` +
-the rotations, e.g. `shape("cube").rotateX(saw.range(0,1).slow(8))`. **Matte-shaded
-by default** so they read as 3D (like a p5 `sphere`); `.shade(0)` flattens to an
-unlit silhouette, `.shade(1)` deepens the shading. No gloss.
+`torus` `octa`. Drive `size` + the rotations, e.g.
+`shape("cube").rotateX(saw.range(0,1).slow(8))`. **Matte-shaded by default** so they
+read as 3D (like a p5 `sphere`); `.shade(0)` flattens to an unlit silhouette,
+`.shade(1)` deepens the shading (no gloss). **`.fill(0).stroke().weight(w)`** draws
+them as a wireframe — edges for `cube`/`octa`, the grazing silhouette for `sphere`/`torus`.
 
-**Imported meshes** (real FBX geometry from `models/`, instanced + depth-tested,
-flat-shaded): `bong`. Same controls as the 3D shapes (`size`, the rotations,
-`color`) — loads async, so it appears a moment after first run.
+**Imported meshes** (real FBX geometry from `models/`, instanced + depth-tested):
+`bong`. Same controls as the 3D shapes — `size`, the rotations, `color`, and
+`.shade()` (matte by default, `.shade(0)` = flat/unlit). Loads async, so it
+appears a moment after first run.
 
 ---
 
