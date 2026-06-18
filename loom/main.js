@@ -1055,9 +1055,12 @@ renderClock();
 
 // trace button removed for now; the mode stays off (renderer code remains, dormant)
 
-$('#newbtn').addEventListener('click', () => {
+function newPatch() {
   editor.value = DEFAULT_PATCH; refreshHL(); run(); setActive('');
-});
+  if (isMobile()) setSide(false);
+}
+$('#newbtn').addEventListener('click', newPatch);
+$('#prenew').addEventListener('click', newPatch);   // the in-panel "+ new" button
 
 $('#savebtn').addEventListener('click', () => {
   const cur = activeVal.startsWith('u:') ? activeVal.slice(2) : '';
