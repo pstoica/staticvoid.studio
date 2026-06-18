@@ -1017,6 +1017,13 @@ export class GLRenderer {
     }
     r.setRenderTarget(target);
     r.clear(false, true, false);              // clear depth only (colour preserved)
+    // two passes so a translucent mesh shows ONE face per pixel (no see-through
+    // when alpha < 1): 1) depth pre-pass (no colour) lays down the nearest surface;
+    // 2) colour only where depth == that nearest depth.
+    const kids = this.meshScene.children;
+    for (const im of kids) { const m = im.material; m.colorWrite = false; m.depthWrite = true; m.depthFunc = THREE.LessEqualDepth; }
+    r.render(this.meshScene, this.camera);
+    for (const im of kids) { const m = im.material; m.colorWrite = true; m.depthWrite = false; m.depthFunc = THREE.EqualDepth; }
     r.render(this.meshScene, this.camera);
   }
 
