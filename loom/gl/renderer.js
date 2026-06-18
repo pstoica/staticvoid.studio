@@ -31,25 +31,25 @@ const TRACE_CAP = 8192;         // max points in the trace polyline
 const VERT = `
 precision highp float;
 uniform vec2 uResolution;       // viewport in CSS px (W, H); pixel→NDC mapping
-attribute vec3 position;        // quad corner in -1..1
-attribute vec2 iPos;            // glyph centre, pixel space
-attribute float iRadius;        // glyph radius, px
-attribute float iRot;           // z rotation / spin, radians
-attribute float iRotX;          // 3D tilt around horizontal axis, radians
-attribute float iRotY;          // 3D tilt around vertical axis, radians
-attribute vec3 iColor;          // rgb 0..1 (sRGB)
-attribute float iAlpha;         // 0..1, envelope already folded in
-attribute float iWeight;        // stroke width (full), px
-attribute float iOpen;          // arc/line gap 0..1
-attribute float iShape;         // shape id
-attribute float iFill;          // 0/1
-attribute float iStroke;        // 0/1
-attribute float iVertex;        // 0/1 — dot at each vertex
-attribute float iCap;           // line/cross caps: 0 round, 1 butt, 2 square
-attribute float iJoin;          // polygon corners: 0 miter, 1 round, 2 bevel
-varying vec2 vLocal;            // shape-space coordinate, px (un-rotated)
-varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha;
-varying vec3 vColor;
+in vec3 position;        // quad corner in -1..1
+in vec2 iPos;            // glyph centre, pixel space
+in float iRadius;        // glyph radius, px
+in float iRot;           // z rotation / spin, radians
+in float iRotX;          // 3D tilt around horizontal axis, radians
+in float iRotY;          // 3D tilt around vertical axis, radians
+in vec3 iColor;          // rgb 0..1 (sRGB)
+in float iAlpha;         // 0..1, envelope already folded in
+in float iWeight;        // stroke width (full), px
+in float iOpen;          // arc/line gap 0..1
+in float iShape;         // shape id
+in float iFill;          // 0/1
+in float iStroke;        // 0/1
+in float iVertex;        // 0/1 — dot at each vertex
+in float iCap;           // line/cross caps: 0 round, 1 butt, 2 square
+in float iJoin;          // polygon corners: 0 miter, 1 round, 2 bevel
+out vec2 vLocal;            // shape-space coordinate, px (un-rotated)
+out float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha;
+out vec3 vColor;
 void main() {
   float pad = iWeight * 0.5 + 2.0;          // stroke half-width + AA margin
   // a line's length scales with open ((1-open)*r), and open can exceed 1 (e.g.
@@ -88,9 +88,10 @@ const FRAG = `
 precision highp float;
 #define PI 3.14159265359
 #define TAU 6.28318530718
-varying vec2 vLocal;
-varying float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha;
-varying vec3 vColor;
+in vec2 vLocal;
+in float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha;
+in vec3 vColor;
+out vec4 fragColor;
 
 vec2 rot2(vec2 p, float a){ float c=cos(a), s=sin(a); return vec2(p.x*c-p.y*s, p.x*s+p.y*c); }
 
@@ -223,7 +224,10 @@ void main(){
     capped = true;
   }
 
-  float aa = 1.0;                        // AA half-width in px
+  // AA half-width from the SDF's screen-space gradient: ~1px when flat, but grows
+  // when the glyph is tilted near edge-on so grazing sides soften instead of
+  // breaking into a dashed/chopped stair-step.
+  float aa = clamp(fwidth(d), 0.5, 16.0);
   float cov;
   if (capped) {                          // line/cross: d is the thickened stroke → fill it
     cov = vStroke * (1.0 - smoothstep(-aa, aa, d));
@@ -250,7 +254,7 @@ void main(){
   }
   if (cov <= 0.0) discard;
   float a = clamp(vAlpha * cov, 0.0, 1.0);
-  gl_FragColor = vec4(vColor * a, a);     // premultiplied — blends set the factors
+  fragColor = vec4(vColor * a, a);        // premultiplied — blends set the factors
 }`;
 
 // ── fullscreen post-process passes (per-group FX chain) ──────────────────────────
@@ -613,7 +617,7 @@ export class GLRenderer {
     this.uniforms = { uResolution: { value: new THREE.Vector2(1, 1) } };
     // DoubleSide: the pixel-space projection flips Y, which inverts triangle
     // winding — without this, front-face culling drops every quad.
-    const base = { uniforms: this.uniforms, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide };
+    const base = { glslVersion: THREE.GLSL3, uniforms: this.uniforms, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide };
     const F = THREE;
     const mk = (src, dst, srcA, dstA) => {
       const m = new THREE.RawShaderMaterial(base);
