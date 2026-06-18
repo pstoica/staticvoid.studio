@@ -358,7 +358,8 @@
         <code>.rotate(turns) .spin(turns/s)</code><p>Z spin · 1 = full turn</p>
         <code>.rotateX(turns) .rotateY(turns)</code><p>3D tilt (foreshorten)</p>
         <code>.fill(1|0) .stroke(1|0) .vertex(1|0)</code><p>draw modes, independent &amp; patternable. <code>.fill(0).vertex()</code> = dots only</p>
-        <code>.weight(0..0.1)</code><p>stroke / line / vertex-dot size</p>
+        <code>.weight(0..0.1)</code><p>stroke / line / vertex-dot size (absolute)</p>
+        <code>.outline(0..0.3)</code><p>stroke size relative to the shape — scales with <code>.size()</code></p>
         <code>.cap("round"|"butt"|"square")</code><p>line ends</p>
         <code>.join("miter"|"round"|"bevel")</code><p>polygon corners (default miter / sharp)</p>
         <code>.open(0..1)</code><p>arc/ring gap (use shape <code>arc</code>)</p>

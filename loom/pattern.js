@@ -154,7 +154,8 @@ class Pattern {
   fill(v = 1)   { return this.set('fill', v); }
   stroke(v = 1) { return this.set('stroke', v); }
   vertex(v = 1) { return this.set('vertex', v); }  // draw a dot at each vertex
-  weight(a) { return this.set('weight', a); }
+  weight(a)  { return this.set('weight', a); }   // stroke width, absolute (fraction of min(w,h))
+  outline(a) { return this.set('outline', a); }  // stroke width relative to the shape's radius (scales with size)
   cap(a)    { return this.set('cap', a); }   // line ends: 'round' | 'butt' | 'square'
   join(a)   { return this.set('join', a); }  // corners:   'round' | 'miter' | 'bevel'
   rotateX(a){ return this.set('rotateX', a); }  // tilt around horizontal axis (turns)

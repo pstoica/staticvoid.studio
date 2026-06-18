@@ -169,7 +169,8 @@ filled, outlined, or both. All four are patterns, so `.fill("1 0")`,
 | `.fill(on)` | fill on/off (default on). `.fill(0)` disables fill |
 | `.stroke(on)` | outline on/off (default off). `.stroke()` = on |
 | `.vertex(on)` | draw a dot at each of the shape's vertices |
-| `.weight(w)` | stroke / line / vertex-dot size (`0..0.1` of `min(w,h)`) |
+| `.weight(w)` | stroke / line / vertex-dot size, absolute (`0..0.1` of `min(w,h)`) |
+| `.outline(f)` | stroke size relative to the shape's radius (scales with `size`); overrides `weight` |
 | `.cap(s)` | line ends: `"round"` (default) `"butt"` `"square"` |
 | `.join(s)` | corners: `"miter"` (default, sharp) `"round"` `"bevel"` |
 

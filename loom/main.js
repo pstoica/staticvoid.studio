@@ -35,7 +35,7 @@ const HL_FN = new Set(['shape','s','n','stack','cat','slowcat','fastcat','seq','
 const HL_SIG = new Set(['sine','cosine','saw','isaw','tri','square','rand','perlin','fbm','brown','gauss','white']);
 const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux','superimpose','off','degrade','degradeBy',
   'unDegradeBy','sometimes','sometimesBy','often','rarely','early','late','range','add','sub','mul','div',
-  'color','size','x','y','radius','angle','grid','rotate','rotateX','rotateY','spin','blend','alpha','opacity','pan','jitter','fill','stroke','weight','pixelate',
+  'color','size','x','y','radius','angle','grid','rotate','rotateX','rotateY','spin','blend','alpha','opacity','pan','jitter','fill','stroke','weight','outline','pixelate',
   'blur','feedback','trails','hue','brightness','contrast','saturate','negative','invert','displace','kaleido','mirror',
   'cap','join','open','vertex','attack','decay','life','set','spread','phase','rate','quantize']);
 const HL_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+(?:\.\d+)?\b|=>|\.[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*|[(){}\[\],.]/g;
@@ -168,6 +168,7 @@ function spawn(value, onset) {
     stroke: v.stroke != null ? v.stroke : 0,
     vertex: v.vertex != null ? v.vertex : 0,
     weight: numAt(v.weight != null ? v.weight : 0.006, 0, phase),
+    outline: v.outline != null ? numAt(v.outline, 0, phase) : null,   // stroke as a fraction of radius (overrides weight)
     cap: v.cap || 'square',
     join: v.join || 'miter',
     open: numAt(v.open != null ? v.open : 0, 0, phase),
@@ -259,7 +260,7 @@ function interpPal(colors, t) {
 // ── live oscillators (LFOs): evaluated each frame against a glyph's age, so a
 // control keeps moving over the glyph's lifetime instead of freezing at spawn. ──
 const isOsc = DSL.isOsc;
-const MOD_FIELDS = ['size', 'color', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight'];
+const MOD_FIELDS = ['size', 'color', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline'];
 const _h1 = (x) => { const s = Math.sin((x + 0.123) * 12.9898) * 43758.5453; return s - Math.floor(s); };
 const _snoise = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return _h1(i) * (1 - u) + _h1(i + 1) * u; };
 const _fbm = (x) => { let s = 0, a = 1, fr = 1, n = 0; for (let o = 0; o < 4; o++) { s += _snoise(x * fr) * a; n += a; fr *= 2; a *= 0.5; } return s / n; };
@@ -355,7 +356,7 @@ const CAP_ID = { round: 0, butt: 1, square: 2 };   // line/cross caps (spawn def
 const JOIN_ID = { miter: 0, round: 1, bevel: 2 };  // polygon corners (default miter = sharp)
 function glResolve(p, minDim, out) {
   const age = p.age;
-  let sizePx = p.size, rotTurns = p.rotTurns, rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, color = null;
+  let sizePx = p.size, rotTurns = p.rotTurns, rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline, color = null;
   if (p.mods) for (const m of p.mods) {
     const val = evalOsc(m.osc, age, p.phase);
     if (m.field === 'size') sizePx = val * minDim;
@@ -366,6 +367,7 @@ function glResolve(p, minDim, out) {
     else if (m.field === 'open') open = val;
     else if (m.field === 'alpha') alpha = val;
     else if (m.field === 'weight') weight = val;
+    else if (m.field === 'outline') olw = val;
   }
   if (!color) { if (!p._rgb) p._rgb = cssToRGB(p.color); color = p._rgb; }
   out.x = p.x; out.y = p.y;
@@ -374,7 +376,7 @@ function glResolve(p, minDim, out) {
   out.rotX = rotX; out.rotY = rotY;
   out.rgb = color;
   out.alpha = Math.max(0, Math.min(1, alpha * p._env));
-  out.weight = Math.max(0.75, weight * minDim);
+  out.weight = olw != null ? Math.max(0.75, olw * sizePx) : Math.max(0.75, weight * minDim);
   out.open = open;
   const id = SHAPE_ID[p.shape] != null ? SHAPE_ID[p.shape] : 0;
   out.shape = id;
@@ -549,7 +551,7 @@ function drawShape3D(g, name, r, rz, rx, ry, o, vertex) {
 function drawGlyph(g, p, minDim) {
   const age = p.age;
   let sizePx = p.size, color = p.color, rotTurns = p.rotTurns,
-      rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight;
+      rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline;
   if (p.mods) for (const m of p.mods) {
     const val = evalOsc(m.osc, age, p.phase);
     if (m.field === 'size') sizePx = val * minDim;
@@ -560,6 +562,7 @@ function drawGlyph(g, p, minDim) {
     else if (m.field === 'open') open = val;
     else if (m.field === 'alpha') alpha = val;
     else if (m.field === 'weight') weight = val;
+    else if (m.field === 'outline') olw = val;
   }
   g.save();
   g.translate(p.x, p.y);
@@ -567,7 +570,7 @@ function drawGlyph(g, p, minDim) {
   g.globalAlpha = Math.max(0, Math.min(1, alpha * p._env));
   g.fillStyle = color; g.strokeStyle = color;
   const zRot = rotTurns * TAU + p.spin * age;
-  const lw = Math.max(0.75, weight * minDim);
+  const lw = olw != null ? Math.max(0.75, olw * sizePx) : Math.max(0.75, weight * minDim);
   const outline = OUTLINE_SHAPES.has(p.shape);
   const stroke = outline ? (p.stroke || !p.vertex) : p.stroke;
   const fill = outline ? 0 : p.fill;
