@@ -55,6 +55,10 @@ Sources turn tokens into glyph events. They are the start of every chain.
 the rotations, e.g. `shape("cube").rotateX(saw.range(0,1).slow(8))`. **Flat/unlit
 by default**; `.shade(n)` (`0..1`) mixes in matte faceted lighting (no gloss).
 
+**Imported meshes** (real FBX geometry from `models/`, instanced + depth-tested,
+flat-shaded): `bong`. Same controls as the 3D shapes (`size`, the rotations,
+`color`) — loads async, so it appears a moment after first run.
+
 ---
 
 ## Controls

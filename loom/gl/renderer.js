@@ -14,6 +14,39 @@
 // chain arrive in later phases.
 
 import * as THREE from 'three';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+
+// ── imported 3D meshes (real geometry, instanced + depth-tested; flat-shaded to
+// match the SDF 3D shapes). name → file url, resolved via Vite asset handling. ──
+const MESH_URLS = { bong: new URL('../models/BONG.fbx', import.meta.url).href };
+const MESH_ID = { bong: 15 };          // shape ids for imported meshes (>= 15)
+const MAX_MESH = 1024;
+
+// flat instanced-mesh shaders: orthographic pixel→NDC projection (matching the
+// glyph billboard), per-instance tint (rgb + alpha), premultiplied output.
+const MESH_VERT = `
+precision highp float;
+uniform vec2 uResolution;
+in vec3 position;
+in mat4 instanceMatrix;
+in vec4 aTint;             // rgb + alpha
+out vec4 vTint;
+void main() {
+  vec4 wp = instanceMatrix * vec4(position, 1.0);
+  gl_Position = vec4(2.0 * wp.x / uResolution.x - 1.0,
+                     1.0 - 2.0 * wp.y / uResolution.y,
+                     clamp(-wp.z * 0.001, -0.999, 0.999), 1.0);   // z → depth (self-occlusion)
+  vTint = aTint;
+}`;
+const MESH_FRAG = `
+precision highp float;
+in vec4 vTint;
+out vec4 fragColor;
+void main() {
+  float a = clamp(vTint.a, 0.0, 1.0);
+  fragColor = vec4(vTint.rgb * a, a);    // flat, premultiplied
+}`;
 
 // shape name → SDF id (kept in sync with the switch in the fragment shader and
 // with SHAPE_ID in main.js).  0 circle/dot · 1 ring · 2 arc · 3 square/box ·
@@ -695,6 +728,15 @@ export class GLRenderer {
     this.mesh.frustumCulled = false;
     this.scene.add(this.mesh);
 
+    // imported-mesh path (instanced, depth-tested). meshes load async; until a
+    // model arrives its glyphs simply don't draw.
+    this.meshScene = new THREE.Scene();
+    this.meshObjs = {};          // id → THREE.InstancedMesh
+    this._m4 = new THREE.Matrix4();
+    this._euler = new THREE.Euler();
+    this._v3 = new THREE.Vector3();
+    this._loadMeshes();
+
     // overlay scene (playhead + trace), drawn behind the glyphs with the ortho
     // camera (which maps pixel-space world coords → NDC). Both are thin lines.
     this.overlay = new THREE.Scene();
@@ -756,7 +798,9 @@ export class GLRenderer {
     if (!rt || rt.w !== dw || rt.h !== dh) {
       if (rt) { rt.a.dispose(); rt.b.dispose(); if (rt.hist) { rt.hist[0].dispose(); rt.hist[1].dispose(); } if (rt.mip) rt.mip.dispose(); }
       const opt = { depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
-      rt = { a: new THREE.WebGLRenderTarget(dw, dh, opt), b: new THREE.WebGLRenderTarget(dw, dh, opt), w: dw, h: dh };
+      // `a` also holds glyphs + imported meshes, so it needs a depth buffer for mesh
+      // self-occlusion; `b` is only an FX ping-pong, no depth.
+      rt = { a: new THREE.WebGLRenderTarget(dw, dh, { ...opt, depthBuffer: true }), b: new THREE.WebGLRenderTarget(dw, dh, opt), w: dw, h: dh };
       this.groupRTs.set(gid, rt);
     }
     return rt;
@@ -840,6 +884,7 @@ export class GLRenderer {
         const p = parts[i];
         if (blendKey(p.blend) !== key) continue;
         resolve(p, minDim, out);
+        if (out.shape >= 15) continue;          // imported meshes draw in _drawMeshes
         const a = this.arrays;
         a.iPos[count * 2] = out.x; a.iPos[count * 2 + 1] = out.y;
         a.iRadius[count] = out.r;
@@ -867,7 +912,80 @@ export class GLRenderer {
       this.mesh.material = this.materials[key];
       r.render(this.scene, this.camera);
     }
+    this._drawMeshes(parts, target);
     r.setRenderTarget(null);
+  }
+
+  // load imported FBX meshes → position-only, centred, normalized to unit radius,
+  // wrapped in an instanced + depth-tested flat material.
+  _loadMeshes() {
+    const loader = new FBXLoader();
+    for (const [name, url] of Object.entries(MESH_URLS)) {
+      loader.load(url, (root) => {
+        const geos = [];
+        root.updateMatrixWorld(true);
+        root.traverse((c) => {
+          if (!c.isMesh || !c.geometry) return;
+          const src = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry;
+          const g = new THREE.BufferGeometry();
+          g.setAttribute('position', src.getAttribute('position').clone());
+          g.applyMatrix4(c.matrixWorld);
+          geos.push(g);
+        });
+        if (!geos.length) return;
+        const geo = geos.length > 1 ? mergeGeometries(geos, false) : geos[0];
+        geo.computeBoundingSphere();
+        const c = geo.boundingSphere.center, rad = geo.boundingSphere.radius || 1;
+        geo.translate(-c.x, -c.y, -c.z);
+        geo.scale(1 / rad, 1 / rad, 1 / rad);
+        geo.setAttribute('aTint', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH * 4), 4));
+        const mat = new THREE.RawShaderMaterial({
+          glslVersion: THREE.GLSL3, uniforms: this.uniforms, vertexShader: MESH_VERT, fragmentShader: MESH_FRAG,
+          transparent: true, depthTest: true, depthWrite: true, side: THREE.DoubleSide,
+          blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+          blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+        });
+        const im = new THREE.InstancedMesh(geo, mat, MAX_MESH);
+        im.frustumCulled = false; im.count = 0; im.visible = false;
+        this.meshScene.add(im);
+        this.meshObjs[MESH_ID[name]] = im;
+      }, undefined, (err) => console.warn('Loom: failed to load mesh', name, err));
+    }
+  }
+
+  // draw all imported-mesh glyphs in `parts` into the current target (depth-tested
+  // for correct self-occlusion; the target keeps its colour, depth is cleared here).
+  _drawMeshes(parts, target) {
+    if (!parts.length) return;
+    const ids = Object.keys(this.meshObjs);
+    if (!ids.length) return;
+    const r = this.renderer, out = this._scratch, minDim = this._minDim, resolve = this._resolve;
+    for (const im of this.meshScene.children) { im.count = 0; im.visible = false; }
+    let any = false;
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      resolve(p, minDim, out);
+      const im = this.meshObjs[out.shape];
+      if (!im || im.count >= MAX_MESH) continue;
+      const n = im.count;
+      this._euler.set(out.rotX, out.rotY, out.rot, 'XYZ');
+      this._m4.makeRotationFromEuler(this._euler);
+      this._m4.scale(this._v3.set(out.r, out.r, out.r));
+      this._m4.setPosition(out.x, out.y, 0);
+      im.setMatrixAt(n, this._m4);
+      const t = im.geometry.getAttribute('aTint');
+      t.array[n * 4] = out.rgb[0]; t.array[n * 4 + 1] = out.rgb[1]; t.array[n * 4 + 2] = out.rgb[2]; t.array[n * 4 + 3] = out.alpha;
+      im.count = n + 1; im.visible = true; any = true;
+    }
+    if (!any) return;
+    for (const im of this.meshScene.children) {
+      if (!im.count) continue;
+      im.instanceMatrix.needsUpdate = true;
+      im.geometry.getAttribute('aTint').needsUpdate = true;
+    }
+    r.setRenderTarget(target);
+    r.clear(false, true, false);              // clear depth only (colour preserved)
+    r.render(this.meshScene, this.camera);
   }
 
   // resolve an FX param against global time (number / osc / pattern) via main.js
