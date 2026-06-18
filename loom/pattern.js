@@ -407,7 +407,9 @@ class Group {
     return this._pat.query(s).map((h) => hap(h.whole, h.part, Object.assign({}, h.value, { _gid: gid, _fx: fx })));
   }
 }
-function group(pat) { return new Group(pat); }
+// variadic like stack(), so group(bg(...), shape(...)) works as expected (not just
+// group(stack(...))). one arg passes through unchanged.
+function group(...pats) { return new Group(pats.length > 1 ? stack(...pats) : (pats[0] || silence)); }
 
 // ── combine two patterns: structure from the left, value sampled from right ────
 function appLeft(pf, pv) {
