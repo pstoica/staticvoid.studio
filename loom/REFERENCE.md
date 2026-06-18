@@ -52,8 +52,9 @@ Sources turn tokens into glyph events. They are the start of every chain.
 
 **3D shapes** (raymarched, tumbled by `rotateX`/`rotateY`/`spin`): `cube` `sphere`
 `torus` `octa`. Solid only — `fill`/`stroke`/`weight` don't apply; drive `size` +
-the rotations, e.g. `shape("cube").rotateX(saw.range(0,1).slow(8))`. **Flat/unlit
-by default**; `.shade(n)` (`0..1`) mixes in matte faceted lighting (no gloss).
+the rotations, e.g. `shape("cube").rotateX(saw.range(0,1).slow(8))`. **Matte-shaded
+by default** so they read as 3D (like a p5 `sphere`); `.shade(0)` flattens to an
+unlit silhouette, `.shade(1)` deepens the shading. No gloss.
 
 **Imported meshes** (real FBX geometry from `models/`, instanced + depth-tested,
 flat-shaded): `bong`. Same controls as the 3D shapes (`size`, the rotations,

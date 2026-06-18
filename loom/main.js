@@ -169,7 +169,10 @@ function spawn(value, onset) {
     vertex: v.vertex != null ? v.vertex : 0,
     weight: numAt(v.weight != null ? v.weight : 0.006, 0, phase),
     outline: v.outline != null ? numAt(v.outline, 0, phase) : null,   // stroke as a fraction of radius (overrides weight)
-    shade: numAt(v.shade != null ? v.shade : 0, 0, phase),            // 3D lighting amount (0 = flat/unlit)
+    // 3D shading amount. 3D primitives (cube/sphere/torus/octa, id 11–14) default
+    // to a matte shaded look so they read as 3D (like a p5 sphere); 2D shapes stay
+    // flat (0). Override either way with .shade(n).
+    shade: numAt(v.shade != null ? v.shade : (SHAPE_ID[v.shape] >= 11 && SHAPE_ID[v.shape] <= 14 ? 0.85 : 0), 0, phase),
     cap: v.cap || 'square',
     join: v.join || 'miter',
     open: numAt(v.open != null ? v.open : 0, 0, phase),
