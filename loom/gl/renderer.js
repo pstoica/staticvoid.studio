@@ -36,9 +36,16 @@ out vec3 vWPos;            // transformed position → per-face normal in the fr
 void main() {
   vec4 wp = instanceMatrix * vec4(position, 1.0);
   vWPos = wp.xyz;
+  // depth: each instance gets its own band (higher id = newer = nearer) so
+  // overlapping meshes don't interleave/z-fight; within the band, normalize by the
+  // instance scale so a small mesh keeps full self-occlusion precision.
+  float scale = max(length(instanceMatrix[0].xyz), 1.0);
+  float zl = clamp(wp.z / scale, -1.0, 1.0);          // +1 front .. -1 back, within the mesh
+  float inv = 1.0 / 512.0;
+  float z = -float(gl_InstanceID) * 2.0 * inv - zl * inv;
   gl_Position = vec4(2.0 * wp.x / uResolution.x - 1.0,
                      1.0 - 2.0 * wp.y / uResolution.y,
-                     clamp(-wp.z * 0.001, -0.999, 0.999), 1.0);   // z → depth (self-occlusion)
+                     clamp(z, -0.999, 0.999), 1.0);
   vTint = aTint;
 }`;
 const MESH_FRAG = `
