@@ -363,7 +363,8 @@ function cssToRGB(s) {
 const SHAPE_ID = { dot: 0, circle: 0, ring: 1, arc: 2, square: 3, box: 3, tri: 4, pent: 5, hex: 6, star: 7, plus: 8, line: 9, cross: 10,
   // 3D raymarched shapes (normal-shaded, tumbled by rotateX/rotateY/spin)
   cube: 11, box3: 11, sphere: 12, ball: 12, torus: 13, donut: 13, octa: 14, octahedron: 14,
-  bong: 15 };   // imported FBX mesh (renderer maps id >= 15 to a loaded model)
+  // imported FBX meshes (renderer maps id >= 15 to a model, lazy-loaded on first use)
+  bong: 15, knot: 16, amongus: 17, sus: 17, balloons: 18, balloon: 18, chain: 19 };
 const OUTLINE_IDS = new Set([1, 2, 9, 10]);
 const CAP_ID = { round: 0, butt: 1, square: 2 };   // line/cross caps (spawn defaults cap to 'square')
 const JOIN_ID = { miter: 0, round: 1, bevel: 2 };  // polygon corners (default miter = sharp)

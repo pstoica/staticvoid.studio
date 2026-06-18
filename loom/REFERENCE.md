@@ -58,9 +58,11 @@ read as 3D (like a p5 `sphere`); `.shade(0)` flattens to an unlit silhouette,
 them as a wireframe — edges for `cube`/`octa`, the grazing silhouette for `sphere`/`torus`.
 
 **Imported meshes** (real FBX geometry from `models/`, instanced + depth-tested):
-`bong`. Same controls as the 3D shapes — `size`, the rotations, `color`, and
-`.shade()` (matte by default, `.shade(0)` = flat/unlit). Loads async, so it
-appears a moment after first run.
+`bong` · `knot` · `amongus` (alias `sus`) · `balloons` (alias `balloon`) · `chain`.
+Same controls as the 3D shapes — `size`, the rotations, `color`, and `.shade()`
+(matte by default, `.shade(0)` = flat/unlit). Flat-tinted by their `.color()` —
+the models' own colours aren't used yet. Each is **lazy-loaded on first use**, so a
+mesh appears a moment after the patch first references it.
 
 ---
 

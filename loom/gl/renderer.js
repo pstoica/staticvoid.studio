@@ -19,8 +19,15 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 // ── imported 3D meshes (real geometry, instanced + depth-tested; flat-shaded to
 // match the SDF 3D shapes). name → file url, resolved via Vite asset handling. ──
-const MESH_URLS = { bong: new URL('../models/BONG.fbx', import.meta.url).href };
-const MESH_ID = { bong: 15 };          // shape ids for imported meshes (>= 15)
+const MESH_URLS = {
+  bong:     new URL('../models/BONG.fbx', import.meta.url).href,
+  knot:     new URL('../models/Circle.fbx', import.meta.url).href,   // a twisted torus knot
+  amongus:  new URL('../models/amongstus.fbx', import.meta.url).href,
+  balloons: new URL('../models/balloons.fbx', import.meta.url).href,
+  chain:    new URL('../models/chain1.fbx', import.meta.url).href,
+};
+const MESH_ID = { bong: 15, knot: 16, amongus: 17, balloons: 18, chain: 19 };  // shape ids >= 15
+const MESH_PRELOAD = ['bong'];   // fetched up front (the built-in preset uses it); rest load on first use
 const MAX_MESH = 1024;
 
 // flat instanced-mesh shaders: orthographic pixel→NDC projection (matching the
@@ -821,11 +828,15 @@ export class GLRenderer {
     // imported-mesh path (one draw per instance, depth-tested). meshes load async;
     // until a model arrives its glyphs simply don't draw.
     this.meshScene = new THREE.Scene();
-    this.meshObjs = {};          // id → THREE.Mesh
+    this.meshObjs = {};          // id → { solo, batch }, populated as models finish loading
     this._m4 = new THREE.Matrix4();
     this._euler = new THREE.Euler();
     this._v3 = new THREE.Vector3();
-    this._loadMeshes();
+    this._fbxLoader = new FBXLoader();
+    this._meshUrlById = {};      // id → file url, for lazy loading on first reference
+    for (const [name, id] of Object.entries(MESH_ID)) this._meshUrlById[id] = MESH_URLS[name];
+    this._meshLoading = new Set();
+    for (const name of MESH_PRELOAD) this._ensureMesh(MESH_ID[name]);
 
     // overlay scene (playhead + trace), drawn behind the glyphs with the ortho
     // camera (which maps pixel-space world coords → NDC). Both are thin lines.
@@ -1006,65 +1017,75 @@ export class GLRenderer {
     r.setRenderTarget(null);
   }
 
-  // load imported FBX meshes → position-only, centred, normalized to unit radius. Two
-  // draw paths share one geometry: an instanced `batch` for opaque instances (one cheap
-  // draw, hard occlusion is correct for solids) and a `solo` Mesh for translucent ones
-  // (rendered one at a time in _drawMeshes so they composite like 2D glyphs).
-  _loadMeshes() {
-    const loader = new FBXLoader();
+  // lazily fetch the FBX for a mesh id the first time a patch references it (so the
+  // page doesn't download every model up front). Idempotent: ignores ids already
+  // loaded or in flight.
+  _ensureMesh(id) {
+    if (this.meshObjs[id] || this._meshLoading.has(id)) return;
+    const url = this._meshUrlById[id];
+    if (!url) return;
+    this._meshLoading.add(id);
+    this._fbxLoader.load(url,
+      (root) => { this._meshLoading.delete(id); this._buildMesh(id, root); },
+      undefined,
+      (err) => { this._meshLoading.delete(id); console.warn('Loom: failed to load mesh', id, err); });
+  }
+
+  // build the render objects for a loaded FBX → position-only, centred, normalized to
+  // unit radius. Two draw paths share one geometry: an instanced `batch` for opaque
+  // instances (one cheap draw, hard occlusion is correct for solids) and a `solo` Mesh
+  // for translucent ones (rendered one at a time in _drawMeshes so they composite like
+  // 2D glyphs). Source materials/colours are dropped — meshes are flat-tinted today.
+  _buildMesh(id, root) {
+    const geos = [];
+    root.updateMatrixWorld(true);
+    root.traverse((c) => {
+      if (!c.isMesh || !c.geometry) return;
+      const src = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', src.getAttribute('position').clone());
+      g.applyMatrix4(c.matrixWorld);
+      geos.push(g);
+    });
+    if (!geos.length) return;
+    const geo = geos.length > 1 ? mergeGeometries(geos, false) : geos[0];
+    geo.computeBoundingSphere();
+    const c = geo.boundingSphere.center, rad = geo.boundingSphere.radius || 1;
+    geo.translate(-c.x, -c.y, -c.z);
+    geo.scale(1 / rad, 1 / rad, 1 / rad);
+    geo.deleteAttribute('normal');         // drop any imported normals…
+    geo.computeVertexNormals();            // …rebuild per-face (non-indexed → flat)
+    geo.setAttribute('aTint', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH * 4), 4));
+    geo.setAttribute('aShade', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH), 1));
+
     const blend = {
       blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
       blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
     };
-    for (const [name, url] of Object.entries(MESH_URLS)) {
-      loader.load(url, (root) => {
-        const geos = [];
-        root.updateMatrixWorld(true);
-        root.traverse((c) => {
-          if (!c.isMesh || !c.geometry) return;
-          const src = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry;
-          const g = new THREE.BufferGeometry();
-          g.setAttribute('position', src.getAttribute('position').clone());
-          g.applyMatrix4(c.matrixWorld);
-          geos.push(g);
-        });
-        if (!geos.length) return;
-        const geo = geos.length > 1 ? mergeGeometries(geos, false) : geos[0];
-        geo.computeBoundingSphere();
-        const c = geo.boundingSphere.center, rad = geo.boundingSphere.radius || 1;
-        geo.translate(-c.x, -c.y, -c.z);
-        geo.scale(1 / rad, 1 / rad, 1 / rad);
-        geo.deleteAttribute('normal');         // drop any imported normals…
-        geo.computeVertexNormals();            // …rebuild per-face (non-indexed → flat)
-        geo.setAttribute('aTint', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH * 4), 4));
-        geo.setAttribute('aShade', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH), 1));
+    const soloMat = new THREE.RawShaderMaterial({
+      glslVersion: THREE.GLSL3,
+      uniforms: {
+        uResolution: this.uniforms.uResolution,   // shared, kept in sync on resize
+        uModel: { value: new THREE.Matrix4() },
+        uTint: { value: new THREE.Vector4(1, 1, 1, 1) },
+        uShade: { value: 0 },
+      },
+      vertexShader: MESH_VERT, fragmentShader: MESH_FRAG,
+      transparent: true, depthTest: true, depthWrite: true, side: THREE.DoubleSide, ...blend,
+    });
+    const solo = new THREE.Mesh(geo, soloMat);
+    solo.frustumCulled = false; solo.visible = false;
 
-        const soloMat = new THREE.RawShaderMaterial({
-          glslVersion: THREE.GLSL3,
-          uniforms: {
-            uResolution: this.uniforms.uResolution,   // shared, kept in sync on resize
-            uModel: { value: new THREE.Matrix4() },
-            uTint: { value: new THREE.Vector4(1, 1, 1, 1) },
-            uShade: { value: 0 },
-          },
-          vertexShader: MESH_VERT, fragmentShader: MESH_FRAG,
-          transparent: true, depthTest: true, depthWrite: true, side: THREE.DoubleSide, ...blend,
-        });
-        const solo = new THREE.Mesh(geo, soloMat);
-        solo.frustumCulled = false; solo.visible = false;
+    const batchMat = new THREE.RawShaderMaterial({
+      glslVersion: THREE.GLSL3, uniforms: { uResolution: this.uniforms.uResolution },
+      vertexShader: MESH_VERT_INST, fragmentShader: MESH_FRAG,
+      transparent: true, depthTest: true, depthWrite: true, side: THREE.DoubleSide, ...blend,
+    });
+    const batch = new THREE.InstancedMesh(geo, batchMat, MAX_MESH);
+    batch.frustumCulled = false; batch.count = 0; batch.visible = false;
 
-        const batchMat = new THREE.RawShaderMaterial({
-          glslVersion: THREE.GLSL3, uniforms: { uResolution: this.uniforms.uResolution },
-          vertexShader: MESH_VERT_INST, fragmentShader: MESH_FRAG,
-          transparent: true, depthTest: true, depthWrite: true, side: THREE.DoubleSide, ...blend,
-        });
-        const batch = new THREE.InstancedMesh(geo, batchMat, MAX_MESH);
-        batch.frustumCulled = false; batch.count = 0; batch.visible = false;
-
-        this.meshScene.add(batch); this.meshScene.add(solo);
-        this.meshObjs[MESH_ID[name]] = { solo, batch };
-      }, undefined, (err) => console.warn('Loom: failed to load mesh', name, err));
-    }
+    this.meshScene.add(batch); this.meshScene.add(solo);
+    this.meshObjs[id] = { solo, batch };
   }
 
   // draw all imported-mesh glyphs in `parts` into the current target. Two phases:
@@ -1075,7 +1096,6 @@ export class GLRenderer {
   // A is drawn first, so in a mixed scene opaque sits behind translucent.
   _drawMeshes(parts, target) {
     if (!parts.length) return;
-    if (!Object.keys(this.meshObjs).length) return;
     const r = this.renderer, out = this._scratch, minDim = this._minDim, resolve = this._resolve;
     for (const k in this.meshObjs) { const e = this.meshObjs[k]; e.batch.count = 0; e.batch.visible = false; e.solo.visible = false; }
     const solos = (this._soloList || (this._soloList = []));
@@ -1085,7 +1105,7 @@ export class GLRenderer {
     for (let i = 0; i < parts.length && drew < MAX_MESH; i++) {
       resolve(parts[i], minDim, out);
       const entry = this.meshObjs[out.shape];
-      if (!entry) continue;
+      if (!entry) { if (out.shape >= 15) this._ensureMesh(out.shape); continue; }  // lazy-load on first use
       this._euler.set(out.rotX, out.rotY, out.rot, 'XYZ');
       this._m4.makeRotationFromEuler(this._euler);
       this._m4.scale(this._v3.set(out.r, out.r, out.r));
