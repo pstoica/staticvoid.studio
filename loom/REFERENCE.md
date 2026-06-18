@@ -180,6 +180,7 @@ filled, outlined, or both. All four are patterns, so `.fill("1 0")`,
 | `.vertex(on)` | draw a dot at each of the shape's vertices |
 | `.weight(w)` | stroke / line / vertex-dot size, absolute (`0..0.1` of `min(w,h)`) |
 | `.outline(f)` | stroke size relative to the shape's radius (scales with `size`); overrides `weight` |
+| `.shade(n)` | `0..1` — 3D-ify: 2D shapes puff into glossy plastic toys (`ring` → tube); 3D shapes get matte faceted lighting |
 | `.cap(s)` | line ends: `"round"` (default) `"butt"` `"square"` |
 | `.join(s)` | corners: `"miter"` (default, sharp) `"round"` `"bevel"` |
 

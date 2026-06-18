@@ -343,9 +343,33 @@ void main(){
     float vd = vertDist(q, id, vR, vOpen);
     cov = max(cov, 1.0 - smoothstep(vr - aa, vr + aa, vd));
   }
+  // .shade(n) on a 2D shape → glossy "plastic toy" puff: fake a domed normal from
+  // the SDF (screen-space derivatives) and add diffuse + a tight specular.
+  vec3 outColor = vColor;
+  if (vShade > 0.001 && !capped) {
+    vec3 N;
+    if (openCurve) {                         // ring / arc → a torus-like tube
+      float sc = length(q) - vR;             // signed across the tube
+      float zz = sqrt(max(1.0 - sc * sc / (hw * hw), 0.0));
+      vec2 rad = length(q) > 1e-4 ? normalize(q) : vec2(0.0);
+      N = normalize(vec3(rad * (sc / hw), zz + 1e-3));
+    } else {                                 // filled shape → a domed pillow
+      float depth = -d;                      // depth inside the fill
+      float br = max(vShade * vR, 1.0);      // dome radius (shade 1 = full puff)
+      float tt = clamp(depth / br, 0.0, 1.0);
+      float zz = sqrt(max(1.0 - (1.0 - tt) * (1.0 - tt), 0.0));
+      vec2 g = vec2(dFdx(d), -dFdy(d));      // ∇d, outward (flip y → maths up)
+      float gl = length(g); vec2 dir = gl > 1e-5 ? g / gl : vec2(0.0);
+      N = normalize(vec3(dir * (1.0 - zz), zz + 1e-3));
+    }
+    vec3 L = normalize(vec3(-0.3, 0.5, 0.8));
+    float diff = max(dot(N, L), 0.0);
+    float spec = pow(max(dot(N, normalize(L + vec3(0.0, 0.0, 1.0))), 0.0), 28.0);
+    outColor = clamp(vColor * (0.45 + 0.6 * diff) + vec3(spec) * 0.75, 0.0, 1.0);
+  }
   if (cov <= 0.0) discard;
   float a = clamp(vAlpha * cov, 0.0, 1.0);
-  fragColor = vec4(vColor * a, a);        // premultiplied — blends set the factors
+  fragColor = vec4(outColor * a, a);      // premultiplied — blends set the factors
 }`;
 
 // ── fullscreen post-process passes (per-group FX chain) ──────────────────────────
