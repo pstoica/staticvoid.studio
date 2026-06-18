@@ -71,6 +71,34 @@ void main() {
   float a = clamp(vTint.a, 0.0, 1.0);
   fragColor = vec4(clamp(vTint.rgb * shade, 0.0, 1.0) * a, a);   // premultiplied
 }`;
+// instanced variant of MESH_VERT for the OPAQUE batch: many solid meshes in one draw.
+// Opaque objects can share a depth buffer (hard occlusion is the correct result), so we
+// skip the per-instance compositing and just order coincident instances by a per-id
+// depth band (higher gl_InstanceID = newer = nearer). Shares MESH_FRAG.
+const MESH_VERT_INST = `
+precision highp float;
+uniform vec2 uResolution;
+in vec3 position;
+in vec3 normal;
+in mat4 instanceMatrix;
+in vec4 aTint;             // rgb + alpha
+in float aShade;          // 0 = flat/unlit, 1 = faceted lighting
+out vec4 vTint;
+out float vShade;
+out vec3 vN;
+void main() {
+  vShade = aShade;
+  vec4 wp = instanceMatrix * vec4(position, 1.0);
+  vN = mat3(instanceMatrix) * normal;
+  float scale = max(length(instanceMatrix[0].xyz), 1.0);
+  float zl = clamp(wp.z / scale, -1.0, 1.0);          // +1 front .. -1 back, within the mesh
+  float inv = 1.0 / 2048.0;                           // band per instance (≈1000 before saturation)
+  float z = -float(gl_InstanceID) * 2.0 * inv - zl * inv;
+  gl_Position = vec4(2.0 * wp.x / uResolution.x - 1.0,
+                     1.0 - 2.0 * wp.y / uResolution.y,
+                     clamp(z, -0.999, 0.999), 1.0);
+  vTint = aTint;
+}`;
 
 // shape name → SDF id (kept in sync with the switch in the fragment shader and
 // with SHAPE_ID in main.js).  0 circle/dot · 1 ring · 2 arc · 3 square/box ·
@@ -978,11 +1006,16 @@ export class GLRenderer {
     r.setRenderTarget(null);
   }
 
-  // load imported FBX meshes → position-only, centred, normalized to unit radius,
-  // wrapped in a depth-tested flat material. Rendered one instance at a time (see
-  // _drawMeshes) so instances composite like 2D glyphs instead of occluding each other.
+  // load imported FBX meshes → position-only, centred, normalized to unit radius. Two
+  // draw paths share one geometry: an instanced `batch` for opaque instances (one cheap
+  // draw, hard occlusion is correct for solids) and a `solo` Mesh for translucent ones
+  // (rendered one at a time in _drawMeshes so they composite like 2D glyphs).
   _loadMeshes() {
     const loader = new FBXLoader();
+    const blend = {
+      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+      blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    };
     for (const [name, url] of Object.entries(MESH_URLS)) {
       loader.load(url, (root) => {
         const geos = [];
@@ -1003,7 +1036,10 @@ export class GLRenderer {
         geo.scale(1 / rad, 1 / rad, 1 / rad);
         geo.deleteAttribute('normal');         // drop any imported normals…
         geo.computeVertexNormals();            // …rebuild per-face (non-indexed → flat)
-        const mat = new THREE.RawShaderMaterial({
+        geo.setAttribute('aTint', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH * 4), 4));
+        geo.setAttribute('aShade', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH), 1));
+
+        const soloMat = new THREE.RawShaderMaterial({
           glslVersion: THREE.GLSL3,
           uniforms: {
             uResolution: this.uniforms.uResolution,   // shared, kept in sync on resize
@@ -1012,51 +1048,90 @@ export class GLRenderer {
             uShade: { value: 0 },
           },
           vertexShader: MESH_VERT, fragmentShader: MESH_FRAG,
-          transparent: true, depthTest: true, depthWrite: true, side: THREE.DoubleSide,
-          blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
-          blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+          transparent: true, depthTest: true, depthWrite: true, side: THREE.DoubleSide, ...blend,
         });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.frustumCulled = false; mesh.visible = false;
-        this.meshScene.add(mesh);
-        this.meshObjs[MESH_ID[name]] = mesh;
+        const solo = new THREE.Mesh(geo, soloMat);
+        solo.frustumCulled = false; solo.visible = false;
+
+        const batchMat = new THREE.RawShaderMaterial({
+          glslVersion: THREE.GLSL3, uniforms: { uResolution: this.uniforms.uResolution },
+          vertexShader: MESH_VERT_INST, fragmentShader: MESH_FRAG,
+          transparent: true, depthTest: true, depthWrite: true, side: THREE.DoubleSide, ...blend,
+        });
+        const batch = new THREE.InstancedMesh(geo, batchMat, MAX_MESH);
+        batch.frustumCulled = false; batch.count = 0; batch.visible = false;
+
+        this.meshScene.add(batch); this.meshScene.add(solo);
+        this.meshObjs[MESH_ID[name]] = { solo, batch };
       }, undefined, (err) => console.warn('Loom: failed to load mesh', name, err));
     }
   }
 
-  // draw all imported-mesh glyphs in `parts` into the current target. Each instance is
-  // rendered on its own (depth cleared between them) so a single mesh resolves to one
-  // surface per pixel (no see-through when alpha < 1) while instances composite in paint
-  // order — translucent, blending through each other and the background like 2D glyphs,
-  // instead of hard-occluding via a shared depth buffer.
+  // draw all imported-mesh glyphs in `parts` into the current target. Two phases:
+  //   A) opaque instances (authored alpha ≈ 1) → one instanced batch per mesh, hard
+  //      occlusion via depth bands (correct for solids) — cheap, scales to many.
+  //   B) translucent instances → rendered one at a time (depth cleared between) so each
+  //      resolves to a single surface yet composites like a 2D glyph, blending through.
+  // A is drawn first, so in a mixed scene opaque sits behind translucent.
   _drawMeshes(parts, target) {
     if (!parts.length) return;
     if (!Object.keys(this.meshObjs).length) return;
     const r = this.renderer, out = this._scratch, minDim = this._minDim, resolve = this._resolve;
-    for (const k in this.meshObjs) this.meshObjs[k].visible = false;
-    r.setRenderTarget(target);
+    for (const k in this.meshObjs) { const e = this.meshObjs[k]; e.batch.count = 0; e.batch.visible = false; e.solo.visible = false; }
+    const solos = (this._soloList || (this._soloList = []));
+    solos.length = 0;
     let drew = 0;
+
     for (let i = 0; i < parts.length && drew < MAX_MESH; i++) {
       resolve(parts[i], minDim, out);
-      const mesh = this.meshObjs[out.shape];
-      if (!mesh) continue;
+      const entry = this.meshObjs[out.shape];
+      if (!entry) continue;
       this._euler.set(out.rotX, out.rotY, out.rot, 'XYZ');
       this._m4.makeRotationFromEuler(this._euler);
       this._m4.scale(this._v3.set(out.r, out.r, out.r));
       this._m4.setPosition(out.x, out.y, 0);
-      const u = mesh.material.uniforms;
-      u.uModel.value.copy(this._m4);
-      u.uTint.value.set(out.rgb[0], out.rgb[1], out.rgb[2], out.alpha);
-      u.uShade.value = out.shade;
-      mesh.visible = true;
-      r.clear(false, true, false);            // clear depth only (accumulated colour kept)
-      const m = mesh.material;
-      m.colorWrite = false; m.depthWrite = true; m.depthFunc = THREE.LessEqualDepth;
-      r.render(this.meshScene, this.camera);  // depth pre-pass: this instance's nearest faces
-      m.colorWrite = true; m.depthWrite = false; m.depthFunc = THREE.EqualDepth;
-      r.render(this.meshScene, this.camera);  // one premultiplied layer over the accumulator
-      mesh.visible = false;
+      if (out.baseAlpha >= 0.999) {            // opaque → instanced batch
+        const b = entry.batch, n = b.count;
+        if (n >= MAX_MESH) continue;
+        b.setMatrixAt(n, this._m4);
+        const t = b.geometry.getAttribute('aTint').array;
+        t[n * 4] = out.rgb[0]; t[n * 4 + 1] = out.rgb[1]; t[n * 4 + 2] = out.rgb[2]; t[n * 4 + 3] = out.alpha;
+        b.geometry.getAttribute('aShade').array[n] = out.shade;
+        b.count = n + 1;
+      } else {                                 // translucent → per-instance, in paint order
+        solos.push({ solo: entry.solo, m: this._m4.clone(), rgb: out.rgb.slice(0, 3), a: out.alpha, shade: out.shade });
+      }
       drew++;
+    }
+
+    r.setRenderTarget(target);
+
+    // ── phase A: opaque batch (two-pass so envelope fades still show one face/pixel) ──
+    const batches = [];
+    for (const k in this.meshObjs) { const b = this.meshObjs[k].batch; if (b.count > 0) { b.visible = true; b.instanceMatrix.needsUpdate = true; b.geometry.getAttribute('aTint').needsUpdate = true; b.geometry.getAttribute('aShade').needsUpdate = true; batches.push(b); } }
+    if (batches.length) {
+      r.clear(false, true, false);
+      for (const b of batches) { const m = b.material; m.colorWrite = false; m.depthWrite = true; m.depthFunc = THREE.LessEqualDepth; }
+      r.render(this.meshScene, this.camera);
+      for (const b of batches) { const m = b.material; m.colorWrite = true; m.depthWrite = false; m.depthFunc = THREE.EqualDepth; }
+      r.render(this.meshScene, this.camera);
+      for (const b of batches) b.visible = false;
+    }
+
+    // ── phase B: translucent, one instance per pass, composited in spawn order ──
+    for (const s of solos) {
+      const u = s.solo.material.uniforms;
+      u.uModel.value.copy(s.m);
+      u.uTint.value.set(s.rgb[0], s.rgb[1], s.rgb[2], s.a);
+      u.uShade.value = s.shade;
+      s.solo.visible = true;
+      r.clear(false, true, false);
+      const m = s.solo.material;
+      m.colorWrite = false; m.depthWrite = true; m.depthFunc = THREE.LessEqualDepth;
+      r.render(this.meshScene, this.camera);
+      m.colorWrite = true; m.depthWrite = false; m.depthFunc = THREE.EqualDepth;
+      r.render(this.meshScene, this.camera);
+      s.solo.visible = false;
     }
   }
 
