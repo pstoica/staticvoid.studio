@@ -636,7 +636,12 @@ void main() {
 }`;
 
 // rgb shift / chromatic aberration: sample R and B at opposite offsets (unpremult,
-// recombine), leaving G centred — the classic split-channel fringe.
+// recombine), leaving G centred — the classic split-channel fringe. The output keeps
+// the ORIGINAL (centre) alpha, so the hue separates WITHIN the existing silhouette
+// instead of the alpha expanding to the union of the three samples. (Using the union
+// stamped coverage where a channel carried no colour — e.g. the red sample landing
+// inside a blue shape — premultiplying to a near-black pixel that darkened whatever
+// was behind it.)
 const RGBSHIFT_FRAG = `
 precision highp float;
 uniform sampler2D tMap;
@@ -648,8 +653,7 @@ void main() {
   vec4 cb = texture2D(tMap, vUv - uOffset);
   float ar = cr.a, ag = cg.a, ab = cb.a;
   vec3 col = vec3(ar > 0.0 ? cr.r / ar : 0.0, ag > 0.0 ? cg.g / ag : 0.0, ab > 0.0 ? cb.b / ab : 0.0);
-  float a = max(ar, max(ag, ab));
-  gl_FragColor = vec4(col * a, a);
+  gl_FragColor = vec4(col * ag, ag);   // keep the centre (original) alpha
 }`;
 
 // posterize: quantize each channel to N levels
