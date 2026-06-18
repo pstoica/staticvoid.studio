@@ -128,6 +128,27 @@ class Pattern {
   mul(arg) { return appLeft(this.fmap((l) => (r) => l * r), reify(arg)); }
   div(arg) { return appLeft(this.fmap((l) => (r) => l / r), reify(arg)); }
   quantize(n) { return this.fmap((v) => Math.round(v * n) / n); } // snap to nearest 1/n
+  // segment(n): sample this pattern n times per cycle on an EVEN time grid and hold
+  // each value for its 1/n slice. Turns a continuous signal (sine/perlin/…) into n
+  // rhythmic, time-quantized steps — Tidal's `segment`/`discretise`. (quantize() steps
+  // the VALUE; segment() steps the TIME.) Sample is frozen at each slice's midpoint, so
+  // it holds steady across the slice no matter when it's read.
+  segment(n) {
+    const src = this;
+    const grid = pure(0)._fast(n);                  // n equal slices per cycle (timing only)
+    return new Pattern((s) => grid.query(s).flatMap((h) => {
+      if (!h.whole) return [];
+      const w = h.whole, t = (w.begin + w.end) / 2; // slice + its midpoint (fixed per slice)
+      // Sample over the WHOLE slice, not an instant: a signal returns its midpoint value,
+      // and a discrete/ranged source keeps a finite (non-collapsing) part. Pick whatever
+      // covers the midpoint so it's the same value no matter when the slice is read.
+      const vs = src.query(span(w.begin, w.end));
+      const pick = vs.find((x) => x.part.begin <= t + EPS && t < x.part.end + EPS) || vs[vs.length - 1];
+      const v = pick ? pick.value : undefined;
+      return v == null ? [] : [hap(w, h.part, v)];
+    }));
+  }
+  seg(n) { return this.segment(n); }                // Strudel alias
 
   // ── control setters (structure from the left, value sampled from the right) ──
   set(name, arg) {

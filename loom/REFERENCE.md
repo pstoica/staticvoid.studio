@@ -255,6 +255,10 @@ a control takes a value.
 | --- | --- |
 | `.range(lo, hi)` | remap a `0..1` signal into `[lo, hi]`; **`lo`/`hi` may each be a number, pattern, or osc** |
 | `.add(x)` `.sub(x)` `.mul(x)` `.div(x)` | arithmetic; **`x` may be a number or a pattern** |
+| `.quantize(n)` | snap the **value** to `n` steps (`Math.round(v*n)/n`). Discrete bands, but a continuous signal still crosses them on its own (uneven) timing |
+| `.segment(n)` (alias `.seg`) | snap the **time**: resample `n` times per cycle on an even grid and hold each value — Tidal's `segment`/`discretise`. `quantize` steps the value, `segment` steps the time |
+
+`quantize` snaps amplitude, not time, so `sine.quantize(4)` lingers at the peaks/troughs (where the sine is slow) and flickers through the middle. For even rhythmic steps use `.segment(n)` (or drive it with a time-linear ramp like `saw`/`tri`). They compose: `perlin.segment(8).quantize(4)` = organic walk, plucked on 8ths, into 4 colours. `palette("rainbow").at(perlin.range(0,1).segment(8))` plucks the background on a grid.
 
 ### Live oscillators
 
