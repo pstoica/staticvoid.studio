@@ -305,6 +305,8 @@ function irand(k) { return signal((t) => Math.floor(timeRand(t) * k)); }
 // Unlike a signal (which is sampled once at a glyph's onset and frozen) an osc
 // keeps running over the glyph's whole lifetime, evaluated each frame against its
 // age. osc(rate, shape).range(lo, hi). Shapes: sine saw tri square rand perlin fbm.
+// Tempo-synced by default: rate is cycles-per-cycle, so it rides the clock and the
+// drawn structure is the same at any tempo. Use .free() for real-time (rate in Hz).
 function osc(rate = 1, shape = 'sine') { return makeOsc({ shape, rate, lo: 0, hi: 1, phase: 0 }); }
 function makeOsc(o) {
   return {
@@ -316,6 +318,10 @@ function makeOsc(o) {
     drift(r = 0.1) { return makeOsc({ ...o, drift: r }); }, // starting phase advances over global time = r × spawn seconds
     fast(n) { return makeOsc({ ...o, rate: o.rate * n }); },
     slow(n) { return makeOsc({ ...o, rate: o.rate / n }); },
+    // tempo: synced by default (rate is cycles-per-cycle, so structure holds across
+    // tempo changes). .free() makes it real-time again (rate in Hz, cycles-per-second).
+    free(v = true) { return makeOsc({ ...o, free: v }); },
+    sync(v = true) { return makeOsc({ ...o, free: !v }); },
     // arithmetic on the osc's output (x may be a number or another osc), applied
     // after range, evaluated live by the renderer.
     add(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['+', x]] }); },

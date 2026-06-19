@@ -270,12 +270,19 @@ frame against the glyph's age, like `spin` does for rotation. So a dot can keep
 moving, its colour can cycle, its size can breathe, *after* it's drawn.
 
 ```js
-osc(rate, "sine").range(lo, hi)   // rate in cycles/sec; default range 0..1
+osc(rate, "sine").range(lo, hi)   // rate = cycles per cycle (tempo-synced); range 0..1
 ```
+
+**Tempo-synced by default**: `rate` is cycles-*per-cycle*, so an osc rides the clock —
+change the tempo (`cps`) and the drawn structure stays the same, the whole animation
+just speeds up or slows down with it. `.free()` switches an osc back to real-time (rate
+in Hz, cycles-per-*second*) — useful when you want a wobble that ignores the tempo. (A
+glyph's lifetime is a fixed number of cycles, so under `.free()` it sweeps a tempo-
+dependent amount of its path and the structure shifts with tempo; synced, it doesn't.)
 
 Shapes: `sine` `saw` `tri` `square` `rand` `perlin` `fbm` (perlin/fbm are the
 smooth, organic, livelier ones). Chainable: `.range(lo, hi)` `.rate(r)`
-`.phase(p)` `.spread(n)` `.drift(r)` `.fast(n)` `.slow(n)`. The `lo`/`hi` of an osc's
+`.phase(p)` `.spread(n)` `.drift(r)` `.fast(n)` `.slow(n)` `.free()`. The `lo`/`hi` of an osc's
 `.range` may themselves be oscs, so the range can move: `osc(2).range(0, osc(0.1).range(0.4, 1))`.
 
 **Phase offsets — `phase` / `spread` / `drift`.** An osc's phase is one sum of

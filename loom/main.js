@@ -280,8 +280,13 @@ function evalOsc(d, age, gp = 0, st = 0) {
   // every parameter may itself be an oscillator → cross-modulation (FM via rate,
   // PM via phase, AM via range lo/hi). gp = the glyph's onset phase, st = the
   // glyph's spawn time (seconds) → .drift() advances the starting phase over time.
+  // Tempo-synced by default: convert the seconds-based terms (age, spawn time) to
+  // cycles via cps, so rate is cycles-per-cycle and the structure is the same at any
+  // tempo. .free() keeps them in real seconds (rate in Hz). phase/spread are already
+  // cycle-relative, so they're unscaled.
+  const k = d.free ? 1 : cps;
   const rate = numAt(d.rate, age, gp, st);
-  const t = age * rate + numAt(d.phase || 0, age, gp, st) + numAt(d.spread || 0, age, gp, st) * gp + numAt(d.drift || 0, age, gp, st) * st;
+  const t = age * k * rate + numAt(d.phase || 0, age, gp, st) + numAt(d.spread || 0, age, gp, st) * gp + numAt(d.drift || 0, age, gp, st) * st * k;
   const f = t - Math.floor(t);
   let v;
   switch (d.shape) {
@@ -756,7 +761,7 @@ function tick(dt) {
 
 // debug stepper, lets tooling drive frames when the tab is backgrounded (the
 // browser pauses requestAnimationFrame while hidden). Harmless in production.
-window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); }, particles, setDecay: (v) => { decayScale = v; }, glr };
+window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); }, particles, setDecay: (v) => { decayScale = v; }, setCps, glr };
 
 // ── presets ───────────────────────────────────────────────────────────────────────
 const PRESETS = {
