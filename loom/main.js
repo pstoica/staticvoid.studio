@@ -196,12 +196,14 @@ function spawn(value, onset) {
     alpha: numAt(v.alpha != null ? v.alpha : 1, 0, phase),
     blend: v.blend || 'source-over',
     age: 0,
+    ageCycles: 0,              // age in CYCLES, accumulated per frame → tempo-synced oscs survive a live cps change
     attack: v.attack != null ? v.attack : 0.06,
     // fade-out seconds; default ~1 cycle. The master slider is baked in HERE so
     // each glyph keeps the decay it was born with.
     decay: ((v.decay != null ? v.decay : 1.0) / cps) * decayScale,
     mods: mods.length ? mods : null,
-    spawnT: elapsed,           // global seconds at spawn → osc().drift() reads this
+    spawnT: elapsed,           // global seconds at spawn → osc().drift() (free) reads this
+    spawnCycle: cycle,         // global cycle at spawn → osc().drift() (synced) reads this
     gid: v._gid || 0,          // group layer id (0 = ungrouped, drawn to main canvas)
     fx: v._fx || null,         // group effect params (e.g. { pixelate })
     echoFam: v._echoFam || 0,  // echo() family (0 = not an echo layer); gid is its frozen generation
@@ -288,17 +290,18 @@ const MOD_FIELDS = ['size', 'color', 'rotate', 'rotateX', 'rotateY', 'open', 'al
 const _h1 = (x) => { const s = Math.sin((x + 0.123) * 12.9898) * 43758.5453; return s - Math.floor(s); };
 const _snoise = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return _h1(i) * (1 - u) + _h1(i + 1) * u; };
 const _fbm = (x) => { let s = 0, a = 1, fr = 1, n = 0; for (let o = 0; o < 4; o++) { s += _snoise(x * fr) * a; n += a; fr *= 2; a *= 0.5; } return s / n; };
-function evalOsc(d, age, gp = 0, st = 0) {
+function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
   // every parameter may itself be an oscillator → cross-modulation (FM via rate,
-  // PM via phase, AM via range lo/hi). gp = the glyph's onset phase, st = the
-  // glyph's spawn time (seconds) → .drift() advances the starting phase over time.
-  // Tempo-synced by default: convert the seconds-based terms (age, spawn time) to
-  // cycles via cps, so rate is cycles-per-cycle and the structure is the same at any
-  // tempo. .free() keeps them in real seconds (rate in Hz). phase/spread are already
-  // cycle-relative, so they're unscaled.
-  const k = d.free ? 1 : cps;
-  const rate = numAt(d.rate, age, gp, st);
-  const t = age * k * rate + numAt(d.phase || 0, age, gp, st) + numAt(d.spread || 0, age, gp, st) * gp + numAt(d.drift || 0, age, gp, st) * st * k;
+  // PM via phase, AM via range lo/hi). gp = the glyph's onset phase. The osc's running
+  // time is measured in CYCLES by default (rate is cycles-per-cycle), so the drawn
+  // structure is the same at any tempo. ageC/stC are the cycle-accumulated age and spawn
+  // cycle — passed by live callers so a tempo change doesn't retroactively warp anything;
+  // they fall back to age*cps for frozen/initial evaluation. .free() switches back to real
+  // seconds (rate in Hz). phase/spread are already cycle-relative, so they're unscaled.
+  const trun = d.free ? age : (ageC != null ? ageC : age * cps);
+  const tdrift = d.free ? st : (stC != null ? stC : st * cps);
+  const rate = numAt(d.rate, age, gp, st, ageC, stC);
+  const t = trun * rate + numAt(d.phase || 0, age, gp, st, ageC, stC) + numAt(d.spread || 0, age, gp, st, ageC, stC) * gp + numAt(d.drift || 0, age, gp, st, ageC, stC) * tdrift;
   const f = t - Math.floor(t);
   let v;
   switch (d.shape) {
@@ -311,17 +314,17 @@ function evalOsc(d, age, gp = 0, st = 0) {
     case 'fbm': v = _fbm(t); break;                       // organic, multi-octave
     default: v = (Math.sin(TAU * t) + 1) / 2;             // sine
   }
-  const lo = numAt(d.lo, age, gp, st), hi = numAt(d.hi, age, gp, st);
+  const lo = numAt(d.lo, age, gp, st, ageC, stC), hi = numAt(d.hi, age, gp, st, ageC, stC);
   let r = lo + v * (hi - lo);
   if (d.ops) for (const [op, x] of d.ops) {            // .add/.sub/.mul/.div/.quantize (x may be an osc)
-    const y = numAt(x, age, gp, st);
+    const y = numAt(x, age, gp, st, ageC, stC);
     r = op === '*' ? r * y : op === '+' ? r + y : op === '-' ? r - y : op === '/' ? r / y : op === 'q' ? Math.round(r * y) / y : r;
   }
   return r;
 }
-const numAt = (a, age, gp = 0, st = 0) => (isOsc(a) ? evalOsc(a.__osc, age, gp, st) : a);
+const numAt = (a, age, gp = 0, st = 0, ageC = null, stC = null) => (isOsc(a) ? evalOsc(a.__osc, age, gp, st, ageC, stC) : a);
 // resolve an oscillator-driven colour: through a palette if attached, else as hue
-const oscColor = (d, age, gp, st = 0) => (d.pal ? interpPal(d.pal, evalOsc(d, age, gp, st)) : resolveColor(evalOsc(d, age, gp, st), gp));
+const oscColor = (d, age, gp, st = 0, ageC = null, stC = null) => (d.pal ? interpPal(d.pal, evalOsc(d, age, gp, st, ageC, stC)) : resolveColor(evalOsc(d, age, gp, st, ageC, stC), gp));
 
 // ── colour → rgb float triples (0..1), for the WebGL renderer ──────────────────
 // The Canvas2D path works in CSS colour strings; WebGL wants float rgb. These
@@ -366,7 +369,7 @@ function resolveColorRGB(c, phase) {
   if (typeof c === 'number') { const rgb = hslRGB(((c * 360) % 360 + 360) % 360, 0.82, 0.64); return [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255]; }
   const rgb = hexToRGB01(PALETTE[Math.floor(phase * PALETTE.length) % PALETTE.length]); return rgb;
 }
-const oscColorRGB = (d, age, gp, st = 0) => (d.pal ? interpPalRGB(d.pal, evalOsc(d, age, gp, st)) : resolveColorRGB(evalOsc(d, age, gp, st), gp));
+const oscColorRGB = (d, age, gp, st = 0, ageC = null, stC = null) => (d.pal ? interpPalRGB(d.pal, evalOsc(d, age, gp, st, ageC, stC)) : resolveColorRGB(evalOsc(d, age, gp, st, ageC, stC), gp));
 // parse a captured CSS colour string (resolveColor output: '#…', 'rgb(…)', 'hsl(h s% l%)')
 function cssToRGB(s) {
   if (typeof s !== 'string') return [1, 1, 1];
@@ -389,12 +392,12 @@ const OUTLINE_IDS = new Set([1, 2, 9, 10]);
 const CAP_ID = { round: 0, butt: 1, square: 2 };   // line/cross caps (spawn defaults cap to 'square')
 const JOIN_ID = { miter: 0, round: 1, bevel: 2 };  // polygon corners (default miter = sharp)
 function glResolve(p, minDim, out) {
-  const age = p.age;
+  const age = p.age, ageC = p.ageCycles, stC = p.spawnCycle;
   let sizePx = p.size, rotTurns = p.rotTurns, rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline, shade = p.shade, color = null;
   if (p.mods) for (const m of p.mods) {
-    const val = evalOsc(m.osc, age, p.phase, p.spawnT);
+    const val = evalOsc(m.osc, age, p.phase, p.spawnT, ageC, stC);
     if (m.field === 'size') sizePx = val * minDim;
-    else if (m.field === 'color') color = oscColorRGB(m.osc, age, p.phase, p.spawnT);
+    else if (m.field === 'color') color = oscColorRGB(m.osc, age, p.phase, p.spawnT, ageC, stC);
     else if (m.field === 'rotate') rotTurns = val;
     else if (m.field === 'rotateX') rotX = val * TAU;
     else if (m.field === 'rotateY') rotY = val * TAU;
@@ -432,7 +435,7 @@ function glResolve(p, minDim, out) {
 // sampled at the current cycle. Numbers pass through.
 function evalGlobal(param, cycle, elapsed) {
   if (param == null) return param;
-  if (isOsc(param)) return evalOsc(param.__osc, elapsed, 0);
+  if (isOsc(param)) return evalOsc(param.__osc, elapsed, 0, 0, cycle, 0);   // cycle = tempo-synced time
   if (param instanceof DSL.Pattern) {
     // a tiny forward window, not a zero-width span: discrete patterns (mini
     // sequences) collapse to their first step when sampled at an instant.
@@ -447,7 +450,7 @@ function evalGlobal(param, cycle, elapsed) {
 // Like a control's colour: number/string/palette = constant, osc = live (elapsed),
 // pattern = sampled at the cycle, so bg("<#000 #103>"), bg(osc(...)) etc. animate.
 function bgEval(src, cycle, elapsed) {
-  if (isOsc(src)) return oscColor(src.__osc, elapsed, 0);
+  if (isOsc(src)) return oscColor(src.__osc, elapsed, 0, 0, cycle, 0);   // cycle = tempo-synced time
   if (src instanceof DSL.Pattern) {
     const hs = src.query(DSL.span(cycle, cycle + 1e-4));
     for (const h of hs) if (h.value != null) return resolveColor(h.value, 0);
@@ -464,26 +467,27 @@ function bgEval(src, cycle, elapsed) {
 // radius/angle alone = ring, both = orbit around (x,y).
 function resolvePos(p, minDim, age) {
   const { x, y, radius, angle, gridX, gridY, pan, phase } = p.pin;
-  const st = p.spawnT || 0;                            // spawn time → osc().drift()
+  const st = p.spawnT || 0;                            // spawn time → osc().drift() (free)
+  const ageC = p.ageCycles, stC = p.spawnCycle;        // cycle-time → tempo-synced oscs
   let px, py;
   if (gridX != null) {                                 // grid: cell from onset phase
-    const cols = Math.max(1, Math.round(numAt(gridX, age, phase, st)));
-    const rows = Math.max(1, Math.round(numAt(gridY != null ? gridY : gridX, age, phase, st)));
+    const cols = Math.max(1, Math.round(numAt(gridX, age, phase, st, ageC, stC)));
+    const rows = Math.max(1, Math.round(numAt(gridY != null ? gridY : gridX, age, phase, st, ageC, stC)));
     const cell = Math.min(cols * rows - 1, Math.floor((((phase % 1) + 1) % 1) * cols * rows));
     px = ((cell % cols) + 0.5) / cols * W;
     py = ((Math.floor(cell / cols) % rows) + 0.5) / rows * H;
   } else {
-    px = (x != null ? numAt(x, age, phase, st) : 0.5) * W;
-    py = (y != null ? numAt(y, age, phase, st) : 0.5) * H;
+    px = (x != null ? numAt(x, age, phase, st, ageC, stC) : 0.5) * W;
+    py = (y != null ? numAt(y, age, phase, st, ageC, stC) : 0.5) * H;
   }
   const defR = (gridX == null && x == null && y == null && radius == null) ? 0.34 : 0;
-  const rad = (radius != null ? numAt(radius, age, phase, st) : defR) * minDim;
+  const rad = (radius != null ? numAt(radius, age, phase, st, ageC, stC) : defR) * minDim;
   if (rad !== 0) {
-    const ang = (angle != null ? numAt(angle, age, phase, st) : phase) * TAU - Math.PI / 2;
+    const ang = (angle != null ? numAt(angle, age, phase, st, ageC, stC) : phase) * TAU - Math.PI / 2;
     px += Math.cos(ang) * rad;
     py += Math.sin(ang) * rad;
   }
-  if (pan != null) px += (numAt(pan, age, phase, st) - 0.5) * W * 0.42;
+  if (pan != null) px += (numAt(pan, age, phase, st, ageC, stC) - 0.5) * W * 0.42;
   return [px + p.jx * minDim, py + p.jy * minDim];
 }
 
@@ -586,13 +590,13 @@ function drawShape3D(g, name, r, rz, rx, ry, o, vertex) {
 // draw a single glyph to any context (main canvas or a group buffer), applying
 // its live oscillators. Shared by ungrouped and grouped rendering.
 function drawGlyph(g, p, minDim) {
-  const age = p.age;
+  const age = p.age, ageC = p.ageCycles, stC = p.spawnCycle;
   let sizePx = p.size, color = p.color, rotTurns = p.rotTurns,
       rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline;
   if (p.mods) for (const m of p.mods) {
-    const val = evalOsc(m.osc, age, p.phase, p.spawnT);
+    const val = evalOsc(m.osc, age, p.phase, p.spawnT, ageC, stC);
     if (m.field === 'size') sizePx = val * minDim;
-    else if (m.field === 'color') color = oscColor(m.osc, age, p.phase, p.spawnT);
+    else if (m.field === 'color') color = oscColor(m.osc, age, p.phase, p.spawnT, ageC, stC);
     else if (m.field === 'rotate') rotTurns = val;
     else if (m.field === 'rotateX') rotX = val * TAU;
     else if (m.field === 'rotateY') rotY = val * TAU;
@@ -715,6 +719,7 @@ function tick(dt) {
   for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
     p.age += dt;
+    p.ageCycles += dt * cps;                          // accumulates at the live tempo (no retroactive warp)
     if (p.age >= p.attack + p.decay) continue;        // expired → drop
     const env = p.age < p.attack
       ? (p.attack > 0 ? p.age / p.attack : 1)          // attack rise
