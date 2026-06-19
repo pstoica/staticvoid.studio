@@ -130,6 +130,16 @@ function run() {
     // preset/new wipes explicitly. On a compile error we keep the old patch + its fx map
     // untouched (the snapshot below and `pattern` are only updated on success).
     activeGroupFx = new Map(DSL._groupFx);
+    // echo() generation cap: this compile mints one new generation per echo family, so
+    // keep at most cap-1 of the existing (older) generations and drop the rest now — a
+    // hard cap so accumulating effects can't pile up unbounded.
+    for (const { fam, cap } of DSL._echoGroups) {
+      const gens = [...new Set(particles.filter((p) => p.echoFam === fam).map((p) => p.gid))].sort((a, b) => b - a);
+      if (gens.length > cap - 1) {
+        const keep = new Set(gens.slice(0, Math.max(0, cap - 1)));
+        for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; if (p.echoFam === fam && !keep.has(p.gid)) particles.splice(i, 1); }
+      }
+    }
     errBar.textContent = '';
     errBar.classList.remove('show');
     localStorage.setItem('loom.code', editor.value);
@@ -194,6 +204,8 @@ function spawn(value, onset) {
     spawnT: elapsed,           // global seconds at spawn → osc().drift() reads this
     gid: v._gid || 0,          // group layer id (0 = ungrouped, drawn to main canvas)
     fx: v._fx || null,         // group effect params (e.g. { pixelate })
+    echoFam: v._echoFam || 0,  // echo() family (0 = not an echo layer); gid is its frozen generation
+    echoCap: v._echoCap || 0,  // max generations to keep for this family
   };
   const xy = resolvePos(p, minDim, 0);
   p.x = xy[0]; p.y = xy[1];
@@ -719,7 +731,7 @@ function tick(dt) {
   // (stable by group order). Editing an effect line updates what the on-screen glyphs
   // render with; a removed group → no fx. Content stays as captured, so it still
   // cross-fades. Cheap: one map lookup per live glyph.
-  for (let i = 0; i < live.length; i++) { const p = live[i]; p.fx = p.gid ? (activeGroupFx.get(p.gid) || null) : null; }
+  for (let i = 0; i < live.length; i++) { const p = live[i]; if (p.echoFam) continue; p.fx = p.gid ? (activeGroupFx.get(p.gid) || null) : null; }
 
   // trace mode: thread a line through the live points in spawn order, behind
   // the glyphs, rhythm becomes a connected path / constellation.

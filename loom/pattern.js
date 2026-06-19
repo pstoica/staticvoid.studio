@@ -382,8 +382,10 @@ function bg(color) { if (_bgSink) _bgSink(typeof color === 'string' ? mini(color
 // recognise "the same group" and apply edited FX to glyphs already on screen. _groupFx is
 // the live id→fx registry for the current compile.
 let _gid = 0;
+let _echoGen = 0;               // monotonic generation id for echo() layers (NOT reset)
 const _groupFx = new Map();
-function _resetGroups() { _gid = 0; _groupFx.clear(); }
+const _echoGroups = [];         // {fam, cap} for echo() groups in the current compile
+function _resetGroups() { _gid = 0; _groupFx.clear(); _echoGroups.length = 0; }
 class Group {
   constructor(pat) { this._pat = reify(pat); this._gid = ++_gid; this._fx = { chain: [] }; _groupFx.set(this._gid, this._fx); }
   // Each effect appends to an ordered chain; the renderer runs them in call order
@@ -437,13 +439,32 @@ class Group {
     return this._push({ type: 'aspect', ratio: r });
   }
   query(s) {
-    const gid = this._gid, fx = this._fx;
-    return this._pat.query(s).map((h) => hap(h.whole, h.part, Object.assign({}, h.value, { _gid: gid, _fx: fx })));
+    // normal groups render under their stable gid (live-FX diffing). echo() groups render
+    // each compile's glyphs under a unique frozen generation id, so editing forks a new
+    // layer that keeps the old fx and decays out — `_echoFam`/`_echoCap` let main.js cap
+    // how many generations linger per group.
+    const fx = this._fx;
+    const extra = this._echo
+      ? { _gid: this._gen, _fx: fx, _echoFam: this._gid, _echoCap: this._echo }
+      : { _gid: this._gid, _fx: fx };
+    return this._pat.query(s).map((h) => hap(h.whole, h.part, Object.assign({}, h.value, extra)));
   }
 }
 // variadic like stack(), so group(bg(...), shape(...)) works as expected (not just
 // group(stack(...))). one arg passes through unchanged.
 function group(...pats) { return new Group(pats.length > 1 ? stack(...pats) : (pats[0] || silence)); }
+
+// echo(group(...), n): accumulate-on-edit. Each re-run forks the group into a new frozen
+// generation (its own gid + captured fx) while the previous generations decay out, so
+// alternating effects stack into a fading palimpsest. `n` caps how many generations stay
+// alive (oldest dropped instantly, see main.js). Without echo, a group updates in place.
+function echo(g, n = 4) {
+  const grp = (g instanceof Group) ? g : new Group(g);
+  grp._echo = Math.max(1, n | 0);
+  grp._gen = ++_echoGen;                       // unique this compile (echo() runs once)
+  _echoGroups.push({ fam: grp._gid, cap: grp._echo });
+  return grp;
+}
 
 // ── combine two patterns: structure from the left, value sampled from right ────
 function appLeft(pf, pv) {
@@ -631,8 +652,8 @@ function rev(p) { return reify(p).rev(); }
 export const DSL = {
   Pattern, pure, silence, stack, slowcat, fastcat, cat, seq, sequence, timecat,
   fast, slow, rev, run, range, mini, euclid,
-  shape, s, n, choose, irand, osc, palette, bg, group, _setBgSink,
+  shape, s, n, choose, irand, osc, palette, bg, group, echo, _setBgSink,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   hasOnset, span, isOsc,
-  _groupFx, _resetGroups,
+  _groupFx, _resetGroups, _echoGroups,
 };

@@ -163,6 +163,16 @@ cycle, `mirror("1 0")` flips on and off, `blur(saw.range(0, 12))` swells in.
 > Note: FX live on the group, evaluated per-frame, so per-event combinators like
 > `.sometimes` don't apply to them, pattern the FX param instead (as above).
 
+**Editing FX is live.** Changing or dropping an effect line and re-running applies to
+the glyphs already on screen — no wipe, no waiting for them to fade. (Glyph *content*
+still cross-fades: old shapes finish their decay as the new ones take over.)
+
+**`echo(group(...), n)`** opts a group into *accumulating* edits instead: each re-run
+forks a new frozen generation (keeping that edit's FX) while the previous generations
+decay out, so alternating effects stack into a fading palimpsest. `n` caps how many
+generations linger (oldest dropped instantly). `echo(group(...).dots(8), 3)` — flip
+`dots`↔`pixelate`↔`scanlines` across re-runs and watch them layer.
+
 > The shader FX run on the WebGL renderer (the default). The legacy Canvas2D
 > renderer (append `?gl=0` to the URL) applies only `pixelate`.
 | `.rotate(t)` | turns (`1` = 360°) | static Z rotation |
