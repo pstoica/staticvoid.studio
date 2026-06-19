@@ -200,21 +200,62 @@
   #sidegrab:hover::before, #sidegrab.drag::before { background:var(--accent); height:56px; }
 
   .helpbody { max-width:none; }
-  #side section { margin:0 0 20px; }
-  #side h3 { font:600 12px/1 var(--mono); color:var(--accent); letter-spacing:.04em;
-    text-transform:uppercase; margin:0 0 10px; }
-  #side h3 span { color:var(--muted); text-transform:none; font-weight:400; }
+  /* per-section accent colour (type hierarchy + a little life) */
+  #side section { margin:0 0 22px; --cat:var(--accent); }
+  #side section[data-cat="mini"]   { --cat:#b58cff; }
+  #side section[data-cat="src"]    { --cat:#56b6ff; }
+  #side section[data-cat="ctrl"]   { --cat:#6df0c2; }
+  #side section[data-cat="xform"]  { --cat:#ffd166; }
+  #side section[data-cat="fx"]     { --cat:#ff7de0; }
+  #side section[data-cat="sig"]    { --cat:#5dd3ff; }
+  #side section[data-cat="pal"]    { --cat:#ff9f6b; }
+  #side h3 { font:700 13px/1 var(--mono); color:var(--cat); letter-spacing:.06em;
+    text-transform:uppercase; margin:0 0 11px; display:flex; align-items:center; gap:8px; }
+  #side h3::before { content:""; width:8px; height:8px; border-radius:2px; flex:none;
+    background:var(--cat); box-shadow:0 0 10px -1px var(--cat); }
+  #side h3 span { color:var(--muted); text-transform:none; font-weight:400; letter-spacing:0; }
   #side code { font:500 12px/1.5 var(--mono); color:var(--ink);
     background:rgba(255,255,255,.045); border:1px solid var(--line); border-radius:6px;
     padding:1px 6px; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; }
-  #side section > code { display:block; padding:5px 9px; margin:6px 0 2px; }
-  #side p code { background:rgba(255,255,255,.08); }
-  #side p { font:400 11.5px/1.45 var(--font); color:var(--muted); margin:0 0 6px 2px; }
+  #side section > .grow > code:first-child, #side section > code {
+    display:block; padding:5px 9px 5px 11px; margin:7px 0 2px;
+    border-left:2px solid color-mix(in srgb, var(--cat) 55%, transparent); }
+  #side p code { background:rgba(255,255,255,.08); border-color:transparent; color:var(--cat); }
+  #side p { font:400 11.5px/1.5 var(--font); color:var(--muted); margin:0 0 7px 2px; }
   #side p.shapes { font-family:var(--mono); color:rgba(238,241,246,.7); margin-top:8px; }
   #side p a { color:var(--ink); text-decoration:none; border-bottom:1px solid var(--accent-dim); }
   #side p a:hover { border-bottom-color:var(--ink); }
-  #side .lineage { margin-top:18px; padding-top:14px; border-top:1px solid var(--line); }
-  #side em { color:var(--ok); font-style:normal; }
+  #side .grow { margin:0 0 4px; }
+  #side .grow[hidden] { display:none; }
+  #side .lineage { --cat:var(--muted); margin-top:18px; padding-top:14px; border-top:1px solid var(--line); }
+  #side em { color:var(--cat); font-style:normal; }
+
+  /* filter + LLM-copy bar (sticky atop the guide) */
+  .guidebar { position:sticky; top:0; z-index:3; display:flex; gap:8px; margin:0 0 16px;
+    padding:2px 0 12px; background:linear-gradient(rgba(13,13,14,.98) 72%, rgba(13,13,14,0)); }
+  #guidefilter { flex:1; min-width:0; font:500 12px/1 var(--mono); color:var(--ink);
+    background:rgba(255,255,255,.05); border:1px solid var(--line); border-radius:7px; padding:9px 11px; }
+  #guidefilter::placeholder { color:var(--muted); }
+  #guidefilter:focus { outline:none; border-color:rgba(255,255,255,.28); background:rgba(255,255,255,.08); }
+  #guidecopy { font:600 10px/1 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+    background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:7px; padding:0 12px; cursor:pointer;
+    white-space:nowrap; flex:none; transition:.14s var(--ease); }
+  #guidecopy:hover { color:var(--ink); border-color:rgba(255,255,255,.24); }
+  #guidecopy.done { color:#6df0c2; border-color:rgba(109,240,194,.45); background:rgba(109,240,194,.08); }
+  .guideempty { color:var(--muted); font:400 12px/1.5 var(--font); padding:6px 2px; }
+  .guideempty[hidden] { display:none; }
+
+  /* palette swatches */
+  #palswatches { display:flex; flex-direction:column; gap:4px; margin-top:4px; }
+  .palrow { display:flex; align-items:center; gap:10px; padding:3px 4px; border-radius:6px;
+    cursor:pointer; border:1px solid transparent; }
+  .palrow:hover { background:rgba(255,255,255,.05); border-color:var(--line); }
+  .palname { font:500 11px/1 var(--mono); color:var(--muted); width:62px; flex:none; }
+  .palrow:hover .palname { color:var(--ink); }
+  .palgrad { height:15px; flex:1; border-radius:4px; border:1px solid rgba(255,255,255,.14); }
+  .palrow .palhint { font:500 10px/1 var(--mono); color:transparent; flex:none; }
+  .palrow:hover .palhint { color:var(--muted); }
+  .palrow.copied .palhint { color:#6df0c2; }
 
   @media (max-width:760px) {
     #rail { top:auto; right:0; bottom:0; width:100vw; height:auto; max-height:56vh;
@@ -328,7 +369,12 @@
 
     <div class="tabpane" data-pane="guide" hidden>
     <div class="helpbody">
-      <section>
+      <div class="guidebar">
+        <input id="guidefilter" type="search" placeholder="filter the guide…" autocomplete="off" spellcheck="false">
+        <button id="guidecopy" title="copy the full reference as text — paste into an LLM to teach it Loom">copy for LLM</button>
+      </div>
+      <p class="guideempty" hidden>no matches.</p>
+      <section data-cat="mini">
         <h3>mini-notation <span>(inside "…")</span></h3>
         <code>"a b c d"</code><p>sequence, splits the cycle evenly</p>
         <code>"a [b c]"</code><p>subdivide a step</p>
@@ -340,7 +386,7 @@
         <code>"a | b | c"</code><p>random choice each cycle</p>
         <code>"{a b c}%4"</code><p>polymeter, n steps/cycle</p>
       </section>
-      <section>
+      <section data-cat="src">
         <h3>sources</h3>
         <code>shape("circle*8")</code><p>emit glyphs (alias <code>s</code>)</p>
         <code>n("0 1 2")</code><p>numbered dots · <code>run(8)</code> = 0…7</p>
@@ -351,7 +397,7 @@
         <p>3D shapes are matte by default (<code>.shade(0)</code> = flat/unlit); <code>.fill(0).stroke().weight(w)</code> = wireframe (edges on cube/octa, silhouette on sphere/torus)</p>
         <code>.shade(0..1)</code><p>3D-ify a shape: 2D shapes puff into glossy plastic toys (a <code>ring</code> → a shiny tube), 3D shapes get matte faceted lighting</p>
       </section>
-      <section>
+      <section data-cat="ctrl">
         <h3>controls <span>(chain onto a source)</span></h3>
         <code>.color("#ff5d73" | "red" | 0..1)</code>
         <code>.color(palette("#a","#b","#c").at(x))</code><p>interpolate a palette by x (number · pattern · osc)</p>
@@ -371,7 +417,7 @@
         <code>.attack(s) .decay(s)</code><p>fade-in / fade-out (s alias <code>.life</code>)</p>
         <code>.blend("source-over"|"screen"|"lighter"|"multiply")</code>
       </section>
-      <section>
+      <section data-cat="xform">
         <h3>transforms</h3>
         <code>.fast(n) .slow(n) .rev()</code>
         <code>.every(n, p =&gt; …) .iter(n) .palindrome()</code>
@@ -381,7 +427,7 @@
         <code>stack(…) cat(…) seq(…) fastcat(…)</code>
         <code>group(pat)</code><p>render a layer to its own buffer, then run a shader FX chain on it</p>
       </section>
-      <section>
+      <section data-cat="fx">
         <h3>shader fx <span>(chain onto a group)</span></h3>
         <code>.pixelate(n) .blur(n)</code><p>mosaic · gaussian glow</p>
         <code>.feedback(fade, zoom, rot) .trails(fade)</code><p>trails / tunnel, warps the previous frame</p>
@@ -397,7 +443,7 @@
         <code>.hue(t) .brightness(b) .contrast(c) .saturate(s)</code><p>colour grade</p>
         <code>.pixelate(osc(0.2).range(3,26))</code><p>FX params take numbers, patterns, or oscs (global time), so the effect itself moves</p>
       </section>
-      <section>
+      <section data-cat="sig">
         <h3>signals &amp; maths <span>(0..1 unless ranged)</span></h3>
         <code>sine cosine saw isaw tri square</code>
         <code>rand perlin fbm brown gauss</code><p>noise: white · smooth · fractal · red · bell</p>
@@ -411,10 +457,11 @@
         <code>.add(x) .sub(x) .mul(x) .div(x)</code><p>x may be a number <em>or a pattern</em></p>
         <code>.x( saw.add(sine.range(0, 0.1)) )</code><p>← wobble a ramp by a sine</p>
       </section>
-      <section>
+      <section data-cat="pal">
         <h3>palettes <span>(named ramps)</span></h3>
         <code>palette("sunset").at(saw.range(0,1))</code>
-        <p class="shapes">sunset · ember · ice · neon · forest · candy · mono · rainbow · aurora</p>
+        <p>named ramps, interpolated in OKLCH — click a swatch to drop it in your patch:</p>
+        <div id="palswatches"></div>
       </section>
       <section class="lineage">
         <h3>lineage</h3>

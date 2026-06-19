@@ -655,5 +655,5 @@ export const DSL = {
   shape, s, n, choose, irand, osc, palette, bg, group, echo, _setBgSink,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   hasOnset, span, isOsc,
-  _groupFx, _resetGroups, _echoGroups,
+  _groupFx, _resetGroups, _echoGroups, PALETTES,
 };

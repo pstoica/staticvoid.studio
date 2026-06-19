@@ -7,6 +7,7 @@
 
 import { DSL } from './pattern.js';
 import { GLRenderer } from './gl/renderer.js';
+import REFERENCE from './REFERENCE.md?raw';   // full cheatsheet text, for the "copy for LLM" button
 
 const $ = (sel) => document.querySelector(sel);
 const TAU = Math.PI * 2;
@@ -1154,6 +1155,69 @@ function showTab(name) {
   tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   localStorage.setItem('loom.sidetab', name);
 }
+
+// ── guide: filterable rows, LLM-copy, palette swatches ──────────────────────────────
+function setupGuide() {
+  const sections = [...document.querySelectorAll('#side section')];
+  // wrap each entry (a <code> block + its following description siblings) into a .grow
+  // row, so the filter can show/hide them individually.
+  for (const sec of sections) {
+    let cur = null;
+    for (const ch of [...sec.children]) {
+      if (ch.tagName === 'H3') continue;
+      if (ch.tagName === 'CODE' || !cur) { cur = document.createElement('div'); cur.className = 'grow'; sec.insertBefore(cur, ch); }
+      cur.appendChild(ch);
+    }
+  }
+
+  // palette swatches → click inserts palette("name") at the cursor
+  const pals = DSL.PALETTES, palc = $('#palswatches');
+  if (pals && palc) for (const name of Object.keys(pals)) {
+    const grad = `linear-gradient(90deg, ${pals[name].join(', ')})`;
+    const row = document.createElement('div');
+    row.className = 'palrow';
+    row.innerHTML = `<span class="palname"></span><span class="palgrad"></span><span class="palhint">insert</span>`;
+    row.querySelector('.palname').textContent = name;
+    row.querySelector('.palgrad').style.background = grad;
+    row.addEventListener('click', () => {
+      const snip = `palette("${name}")`, ta = editor, a = ta.selectionStart, b = ta.selectionEnd;
+      ta.value = ta.value.slice(0, a) + snip + ta.value.slice(b);
+      ta.selectionStart = ta.selectionEnd = a + snip.length;
+      ta.focus(); refreshHL();
+      row.classList.add('copied'); setTimeout(() => row.classList.remove('copied'), 700);
+    });
+    palc.appendChild(row);
+  }
+
+  // filter bar
+  const filter = $('#guidefilter'), empty = document.querySelector('.guideempty');
+  filter && filter.addEventListener('input', () => {
+    const q = filter.value.trim().toLowerCase();
+    let anyVisible = false;
+    for (const sec of sections) {
+      const h3 = sec.querySelector('h3'), htext = h3 ? h3.textContent.toLowerCase() : '';
+      const hMatch = !!q && htext.includes(q);
+      let secVis = false;
+      for (const r of sec.querySelectorAll('.grow')) {
+        const m = !q || hMatch || r.textContent.toLowerCase().includes(q);
+        r.hidden = !m; if (m) secVis = true;
+      }
+      sec.hidden = q ? (!secVis && !hMatch) : false;
+      if (!sec.hidden) anyVisible = true;
+    }
+    if (empty) empty.hidden = anyVisible || !q;
+  });
+
+  // copy the full reference for pasting into an LLM
+  const copyBtn = $('#guidecopy');
+  copyBtn && copyBtn.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(REFERENCE); }
+    catch { const t = document.createElement('textarea'); t.value = REFERENCE; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+    copyBtn.classList.add('done'); copyBtn.textContent = 'copied ✓';
+    setTimeout(() => { copyBtn.classList.remove('done'); copyBtn.textContent = 'copy for LLM'; }, 1500);
+  });
+}
+setupGuide();
 // keep the top-right toolbar docked just left of the panel while it's open
 function syncSideW() {
   const open = !side.classList.contains('hidden');
