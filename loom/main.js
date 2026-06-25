@@ -1762,10 +1762,11 @@ document.addEventListener('keydown', (e) => {
 });
 $('#performbtn').addEventListener('click', togglePerform);
 const isMobile = () => window.matchMedia('(max-width:760px)').matches;
-// tap the canvas (outside the sidebar and the control rail) to close the sidebar
+// tap the canvas (outside the sidebar and the control rail) to close the sidebar — but not the
+// floating feed panel, which is its own surface and shouldn't dismiss the sidebar behind it
 document.addEventListener('pointerdown', (e) => {
   if (side.classList.contains('hidden')) return;
-  if (side.contains(e.target) || e.target.closest('#rail, #toolbar')) return;
+  if (side.contains(e.target) || e.target.closest('#rail, #toolbar, #feedpanel')) return;
   setSide(false);
 });
 
