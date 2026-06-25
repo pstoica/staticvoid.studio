@@ -109,6 +109,7 @@ const loomTheme = EditorView.theme({
     display: 'inline-block', verticalAlign: 'middle', margin: '0 1px 0 4px', padding: '0 5px',
     font: '500 11px/1.5 var(--mono)', color: 'var(--t-sig)', background: 'rgba(181,140,255,.14)',
     border: '1px solid rgba(181,140,255,.3)', borderRadius: '999px', minWidth: '1.6em', textAlign: 'center',
+    textShadow: 'none',                                  // the badge has its own bg — the line's shadow just muddies it
   },
 }, { dark: true });
 
