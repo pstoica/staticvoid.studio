@@ -354,6 +354,21 @@ a control takes a value.
 
 `sine` `cosine` `saw` `isaw` `tri` `square` `rand` `perlin`
 
+### Pointer (`mouseX` / `mouseY` / `mouseDown`)
+
+The live pointer (mouse **or touch**) as signals: `mouseX` / `mouseY` are its position
+(`0..1` of the canvas), `mouseDown` is `1` while pressed. Being signals, they follow Loom's
+frozen-vs-live rule, which gives two behaviours from one name:
+
+- On a **per-glyph control** they're sampled at each glyph's **onset and frozen**, so a
+  stream of glyphs leaves a **trail where the pointer was** as each spawned:
+  `shape("dot*8").x(mouseX).y(mouseY)` draws along the pointer's path. Use them for colour,
+  size, anything: `.color(mouseX)`, `.size(mouseY.range(0.02, 0.1))`.
+- As an **FX or physics param** they're **re-read every frame**, so they track the cursor
+  live: `group(...).blur(mouseX.range(0, 14))`, or a cursor-driven attractor
+  `physics(pat, { gravity: 0, attract: 1, ax: mouseX, ay: mouseY })` — the swarm follows
+  your pointer. (Drag on a phone.)
+
 | Method | Effect |
 | --- | --- |
 | `.range(lo, hi)` | remap a `0..1` signal into `[lo, hi]`; **`lo`/`hi` may each be a number, pattern, or osc** |

@@ -34,7 +34,7 @@ const cpsLabel = $('#cpsval');
 // <pre> on every edit and keep their scroll positions synced.
 const HL_FN = new Set(['shape','s','n','stack','cat','slowcat','fastcat','seq','sequence','timecat',
   'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand','osc','palette','bg','group','echo','spring','physics','$']);
-const HL_SIG = new Set(['sine','cosine','saw','isaw','tri','square','rand','perlin','fbm','brown','gauss','white']);
+const HL_SIG = new Set(['sine','cosine','saw','isaw','tri','square','rand','perlin','fbm','brown','gauss','white','mouseX','mouseY','mouseDown']);
 const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux','superimpose','off','degrade','degradeBy',
   'unDegradeBy','sometimes','sometimesBy','often','rarely','early','late','range','add','sub','mul','div',
   'color','size','x','y','radius','angle','grid','rotate','rotateX','rotateY','spin','blend','alpha','opacity','pan','jitter','fill','stroke','weight','outline','shade','pixelate',
@@ -1248,6 +1248,26 @@ $("rings", shape("ring*5")
   )
 )`,
 
+  // interactive: mouseX/mouseY are live pointer signals. The swarm CHASES the cursor (the
+  // attractor centre is the pointer, re-read each frame), while the ring layer spawns AT the
+  // pointer as each ring is born (frozen at onset → a trail along the path). Move the mouse
+  // (or drag on a phone). mouseX works anywhere a signal does — position, colour, size, FX.
+  'cursor': `stack(
+  bg("#06060f"),
+  physics(
+    shape("dot*3").fast(2).x(rand).y(rand)
+      .size(rand.range(0.012, 0.03))
+      .color(palette("neon").at(rand)).decay(7),
+    { gravity: 0, drag: 1.2, attract: 0.7,
+      ax: mouseX, ay: mouseY,
+      swirl: 0.35, turbulence: 0.25, turbScale: 4 }
+  ),
+  shape("ring*8").x(mouseX).y(mouseY)
+    .size(sine.range(0.02, 0.05).fast(3))
+    .color(palette("ice").at(saw.range(0, 1)))
+    .weight(0.004).decay(1.6)
+)`,
+
   // ── shader FX (WebGL): each group() runs a post-process chain on its layer ──
 
   // feedback tunnel, rings fed back with zoom + rotation leave a spiralling trail
@@ -1664,6 +1684,20 @@ function startEngine() {
 $('#warnok').addEventListener('click', () => { localStorage.setItem('loom.epilepsy', '1'); warn.hidden = true; startEngine(); });
 
 DSL._setBgSink((c) => { bgSource = c; });   // bg("…") stores its (raw) arg here at compile time; resolved per-frame in tick
+
+// feed the live pointer (mouse + touch) into the mouseX/mouseY/mouseDown signals. Position
+// is 0..1 of the canvas; clamped so off-canvas reads stay in range. Pointer events cover
+// touch, so it works on phones too. We keep the last position so a release holds it.
+let ptrX = 0.5, ptrY = 0.5;
+function feedPointer(e, down) {
+  const r = activeCanvas.getBoundingClientRect();
+  ptrX = Math.max(0, Math.min(1, (e.clientX - r.left) / (r.width || 1)));
+  ptrY = Math.max(0, Math.min(1, (e.clientY - r.top) / (r.height || 1)));
+  DSL._setPointer(ptrX, ptrY, down != null ? down : e.buttons ? 1 : 0);
+}
+window.addEventListener('pointermove', (e) => feedPointer(e), { passive: true });
+window.addEventListener('pointerdown', (e) => feedPointer(e, 1), { passive: true });
+window.addEventListener('pointerup', () => DSL._setPointer(ptrX, ptrY, 0), { passive: true });
 resize();
 setCps(cps);
 setDecay(decayScale);

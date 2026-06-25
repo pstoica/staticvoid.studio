@@ -73,6 +73,14 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
 7. **Hardware / external out** (later, optional): second-window/projector, NDI/Syphon (into
    Resolume etc.), MIDI/OSC out, recording.
 
+## Shipped outside the tiers
+
+- **Interaction — live pointer signals** ✅ `mouseX` / `mouseY` / `mouseDown` (mouse + touch)
+  as signals: frozen-at-onset on per-glyph controls (trail where things spawn), re-read each
+  frame as FX/physics params (cursor-driven attractor). Reuses the signal + evalGlobal paths,
+  no new plumbing. Preset: `cursor`. *Next interaction ideas:* MIDI/OSC in as more signals,
+  audio-reactive (mic FFT → signals).
+
 ## Backlog / jot-down (not now)
 
 - **Timeline choreography.** An anime.js-style global *score* animating Loom's knobs (cps,

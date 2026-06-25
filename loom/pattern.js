@@ -348,6 +348,22 @@ const gauss  = signal((t) => {                              // bell curve around
 });
 const white = rand;
 
+// ── live pointer input (mouse / touch), as signals ──────────────────────────────
+// mouseX / mouseY are the pointer position (0..1 of the canvas); mouseDown is 1 while
+// pressed. They're SIGNALS (like sine/saw), so they obey Loom's frozen/live rule for free:
+//  • on a per-glyph control they're sampled at that glyph's ONSET and frozen — so a stream
+//    of glyphs with `.x(mouseX).y(mouseY)` leaves a TRAIL where the pointer was as each
+//    spawned ("where things spawn"),
+//  • as an FX / physics param they're re-read every frame (evalGlobal re-queries), so
+//    `{ attract: 1, ax: mouseX, ay: mouseY }` is a LIVE cursor-driven attractor.
+// They compose like any signal: `.range()`, arithmetic, `.color(mouseX)`, etc. main.js
+// feeds the position in through _setPointer (a sink, like _setBgSink for bg).
+let _pointer = { x: 0.5, y: 0.5, down: 0 };
+function _setPointer(x, y, down) { _pointer.x = x; _pointer.y = y; _pointer.down = down ? 1 : 0; }
+const mouseX = signal(() => _pointer.x);
+const mouseY = signal(() => _pointer.y);
+const mouseDown = signal(() => _pointer.down);
+
 // random discrete choice, fresh per onset: choose("#fff", "#000") or choose(0, 3, 7)
 function choose(...xs) { return signal((t) => xs[Math.min(xs.length - 1, Math.floor(timeRand(t) * xs.length))]); }
 // random integer in 0..n-1
@@ -780,6 +796,7 @@ export const DSL = {
   shape, s, n, choose, irand, osc, palette, bg, group, echo, spring, physics, _setBgSink,
   $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
+  mouseX, mouseY, mouseDown, _setPointer,
   hasOnset, span, isOsc, isSpring, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,
 };

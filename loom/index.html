@@ -469,6 +469,7 @@
         <h3>signals &amp; maths <span>(0..1 unless ranged)</span></h3>
         <code>sine cosine saw isaw tri square</code>
         <code>rand perlin fbm brown gauss</code><p>noise: white · smooth · fractal · red · bell</p>
+        <code>mouseX mouseY mouseDown</code><p>live pointer (mouse/touch). Frozen at onset on a control → <code>.x(mouseX).y(mouseY)</code> trails the pointer; live as an FX/physics param → <code>{ax:mouseX, ay:mouseY}</code> a cursor attractor</p>
         <code>choose("a","b") irand(8)</code><p>random pick / integer per onset</p>
         <code>osc(rate, "sine").range(lo, hi)</code><p>live LFO, keeps moving over a glyph's life (vs signals, frozen at spawn). shapes: sine saw tri square rand perlin fbm</p>
         <code>osc(…).spread(n)</code><p>per-glyph phase offset = n × onset phase, spreads the wave <em>around a ring/grid</em> instead of every glyph in lockstep</p>
