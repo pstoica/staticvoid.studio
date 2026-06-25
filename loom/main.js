@@ -988,7 +988,7 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
     get host() { return feedHost; },
     set host(h) { feedHost = h; localStorage.setItem(FEED_HOST_KEY, h); applyVideo(); if (feedOn) feedReset(); syncFeedUI(); },
     get enabled() { return feedOn; },
-    set enabled(v) { feedOn = !!v; localStorage.setItem(FEED_ON_KEY, v ? '1' : '0'); if (v) feedConnect(); else if (feedWS) { try { feedWS.close(); } catch {} } setFeedStatus(); syncFeedUI(); },
+    set enabled(v) { feedOn = !!v; localStorage.setItem(FEED_ON_KEY, v ? '1' : '0'); if (v) { localStorage.setItem('loom.feedShow', '1'); const b = $('#feedbtn'); if (b) b.hidden = false; feedConnect(); } else if (feedWS) { try { feedWS.close(); } catch {} } setFeedStatus(); syncFeedUI(); },
     get connected() { return !!feedWS && feedWS.readyState === 1; },
     get flipX() { return DSL._jug.flipX; },
     set flipX(v) { DSL._jug.flipX = !!v; localStorage.setItem(FEED_FLIP_KEY, v ? '1' : '0'); applyVideo(); syncFeedUI(); },
@@ -1358,34 +1358,49 @@ function setActive(val) {
   activeVal = val;
   presList.querySelectorAll('.presrow').forEach((r) => r.classList.toggle('active', r.dataset.val === val));
 }
+const COLLAPSE_KEY = 'loom.presetCollapsed';
+const loadCollapsed = () => { try { return JSON.parse(localStorage.getItem(COLLAPSE_KEY)) || {}; } catch { return {}; } };
+const saveCollapsed = (o) => localStorage.setItem(COLLAPSE_KEY, JSON.stringify(o));
+function makePresRow(name, val, deletable) {
+  const r = document.createElement('div'); r.className = 'presrow'; r.dataset.val = val;
+  const load = document.createElement('button'); load.className = 'load'; load.textContent = name;
+  load.addEventListener('click', () => { applyPreset(val); setActive(val); if (isMobile()) setSide(false); });
+  r.appendChild(load);
+  if (deletable) {
+    const del = document.createElement('button'); del.className = 'del'; del.textContent = '×'; del.title = 'delete';
+    del.addEventListener('click', () => {
+      if (!confirm(`Delete preset "${name}"?`)) return;
+      const u = loadUser(); delete u[name]; saveUser(u);
+      if (activeVal === val) activeVal = '';
+      rebuildPresetList();
+    });
+    r.appendChild(del);
+  }
+  return r;
+}
 function rebuildPresetList() {
-  const user = loadUser();
+  const user = loadUser(), collapsed = loadCollapsed();
   presList.innerHTML = '';
-  const label = (t) => { const d = document.createElement('div'); d.className = 'preslabel'; d.textContent = t; presList.appendChild(d); };
-  const row = (name, val, deletable) => {
-    const r = document.createElement('div'); r.className = 'presrow'; r.dataset.val = val;
-    const load = document.createElement('button'); load.className = 'load'; load.textContent = name;
-    load.addEventListener('click', () => { applyPreset(val); setActive(val); if (isMobile()) setSide(false); });
-    r.appendChild(load);
-    if (deletable) {
-      const del = document.createElement('button'); del.className = 'del'; del.textContent = '×'; del.title = 'delete';
-      del.addEventListener('click', () => {
-        if (!confirm(`Delete preset "${name}"?`)) return;
-        const u = loadUser(); delete u[name]; saveUser(u);
-        if (activeVal === val) activeVal = '';
-        rebuildPresetList();
-      });
-      r.appendChild(del);
-    }
-    presList.appendChild(r);
+  const section = (key, title, entries) => {
+    if (!entries.length) return;
+    const sec = document.createElement('div'); sec.className = 'pressection';
+    if (collapsed[key]) sec.classList.add('collapsed');
+    const head = document.createElement('button'); head.className = 'preshead'; head.type = 'button';
+    head.innerHTML = `<span class="caret">▾</span><span>${title}</span><span class="prescount"></span>`;
+    head.querySelector('.prescount').textContent = entries.length;
+    head.addEventListener('click', () => {
+      sec.classList.toggle('collapsed');
+      const c = loadCollapsed(); c[key] = sec.classList.contains('collapsed'); saveCollapsed(c);
+    });
+    const rows = document.createElement('div'); rows.className = 'presrows';
+    for (const [name, val, del] of entries) rows.appendChild(makePresRow(name, val, del));
+    sec.append(head, rows); presList.appendChild(sec);
   };
-  label('built-in');
-  // feature a few favourites at the top, then the rest in definition order
-  const featured = ['threads', 'vortex', 'halo'].filter((n) => n in PRESETS);
+  // your saved patches first — they're what you reach for; built-ins are the reference set below
+  section('saved', 'saved', Object.keys(user).map((n) => [n, 'u:' + n, true]));
+  const featured = ['threads', 'vortex', 'halo'].filter((n) => n in PRESETS);   // a few favourites, then the rest
   const ordered = [...featured, ...Object.keys(PRESETS).filter((n) => !featured.includes(n))];
-  for (const name of ordered) row(name, 'b:' + name, false);
-  const names = Object.keys(user);
-  if (names.length) { label('saved'); for (const name of names) row(name, 'u:' + name, true); }
+  section('builtin', 'built-in', ordered.map((n) => [n, 'b:' + n, false]));
   setActive(activeVal);
 }
 
@@ -1488,7 +1503,15 @@ function flash() {
   const el = $('#runbtn'); el.classList.add('lit'); clearTimeout(flashT);
   flashT = setTimeout(() => el.classList.remove('lit'), 220);
   slotLogo();                   // spin the wordmark like a slot machine
-  $('#hint').hidden = true;     // "edit the pattern" hint has served its purpose
+  retireHint();                 // "edit the pattern" hint has served its purpose — for good
+}
+// the first-run hint is for first-timers only: once you've run a patch (or already have a saved
+// preset) you know the drill, so hide it and remember across sessions.
+const HINT_KEY = 'loom.ranOnce';
+function retireHint() { const h = $('#hint'); if (h) h.hidden = true; localStorage.setItem(HINT_KEY, '1'); }
+function initHint() {
+  const h = $('#hint'); if (!h) return;
+  if (localStorage.getItem(HINT_KEY) === '1' || Object.keys(loadUser()).length) h.hidden = true;
 }
 
 $('#runbtn').addEventListener('click', () => { run(); flash(); });
@@ -1532,13 +1555,18 @@ function newPatch() {
 $('#newbtn').addEventListener('click', newPatch);
 $('#prenew').addEventListener('click', newPatch);   // the in-panel "+ new" button
 
-$('#savebtn').addEventListener('click', () => {
-  const cur = activeVal.startsWith('u:') ? activeVal.slice(2) : '';
+function savePreset() {
+  const cur = activeVal.startsWith('u:') ? activeVal.slice(2) : '';   // pre-fill the active name → same name overwrites
   const name = (prompt('Save preset as:', cur) || '').trim();
   if (!name) return;
   const user = loadUser(); user[name] = editor.getCode(); saveUser(user);
   rebuildPresetList(); setActive('u:' + name); syncURL();
-});
+}
+$('#savebtn').addEventListener('click', savePreset);
+$('#presave').addEventListener('click', savePreset);   // the in-panel save button
+// the presets toolbar is sticky; section heads stick just below it (offset = its height)
+{ const pb = $('#presbar');
+  if (pb) new ResizeObserver(() => document.documentElement.style.setProperty('--presbar-h', pb.offsetHeight + 'px')).observe(pb); }
 
 // ── right sidebar (swappable presets / guide) ──
 const side = $('#side');
@@ -1585,6 +1613,13 @@ function setupGuide() {
     navEl.appendChild(chip);
     navChips.set(sec, chip);
   }
+  // the single-row nav scrolls horizontally; translate a vertical wheel to horizontal so a mouse
+  // (no trackpad swipe) can reach pills the autoscroll has pushed off the left/right edge.
+  if (navEl) navEl.addEventListener('wheel', (e) => {
+    const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (!d) return;
+    navEl.scrollLeft += d; e.preventDefault();
+  }, { passive: false });
   const head = document.querySelector('.guidehead');
   if (head) new ResizeObserver(() => document.documentElement.style.setProperty('--guidehead-h', head.offsetHeight + 'px')).observe(head);
   // scrollspy: light up the nav chip of the section currently under the head
@@ -1833,6 +1868,11 @@ let feedOpacity = parseFloat(localStorage.getItem(FEED_OP_KEY)); if (!(feedOpaci
 let feedWS = null;
 DSL._jug.flipX = localStorage.getItem(FEED_FLIP_KEY) === '1';
 { const f = new URLSearchParams(location.search).get('feed'); if (f != null) { feedOn = true; if (f) feedHost = f; } }   // ?feed or ?feed=host:port
+// the feed is a niche local-only tool — keep its toolbar button off the public UI. Reveal (and
+// remember) it once anyone has touched the feed: ?feed in the URL, or it was enabled before.
+const FEED_SHOW_KEY = 'loom.feedShow';
+const feedShow = feedOn || localStorage.getItem(FEED_SHOW_KEY) === '1';
+if (feedShow) localStorage.setItem(FEED_SHOW_KEY, '1');
 
 const feedCam = $('#feedcam');
 // camera overlay: stream the host's MJPEG behind the canvas and clear the canvas transparent so
@@ -1871,6 +1911,7 @@ function syncFeedUI() {
   fp.on.checked = feedOn; fp.host.value = feedHost; fp.flip.checked = !!DSL._jug.flipX;
   fp.video.checked = feedVideo; fp.op.value = feedOpacity; setFeedStatus();
 }
+if (fp.btn && feedShow) fp.btn.hidden = false;   // surface the toolbar button only when the feed's in use
 if (fp.btn) fp.btn.addEventListener('click', () => { fp.panel.hidden = !fp.panel.hidden; if (!fp.panel.hidden) syncFeedUI(); });
 if (fp.on) fp.on.addEventListener('change', () => { feedOn = fp.on.checked; localStorage.setItem(FEED_ON_KEY, feedOn ? '1' : '0'); if (feedOn) feedConnect(); else if (feedWS) { try { feedWS.close(); } catch {} } setFeedStatus(); });
 if (fp.host) fp.host.addEventListener('change', () => { feedHost = fp.host.value.trim() || 'localhost:8080'; fp.host.value = feedHost; localStorage.setItem(FEED_HOST_KEY, feedHost); applyVideo(); if (feedOn) feedReset(); });
@@ -1891,6 +1932,7 @@ resize();
 setCps(cps);
 setDecay(decayScale);
 rebuildPresetList();
+initHint();
 showTab(localStorage.getItem('loom.sidetab') || 'presets');
 setSide(localStorage.getItem('loom.side') !== '0');
 // boot source priority: ?c=<custom> → ?p=<built-in> → last-worked-on → threads

@@ -41,6 +41,7 @@
     background:rgba(15,15,17,.94); backdrop-filter:blur(10px); border:1px solid var(--line);
     box-shadow:0 14px 40px rgba(0,0,0,.5); font:500 11px/1.3 var(--mono); color:var(--ink); }
   #feedpanel[hidden] { display:none; }
+  #feedbtn[hidden] { display:none; }   /* niche local tool — hidden until the feed's in use */
   .fphdr { display:flex; align-items:center; gap:7px; font:600 10px/1 var(--mono); letter-spacing:.08em;
     text-transform:uppercase; color:var(--muted); padding-bottom:3px; }
   .fpdot { width:7px; height:7px; border-radius:50%; background:#555; flex:none; transition:.2s var(--ease); }
@@ -96,14 +97,25 @@
   /* panel/guide live in the transport row now; styled as .btn (see #transport) */
 
   /* preset list (lives in the sidebar's presets tab) */
-  #presbar { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+  /* presets pane: sticky toolbar (new / save) + collapsible, sticky-headed sections */
+  .tabpane[data-pane="presets"] { padding-top:0; }
+  #presbar { position:sticky; top:0; z-index:3; display:flex; gap:8px; align-items:center;
+    margin:0 -18px 8px; padding:16px 18px 9px; background:#0f0f11; border-bottom:1px solid var(--line); }
   #presbar .mini { height:32px; padding:0 12px; font-size:11px; color:var(--muted);
-    display:inline-flex; align-items:center; }
-  #presbar .mini:hover { color:var(--ink); }
+    background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:7px;
+    display:inline-flex; align-items:center; transition:.14s var(--ease); }
+  #presbar .mini:hover { color:var(--ink); border-color:rgba(255,255,255,.24); }
   #preslist { display:flex; flex-direction:column; gap:3px; }
-  .preslabel { font:600 9px/1 var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--muted);
-    opacity:.55; margin:10px 0 3px 2px; }
-  .preslabel:first-child { margin-top:0; }
+  .pressection { display:flex; flex-direction:column; gap:3px; }
+  .preshead { position:sticky; top:var(--presbar-h, 57px); z-index:2; display:flex; align-items:center; gap:7px;
+    margin:6px -18px 2px; padding:6px 18px; background:#0f0f11; border:0; cursor:pointer; text-align:left;
+    font:600 9px/1 var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+  .preshead:hover { color:var(--ink); }
+  .preshead .caret { font-size:8px; transition:transform .15s var(--ease); }
+  .pressection.collapsed .caret { transform:rotate(-90deg); }
+  .preshead .prescount { margin-left:auto; opacity:.55; font-weight:500; letter-spacing:0; }
+  .presrows { display:flex; flex-direction:column; gap:3px; }
+  .pressection.collapsed .presrows { display:none; }
   .presrow { display:flex; align-items:center; gap:4px; }
   .presrow .load { flex:1; min-width:0; height:34px; padding:0 12px; text-align:left; cursor:pointer;
     font:500 12px/1 var(--mono); color:var(--muted); background:rgba(255,255,255,.025);
@@ -428,7 +440,7 @@
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></button>
     <button class="btn icon" id="helpbtn" aria-label="guide" data-tip="guide">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.3 2.4c-.8.3-1.3.9-1.3 1.7v.4"/><path d="M12 17h.01"/></svg></button>
-    <button class="btn icon" id="feedbtn" aria-label="juggling feed" data-tip="juggling feed">
+    <button class="btn icon" id="feedbtn" aria-label="juggling feed" data-tip="juggling feed" hidden>
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.9 16.1a10 10 0 0 1 0-8.2M19.1 7.9a10 10 0 0 1 0 8.2M7.8 13.2a5 5 0 0 1 0-2.4M16.2 10.8a5 5 0 0 1 0 2.4"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg></button>
   </nav>
 
@@ -456,6 +468,7 @@
     <div class="tabpane" data-pane="presets">
       <div id="presbar">
         <button class="btn mini" id="prenew" title="start a fresh default patch">+ new</button>
+        <button class="btn mini" id="presave" title="save the current patch as a preset (same name overwrites)">save</button>
       </div>
       <div id="preslist"></div>
     </div>
