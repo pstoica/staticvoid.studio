@@ -49,7 +49,8 @@
      click-through (set inline); the sliders re-enable pointer-events + highlight on hover. */
   body.perform #editwrap .cm-content { color:rgba(233,233,234,.16) !important; }
   body.perform #editwrap .cm-line span:not(.cm-loom-live):not(.cm-loom-slider) { color:rgba(233,233,234,.16) !important; }
-  body.perform #editwrap .cm-line { background:transparent; }
+  /* faint ghosted text + the legibility text-shadow = a muddy blur halo, so drop the shadow */
+  body.perform #editwrap .cm-line { background:transparent; text-shadow:none; }
   body.perform #editwrap .cm-cursor { opacity:0; }
   /* controls stay subdued until you reach for them: dimmed by default, full on hover (no scale) */
   body.perform #editwrap .cm-loom-slider { pointer-events:auto; opacity:.3; transition:opacity .15s var(--ease); }

@@ -1245,6 +1245,35 @@ $("rings", shape("ring*5")
 .kaleido(mouseDown.range(0, 8))
 .rgbshift(mouseDown.range(0, 0.012))`,
 
+  // mouse-painted rainbow physics bloom: tumbling shapes spray from the cursor (attract to it),
+  // additive (lighter) blend, and hold the mouse to bleed everything into feedback. Every knob
+  // is a slider — drag them to tune the spray.
+  'bloom': `group(stack(
+  bg("#06060f"),
+  physics(
+    shape("circle hex tri").fast(slider(30, 1, 30))
+      .x(mouseX).y(mouseY)
+      .rotateX(osc(0.5, "sine").range(0, 1))
+      .rotateY(osc(0.33, "sine").range(0, 1))
+      .rotate(osc(0.23, "sine").range(0, 1))
+      .size(rand.range(0.001, slider(0.02, 0.01, 0.3)))
+      .color(palette("rainbow").at(osc(2).spread(1)))
+      .decay(slider(2.00, 0.1, 2)),
+    {
+      gravity: slider(0.06, 0, 1),
+      bounce: slider(0.19, 0, 1),
+      drag: slider(0.00, 0, 1),
+      vel: slider(0.01, 0, 1),
+      spin: slider(0.11, 0, 1),
+      attract: slider(0.66, 0, 1),
+      ax: mouseX,
+      ay: mouseY
+    }
+  )
+).blend("lighter"))
+.feedback(mouseDown.range(0, 1),
+  mouseDown.range(0.9, mouseX.range(0.99, 1)), 0)`,
+
   // inline sliders: each slider(value, min, max) renders a draggable control right in the
   // code — drag it to retune the patch live (it rewrites the number + re-runs). The number
   // you see IS the control; share the URL and the values travel with it.

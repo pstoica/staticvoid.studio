@@ -100,7 +100,10 @@ const loomTheme = EditorView.theme({
   // a chunky, bright block-style caret (drawSelection draws it as .cm-cursor)
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#ffd166', borderLeftWidth: '3px', marginLeft: '-1px' },
   '&.cm-focused .cm-cursor': { borderLeftColor: '#ffd166' },
-  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': { backgroundColor: 'rgba(120,150,255,.34)' },
+  // lift the selection ABOVE the per-line boxes (CM puts the layer at z-index -2, so the dark
+  // boxes paint over it and it reads as opaque) — now it's a translucent highlight on top.
+  '.cm-selectionLayer': { zIndex: '1 !important' },
+  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': { backgroundColor: 'rgba(120,150,255,.32)' },
   '.cm-selectionMatch': { backgroundColor: 'rgba(255,255,255,.10)' },
   // inline slider widget (after a slider(...) call) — detailed track/thumb styling in index.html
   '.cm-loom-slider': { display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle', margin: '0 2px 0 5px' },
