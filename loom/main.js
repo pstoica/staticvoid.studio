@@ -1567,6 +1567,17 @@ function setupGuide() {
   }
   const head = document.querySelector('.guidehead');
   if (head) new ResizeObserver(() => document.documentElement.style.setProperty('--guidehead-h', head.offsetHeight + 'px')).observe(head);
+  // scrollspy: light up the nav chip of the section currently under the head
+  const gpane = document.querySelector('#side .tabpane[data-pane="guide"]');
+  function syncActiveNav() {
+    if (!gpane || !navChips.size) return;
+    const headH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--guidehead-h')) || 100;
+    const y = gpane.scrollTop + headH + 8;
+    let active = null;
+    for (const sec of sections) { if (sec.hidden || sec.classList.contains('lineage')) continue; if (sec.offsetTop <= y) active = sec; }
+    navChips.forEach((chip, sec) => chip.classList.toggle('active', sec === (active || sections.find((s) => navChips.has(s)))));
+  }
+  if (gpane) { gpane.addEventListener('scroll', syncActiveNav, { passive: true }); requestAnimationFrame(syncActiveNav); }
 
   // palette swatches → click inserts palette("name") at the cursor
   const pals = DSL.PALETTES, palc = $('#palswatches');
@@ -1602,6 +1613,7 @@ function setupGuide() {
       if (!sec.hidden) anyVisible = true;
     }
     if (empty) empty.hidden = anyVisible || !q;
+    syncActiveNav();
   });
 
   // copy the full reference for pasting into an LLM

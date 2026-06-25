@@ -259,19 +259,21 @@
   #side em { color:var(--cat); font-style:normal; }
 
   /* filter + LLM-copy bar (sticky atop the guide) */
-  /* sticky head: search bar + section nav, pinned at the top of the scrolling guide */
+  /* sticky head: search bar + section nav, pinned at the top of the scrolling guide. Opaque
+     background — translucent leaked the scrolling code through it. */
   .guidehead { position:sticky; top:0; z-index:5; margin:-16px -18px 14px; padding:14px 18px 0;
-    background:rgba(13,13,14,.97); border-bottom:1px solid var(--line); }
+    background:#0f0f11; border-bottom:1px solid var(--line); }
   .guidebar { display:flex; gap:8px; padding:0 0 10px; }
   #guidenav { display:flex; flex-wrap:wrap; gap:5px; padding:0 0 12px; }
   .gnav { font:600 9.5px/1 var(--mono); letter-spacing:.05em; text-transform:uppercase; cursor:pointer;
     color:var(--muted); background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:999px; padding:5px 8px;
     transition:.12s var(--ease); }
   .gnav:hover { color:var(--gc, var(--ink)); border-color:var(--gc, rgba(255,255,255,.28)); background:rgba(255,255,255,.07); }
+  .gnav.active { color:#0a0a0c; background:var(--gc, var(--ink)); border-color:var(--gc, var(--ink)); }   /* current section */
   .gnav[hidden] { display:none; }
-  /* sticky section headers, pinned just below the head as you scroll */
+  /* sticky section headers, pinned just below the head as you scroll. Opaque (no leak). */
   #side section h3 { position:sticky; top:var(--guidehead-h, 92px); z-index:2; margin:0 -18px 11px; padding:7px 18px;
-    background:rgba(13,13,14,.96); }
+    background:#0f0f11; }
   #guidefilter { flex:1; min-width:0; font:500 12px/1 var(--mono); color:var(--ink);
     background:rgba(255,255,255,.05); border:1px solid var(--line); border-radius:7px; padding:9px 11px; }
   #guidefilter::placeholder { color:var(--muted); }
