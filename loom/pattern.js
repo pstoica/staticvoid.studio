@@ -432,6 +432,53 @@ function vel(ch = 0) { return signal(() => { const e = _lastHeld(ch); return e ?
 function note(ch = 0) { return signal(() => { const e = _lastHeld(ch); return e ? e[0] / 127 : 0; }); }
 function bend(ch = 0) { return signal(() => _midi.bend[ch] || 0); }
 
+// ── juggling feed (WebSocket ball tracking), as signals ───────────────────────────
+// A separate local app tracks juggling balls — webcam position + on-ball IMU — and pushes plain
+// JSON over a WebSocket (see REFERENCE.md). main.js owns the socket (read-only) and pumps every
+// message into _jugInput; the signals below read the latest state. This is the SPATIAL layer
+// ("where the ball is"); the musical layer ("what the music does") arrives separately over MIDI.
+//   ballX/ballY(id)  position 0..1 of the camera frame (origin top-left, like mouseX/mouseY)
+//   ballSeen(id)     1 while the ball is detected this frame, else 0
+//   thrown/caught/tapped(id)   discrete throw/catch/tap as a decaying 0..1 pulse (a flash)
+//   flight(id)       last catch's airtime (seconds, held)     gyro(id)  IMU spin 0..1 (optional)
+// The ball id is the join key — "a"/"b"/"c" (or 0/1/2, or "ball_a") — the SAME across position
+// and events, so each ball is its own independent input. Signals obey the frozen/live rule:
+// frozen at a glyph's onset (.x(ballX("a")).y(ballY("a")) trails a ball), live as an FX/physics
+// param. flipX mirrors x for a selfie view (set via window.loom.feed.flipX).
+const _jug = { balls: {}, flipX: false };
+const _ballId = (id) => {                                          // 0/1/2 · "a"/"A" · "ball_a" → "ball_a"
+  if (id == null) return 'ball_a';
+  if (typeof id === 'number') return 'ball_' + String.fromCharCode(97 + (id | 0));
+  const s = String(id).toLowerCase();
+  return s.startsWith('ball_') ? s : 'ball_' + s;
+};
+const _ball = (id) => _jug.balls[_ballId(id)];
+const _mkBall = (id) => (_jug.balls[id] || (_jug.balls[id] = { x: 0.5, y: 0.5, seen: 0, thr: 0, cat: 0, tap: 0, flight: 0, mag: 0, spin: 0, tiltx: 0, tilty: 0 }));
+function _jugInput(m) {                                            // one feed message; switch on type, ignore unknown
+  if (!m || typeof m !== 'object') return;
+  if (m.type === 'balls' && m.coords) {
+    for (const id in _jug.balls) _jug.balls[id].seen = 0;          // clear; only ids present this frame re-flag
+    for (const id in m.coords) { const c = m.coords[id], b = _mkBall(id); b.x = +c[0]; b.y = +c[1]; b.seen = 1; }
+  } else if (m.type === 'throw') { _mkBall(m.name).thr = 1; }
+  else if (m.type === 'catch') { const b = _mkBall(m.name); b.cat = 1; b.flight = +m.flight || 0; }
+  else if (m.type === 'tap')   { const b = _mkBall(m.name); b.mag = +m.magnitude || 0; b.tap = Math.min(1, b.mag / 30); }
+  else if (m.type === 'imu')   { const b = _mkBall(m.name), g = m.gyro || [0, 0, 0], a = m.accel || [0, 0, 0];
+    b.spin = Math.min(1, Math.hypot(g[0], g[1], g[2]) / 35); b.tiltx = (a[0] || 0) / 9.8; b.tilty = (a[1] || 0) / 9.8; }
+  // status + unknown types: ignored (additive / forward-compatible)
+}
+// decay the throw/catch/tap pulses each frame (driven from the tick loop) — a flash to 1 that
+// falls to ~0 over ~0.4s, so an event reads as a discrete trigger on controls and FX alike.
+function _jugDecay(dt) { const k = Math.exp(-dt * 6); for (const id in _jug.balls) { const b = _jug.balls[id]; b.thr *= k; b.cat *= k; b.tap *= k; } }
+const _jval = (id, f, def) => { const b = _ball(id); return b ? b[f] : def; };
+function ballX(id)    { return signal(() => { const x = _jval(id, 'x', 0.5); return _jug.flipX ? 1 - x : x; }); }
+function ballY(id)    { return signal(() => _jval(id, 'y', 0.5)); }
+function ballSeen(id) { return signal(() => _jval(id, 'seen', 0)); }
+function thrown(id)   { return signal(() => _jval(id, 'thr', 0)); }
+function caught(id)   { return signal(() => _jval(id, 'cat', 0)); }
+function tapped(id)   { return signal(() => _jval(id, 'tap', 0)); }
+function flight(id)   { return signal(() => _jval(id, 'flight', 0)); }
+function gyro(id)     { return signal(() => _jval(id, 'spin', 0)); }
+
 // slider(value, min?, max?, default?): just returns `value` — it's a plain number in the patch.
 // The editor renders an inline draggable slider over the call (see editor.js); dragging rewrites
 // `value` in the source and re-runs, so the number you see IS the control. min/max (default
@@ -892,6 +939,7 @@ export const DSL = {
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   mouseX, mouseY, mouseDown, _setPointer,
   cc, gate, vel, note, bend, _midiInput,
+  ballX, ballY, ballSeen, thrown, caught, tapped, flight, gyro, _jug, _jugInput, _jugDecay,
   hasOnset, span, isOsc, isSpring, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,
 };

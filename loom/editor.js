@@ -15,7 +15,8 @@ import { Tag } from '@lezer/highlight';
 // ── Loom vocabulary (highlight only — kept in sync with the DSL) ──
 const FN = new Set(['shape', 's', 'n', 'stack', 'cat', 'slowcat', 'fastcat', 'seq', 'sequence', 'timecat',
   'pure', 'silence', 'run', 'range', 'mini', 'euclid', 'fast', 'slow', 'rev', 'choose', 'irand', 'pick', 'iff', 'osc',
-  'palette', 'bg', 'group', 'echo', 'spring', 'physics', 'slider', 'cc', 'gate', 'vel', 'note', 'bend', '$']);
+  'palette', 'bg', 'group', 'echo', 'spring', 'physics', 'slider', 'cc', 'gate', 'vel', 'note', 'bend',
+  'ballX', 'ballY', 'ballSeen', 'thrown', 'caught', 'tapped', 'flight', 'gyro', '$']);
 const SIG = new Set(['sine', 'cosine', 'saw', 'isaw', 'tri', 'square', 'rand', 'perlin', 'fbm', 'brown',
   'gauss', 'white', 'mouseX', 'mouseY', 'mouseDown']);
 const METHOD = new Set(['fast', 'slow', 'rev', 'every', 'iter', 'palindrome', 'jux', 'superimpose', 'off',

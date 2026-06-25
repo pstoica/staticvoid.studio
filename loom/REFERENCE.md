@@ -441,6 +441,43 @@ where holding a key lets the swarm fall.
 push. Per-channel CC reads stay independent; an omni `cc(num)` mirrors whichever channel last
 moved that controller.
 
+### Juggling feed (`ballX` / `ballY` / `thrown` / `caught` / `tapped` / …)
+
+Live **ball-tracking** input as signals. A separate local app tracks juggling balls (webcam
+position + on-ball IMU) and broadcasts plain JSON over a WebSocket; Loom consumes it read-only.
+This is the **spatial** layer — *where the ball is* — distinct from the **musical** layer (mapped
+notes/CC), which arrives over **MIDI** (above). Same signal rules as the pointer: frozen at a
+glyph's onset (a trail), live as an FX/physics param.
+
+| signal | is | range |
+| --- | --- | --- |
+| `ballX(id)` `ballY(id)` | a ball's position in the camera frame | `0..1` (origin top-left, like `mouseX`) |
+| `ballSeen(id)` | `1` while the ball is detected this frame | `0` / `1` |
+| `thrown(id)` `caught(id)` `tapped(id)` | a throw / catch / tap, as a **decaying pulse** (flashes to 1, falls to 0 over ~0.4 s) | `0..1` |
+| `flight(id)` | last catch's airtime, **held** until the next catch | seconds |
+| `gyro(id)` | on-ball spin (IMU), if streaming | `0..1` |
+
+`id` is the ball — `"a"`, `"b"`, `"c"` (also `0` / `1` / `2`, or the full `"ball_a"`); it's the
+**join key**, the same across position and events, so each ball is its own independent input.
+`tapped` peaks with the **impact strength**; the others peak at `1`. A ball that leaves frame
+holds its last position (`ballSeen` goes `0`).
+
+```
+// each ball trails its own colour; a catch flares it bright
+stack(
+  shape("dot*4").x(ballX("a")).y(ballY("a")).color("#ff5d73").size(caught("a").range(0.03, 0.22)),
+  shape("dot*4").x(ballX("b")).y(ballY("b")).color("#5dd3ff").size(caught("b").range(0.03, 0.22)),
+)
+// throw → a burst of stars while airborne; spin drives the hue
+physics(shape("star*5").color(gyro("a")), { gravity: thrown("a").range(0, 3) })
+```
+
+**Off by default** (Loom is also a public web app — it won't dial `ws://localhost` from every
+visitor's browser). Turn it on for a session: add **`?feed`** to the URL (default host
+`localhost:8080`), or **`?feed=host:port`**, or `window.loom.feed.enabled = true`. The choice +
+host persist. `window.loom.feed.flipX = true` mirrors `ballX` for a selfie view;
+`window.loom.jug(msg)` injects a feed message for testing without the host.
+
 | Method | Effect |
 | --- | --- |
 | `.range(lo, hi)` | remap a `0..1` signal into `[lo, hi]`; **`lo`/`hi` may each be a number, pattern, or osc** |

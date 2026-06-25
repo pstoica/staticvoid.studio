@@ -769,6 +769,7 @@ function frame(now) {
 
 function tick(dt) {
   elapsed += dt;   // advances even when paused (like glyph age), so FX keep living
+  DSL._jugDecay(dt);   // age the juggling throw/catch/tap pulses (decays even when paused)
   bgColor = bgEval(bgSource, cycle, elapsed);   // bg() is patternable, resolve per frame
   if (glr) glr.setBackground(bgColor);
   // Clean redraw: wipe the buffer completely every frame, then repaint only the
@@ -981,7 +982,17 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   mute: (n) => toggleMute(n), solo: (n) => toggleSolo(n),
   ensurePhysics: () => ensureRapier(), physReady: () => !!rapierReady(),
   get bodies() { return particles.filter((p) => p.body).length; }, get pointer() { return pointerState; },
-  midi: (status, d1, d2) => DSL._midiInput(status, d1, d2) };   // inject a MIDI message (for tooling/testing)
+  midi: (status, d1, d2) => DSL._midiInput(status, d1, d2),   // inject a MIDI message (for tooling/testing)
+  jug: (m) => DSL._jugInput(m),   // inject a juggling-feed message (for tooling/testing)
+  feed: {   // juggling-feed config (host:port, on/off, selfie flip) — persists in localStorage
+    get host() { return feedHost; },
+    set host(h) { feedHost = h; localStorage.setItem(FEED_HOST_KEY, h); if (feedOn) feedReset(); },
+    get enabled() { return feedOn; },
+    set enabled(v) { feedOn = !!v; localStorage.setItem(FEED_ON_KEY, v ? '1' : '0'); if (v) feedConnect(); else if (feedWS) { try { feedWS.close(); } catch {} } },
+    get connected() { return !!feedWS && feedWS.readyState === 1; },
+    get flipX() { return DSL._jug.flipX; },
+    set flipX(v) { DSL._jug.flipX = !!v; },
+    get balls() { return DSL._jug.balls; } } };
 
 // ── $-layer mute / solo chips ───────────────────────────────────────────────────────
 // One chip per live $ layer: click the name to mute (dimmed + struck), click the dot to
@@ -1792,6 +1803,31 @@ function initMidi() {
   }).catch(() => { /* no MIDI / denied — signals just stay 0 */ });
 }
 initMidi();
+
+// ── juggling feed (WebSocket ball tracking) → the ballX/ballY/thrown/caught/... signals ──────
+// A separate local app broadcasts ball positions + throw/catch/tap events as JSON over a
+// WebSocket (see REFERENCE.md). Read-only: loom never sends, only listens. Auto-reconnects (~1s)
+// so the host can come and go. Offline = signals just hold their defaults, no errors.
+//   • OFF by default (this is a public web app — we don't want every visitor's browser dialling
+//     ws://localhost, which https would block as mixed content anyway). Enable per-session.
+//   • Turn on with ?feed (default host) / ?feed=host:port in the URL, or window.loom.feed.enabled
+//     = true. The choice + host persist in localStorage.
+//   • window.loom.jug(msg) injects a feed message for testing without the host.
+const FEED_HOST_KEY = 'loom.feedHost', FEED_ON_KEY = 'loom.feedOn';
+let feedHost = localStorage.getItem(FEED_HOST_KEY) || 'localhost:8080';
+let feedOn = localStorage.getItem(FEED_ON_KEY) === '1';
+let feedWS = null;
+{ const f = new URLSearchParams(location.search).get('feed'); if (f != null) { feedOn = true; if (f) feedHost = f; } }   // ?feed or ?feed=host:port
+function feedConnect() {
+  if (!feedOn || feedWS) return;
+  try { feedWS = new WebSocket('ws://' + feedHost + '/feed'); }
+  catch { feedWS = null; return; }
+  feedWS.onmessage = (e) => { try { DSL._jugInput(JSON.parse(e.data)); } catch { /* skip a bad frame */ } };
+  feedWS.onclose = () => { feedWS = null; if (feedOn) setTimeout(feedConnect, 1000); };   // reconnect while enabled
+  feedWS.onerror = () => { try { feedWS.close(); } catch {} };
+}
+function feedReset() { if (feedWS) { try { feedWS.close(); } catch {} feedWS = null; } feedConnect(); }
+feedConnect();
 
 resize();
 setCps(cps);
