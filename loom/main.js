@@ -38,7 +38,7 @@ const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux'
   'unDegradeBy','sometimes','sometimesBy','often','rarely','early','late','range','add','sub','mul','div',
   'color','size','x','y','radius','angle','grid','rotate','rotateX','rotateY','spin','blend','alpha','opacity','pan','jitter','fill','stroke','weight','outline','shade','pixelate',
   'blur','feedback','trails','hue','brightness','contrast','saturate','negative','invert','displace','kaleido','mirror',
-  'cap','join','open','vertex','attack','decay','life','set','spread','phase','rate','quantize']);
+  'cap','join','open','vertex','attack','decay','life','set','spread','phase','rate','quantize','ease','segment','seg']);
 const HL_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+(?:\.\d+)?\b|=>|\.[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*|[(){}\[\],.]/g;
 const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 function classOf(tok) {
@@ -202,6 +202,9 @@ function spawn(value, onset) {
     // fade-out seconds; default ~1 cycle. The master slider is baked in HERE so
     // each glyph keeps the decay it was born with.
     decay: ((v.decay != null ? v.decay : 1.0) / cps) * decayScale,
+    // optional Penner curve names for the attack/decay envelope segments (else linear)
+    attackEase: v.attackEase || null,
+    decayEase: v.decayEase || null,
     mods: mods.length ? mods : null,
     spawnT: elapsed,           // global seconds at spawn → osc().drift() (free) reads this
     spawnCycle: cycle,         // global cycle at spawn → osc().drift() (synced) reads this
@@ -287,6 +290,7 @@ function interpPal(colors, t) {
 // ── live oscillators (LFOs): evaluated each frame against a glyph's age, so a
 // control keeps moving over the glyph's lifetime instead of freezing at spawn. ──
 const isOsc = DSL.isOsc;
+const applyEase = DSL.ease;   // named Penner curve, 0..1 → 0..1 (shared with pattern.js)
 const MOD_FIELDS = ['size', 'color', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade'];
 const _h1 = (x) => { const s = Math.sin((x + 0.123) * 12.9898) * 43758.5453; return s - Math.floor(s); };
 const _snoise = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return _h1(i) * (1 - u) + _h1(i + 1) * u; };
@@ -315,6 +319,7 @@ function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
     case 'fbm': v = _fbm(t); break;                       // organic, multi-octave
     default: v = (Math.sin(TAU * t) + 1) / 2;             // sine
   }
+  if (d.ease) v = applyEase(d.ease, v);                   // shape the 0..1 waveform BEFORE range
   const lo = numAt(d.lo, age, gp, st, ageC, stC), hi = numAt(d.hi, age, gp, st, ageC, stC);
   let r = lo + v * (hi - lo);
   if (d.ops) for (const [op, x] of d.ops) {            // .add/.sub/.mul/.div/.quantize (x may be an osc)
@@ -722,9 +727,19 @@ function tick(dt) {
     p.age += dt;
     p.ageCycles += dt * cps;                          // accumulates at the live tempo (no retroactive warp)
     if (p.age >= p.attack + p.decay) continue;        // expired → drop
-    const env = p.age < p.attack
-      ? (p.attack > 0 ? p.age / p.attack : 1)          // attack rise
-      : 1 - (p.age - p.attack) / p.decay;              // decay fall
+    // attack rises 0→1, decay falls 1→0; an optional Penner curve shapes either
+    // segment. For decay we ease the "amount remaining" (1−t) so the curve reads as
+    // the shape of the fade. Clamp to 0..1: env drives alpha, so overshoot (outBack/
+    // elastic) flat-tops rather than blowing out. (Future: route overshoot into a
+    // size pop for a true bounce-in — see ROADMAP.)
+    let env;
+    if (p.age < p.attack) {
+      const t = p.attack > 0 ? p.age / p.attack : 1;
+      env = p.attackEase ? applyEase(p.attackEase, t) : t;
+    } else {
+      const t = (p.age - p.attack) / p.decay;
+      env = p.decayEase ? applyEase(p.decayEase, 1 - t) : 1 - t;
+    }
     p._env = Math.max(0, Math.min(1, env));
     p._a = p._env * p.alpha;                           // for trace mode
     if (p.posLive) { const r = resolvePos(p, minDim, p.age); p.x = r[0]; p.y = r[1]; }
@@ -901,6 +916,21 @@ stack(
     .color(palette("rainbow").at(osc(0.08).spread(1).range(0, 1)))
     .size(osc(0.5, "sine").spread(2).range(0.01, 0.05))
     .decay(2)
+)`,
+
+  // easing curves SHAPE a 0..1 signal before it's ranged (fast-out / slow-settle /
+  // overshoot a linear ramp can't). radius rides an outExpo saw (bunched spiral),
+  // hue eases inOutSine, the live size-osc breathes through inOutCubic, and each
+  // glyph blooms with an outBack attack then fades on an inOutSine decay.
+  'easing': `stack(
+  bg("#06060f"),
+  shape("dot*28")
+    .angle(saw.range(0, 1))
+    .radius(saw.ease("outExpo").range(0.04, 0.46))
+    .color(palette("aurora").at(saw.ease("inOutSine").range(0, 1)))
+    .size(osc(0.5, "tri").ease("inOutCubic").range(0.012, 0.055))
+    .attack(0.4, "outBack")
+    .decay(2.4, "inOutSine")
 )`,
 
   // ── shader FX (WebGL): each group() runs a post-process chain on its layer ──

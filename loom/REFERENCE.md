@@ -209,6 +209,14 @@ filled, outlined, or both. All four are patterns, so `.fill("1 0")`,
 | --- | --- |
 | `.attack(s)` | fade-in time. default `0.06` |
 | `.decay(s)` | fade-out time / lifetime. default ≈ one cycle. alias: `.life(s)` |
+| `.attack(s, curve)` | shape the fade-**in** with an easing curve, e.g. `.attack(0.3, "outBack")` |
+| `.decay(s, curve)` | shape the fade-**out**, e.g. `.decay(2, "inOutSine")` (curve names: see *Easing* above) |
+
+The optional second arg shapes that envelope segment with an easing curve instead of a
+straight line. The envelope drives per-glyph **alpha** (`0..1`), so overshooting curves
+(`outBack`/`elastic`) clamp at full rather than blowing out — they change the *timing*
+feel of the fade, not its brightness. *(A future option may route the overshoot into a
+size pop for a true bounce-in.)*
 
 The **decay** slider in the transport is a master multiplier baked into each
 glyph *at spawn*, moving it only affects glyphs drawn afterward, never ones
@@ -269,6 +277,29 @@ a control takes a value.
 | `.add(x)` `.sub(x)` `.mul(x)` `.div(x)` | arithmetic; **`x` may be a number or a pattern** |
 | `.quantize(n)` | snap the **value** to `n` steps (`Math.round(v*n)/n`). Discrete bands, but a continuous signal still crosses them on its own (uneven) timing |
 | `.segment(n)` (alias `.seg`) | snap the **time**: resample `n` times per cycle on an even grid and hold each value — Tidal's `segment`/`discretise`. `quantize` steps the value, `segment` steps the time |
+| `.ease(name)` | reshape the **0..1 signal** through an easing curve **before** `.range()` maps it — turn a linear ramp into an accelerating / decelerating / overshooting one |
+
+### Easing
+
+`.ease("outExpo")` remaps a `0..1` signal through a **Penner / anime.js easing curve**, the
+shaping vocabulary `quantize`/`range` lack. The rule is **ease the unit signal, then
+`range` maps it** — easing always operates on the normalized `0..1`, so put it *before*
+`.range()`:
+
+```js
+shape("dot*24").angle(saw.range(0,1))
+  .radius(saw.ease("outExpo").range(0.04, 0.46))   // a bunched spiral (fast out, slow settle)
+  .color(palette("aurora").at(saw.ease("inOutSine").range(0, 1)))
+```
+
+It works the same on a **live `osc`** (shapes the waveform before its range), so
+`osc(0.5,"tri").ease("inOutCubic").range(0.02, 0.06)` breathes on a softened curve.
+
+**Curves** (24 + `linear`): `in` / `out` / `inOut` × `Quad` `Cubic` `Quart` `Expo`
+`Sine` `Back` `Elastic` `Bounce` — e.g. `inQuad` `outExpo` `inOutSine` `outBack`
+`outElastic` `outBounce`. `back` / `elastic` / `bounce` deliberately **overshoot** past
+`[0,1]` (that swing is the point). The curve name is itself sampled from the right, so it
+can be a mini-notation pattern: `.ease("<inOutSine outBack>")` alternates curves per cycle.
 
 `quantize` snaps amplitude, not time, so `sine.quantize(4)` lingers at the peaks/troughs (where the sine is slow) and flickers through the middle. For even rhythmic steps use `.segment(n)` (or drive it with a time-linear ramp like `saw`/`tri`). They compose: `perlin.segment(8).quantize(4)` = organic walk, plucked on 8ths, into 4 colours. `palette("rainbow").at(perlin.range(0,1).segment(8))` plucks the background on a grid.
 

@@ -33,6 +33,51 @@ function spanCycles(s) {
 const hap = (whole, part, value) => ({ whole, part, value });
 const hasOnset = (h) => h.whole && Math.abs(h.whole.begin - h.part.begin) < EPS;
 
+// ── easing curves (Penner / anime.js set) ───────────────────────────────────────
+// A 0..1 → 0..1 remap, used to *shape* a normalized signal before it's ranged: a
+// linear ramp (saw) becomes an accelerating/decelerating/overshooting one. Pure
+// curve maths, no runtime dep. Each family has in / out / inOut variants derived
+// from the canonical "in" curve: out(t)=1−in(1−t), inOut splits the unit interval.
+// back / elastic / bounce intentionally overshoot OUTPUT past [0,1] — that swing is
+// the point — so we clamp the INPUT domain but never the output.
+const PI = Math.PI;
+const _easeIn = {
+  quad:  (t) => t * t,
+  cubic: (t) => t * t * t,
+  quart: (t) => t * t * t * t,
+  expo:  (t) => (t === 0 ? 0 : Math.pow(2, 10 * t - 10)),
+  sine:  (t) => 1 - Math.cos((t * PI) / 2),
+  back:  (t) => { const c1 = 1.70158, c3 = c1 + 1; return c3 * t * t * t - c1 * t * t; },
+  elastic: (t) => { if (t === 0 || t === 1) return t; const c4 = (2 * PI) / 3; return -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * c4); },
+};
+function _bounceOut(t) {
+  const n1 = 7.5625, d1 = 2.75;
+  if (t < 1 / d1) return n1 * t * t;
+  if (t < 2 / d1) return n1 * (t -= 1.5 / d1) * t + 0.75;
+  if (t < 2.5 / d1) return n1 * (t -= 2.25 / d1) * t + 0.9375;
+  return n1 * (t -= 2.625 / d1) * t + 0.984375;
+}
+const EASE = { linear: (t) => t };
+for (const [fam, fn] of Object.entries(_easeIn)) {
+  const C = fam[0].toUpperCase() + fam.slice(1);
+  EASE['in' + C] = fn;
+  EASE['out' + C] = (t) => 1 - fn(1 - t);
+  EASE['inOut' + C] = (t) => (t < 0.5 ? fn(2 * t) / 2 : 1 - fn(2 - 2 * t) / 2);
+}
+EASE.outBounce = _bounceOut;
+EASE.inBounce = (t) => 1 - _bounceOut(1 - t);
+EASE.inOutBounce = (t) => (t < 0.5 ? (1 - _bounceOut(1 - 2 * t)) / 2 : (1 + _bounceOut(2 * t - 1)) / 2);
+
+// apply a named curve to t. Clamp the input to [0,1] (Penner curves are only defined
+// there; expo/elastic explode outside it) but let the output overshoot. Unknown name
+// → identity, so a typo degrades to "no easing" rather than NaN.
+function ease(name, t) {
+  const fn = EASE[name];
+  if (!fn) return t;
+  const x = t < 0 ? 0 : t > 1 ? 1 : t;
+  return fn(x);
+}
+
 // ── the Pattern type ──────────────────────────────────────────────────────────
 class Pattern {
   constructor(query) { this.query = query; } // query: span -> hap[]
@@ -128,6 +173,11 @@ class Pattern {
   mul(arg) { return appLeft(this.fmap((l) => (r) => l * r), reify(arg)); }
   div(arg) { return appLeft(this.fmap((l) => (r) => l / r), reify(arg)); }
   quantize(n) { return this.fmap((v) => Math.round(v * n) / n); } // snap to nearest 1/n
+  // ease(name): shape this 0..1 signal through a Penner curve, BEFORE any .range().
+  // The rule is "ease the unit signal, range maps it", so `saw.ease("outExpo").range(0,1)`
+  // accelerates the ramp then maps it. The curve name is itself sampled from the right,
+  // so it can be a mini-notation pattern: `.ease("<inOutSine outBack>")` alternates curves.
+  ease(name) { return appLeft(this.fmap((v) => (nm) => ease(String(nm), v)), reify(name)); }
   // segment(n): sample this pattern n times per cycle on an EVEN time grid and hold
   // each value for its 1/n slice. Turns a continuous signal (sine/perlin/…) into n
   // rhythmic, time-quantized steps — Tidal's `segment`/`discretise`. (quantize() steps
@@ -183,10 +233,12 @@ class Pattern {
   rotateX(a){ return this.set('rotateX', a); }  // tilt around horizontal axis (turns)
   rotateY(a){ return this.set('rotateY', a); }  // tilt around vertical axis (turns)
   open(a)   { return this.set('open', a); }     // arc/ring gap, 0..1 (fraction left open)
-  // envelope (seconds): attack = fade-in, decay = fade-out / lifetime
-  attack(a) { return this.set('attack', a); }
-  decay(a)  { return this.set('decay', a); }
-  life(a)   { return this.set('decay', a); } // alias for decay
+  // envelope (seconds): attack = fade-in, decay = fade-out / lifetime. An optional
+  // second arg names a Penner curve to shape that segment instead of a straight line:
+  // .attack(0.3, "outBack") eases the fade-in, .decay(2, "inOutSine") shapes the fade-out.
+  attack(a, curve) { const p = this.set('attack', a); return curve != null ? p.set('attackEase', curve) : p; }
+  decay(a, curve)  { const p = this.set('decay', a);  return curve != null ? p.set('decayEase', curve) : p; }
+  life(a, curve)   { return this.decay(a, curve); } // alias for decay
 }
 
 const NUMERIC = new Set(['size','x','y','radius','angle','gridX','gridY','rotate','rotateX','rotateY','spin','alpha','pan','jitter','weight','attack','decay','fill','stroke','vertex','open']);
@@ -329,6 +381,10 @@ function makeOsc(o) {
     mul(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['*', x]] }); },
     div(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['/', x]] }); },
     quantize(n) { return makeOsc({ ...o, ops: [...(o.ops || []), ['q', n]] }); }, // snap to nearest 1/n
+    // ease(name): shape the osc's 0..1 waveform through a Penner curve, BEFORE range —
+    // same rule as Pattern.ease, so `osc(0.2).ease("inOutSine").range(0,0.4)` matches the
+    // signal form. (A dedicated pre-range slot, not an op, which run post-range.)
+    ease(name) { return makeOsc({ ...o, ease: name }); },
   };
 }
 const isOsc = (a) => a != null && typeof a === 'object' && a.__osc !== undefined;
@@ -654,6 +710,6 @@ export const DSL = {
   fast, slow, rev, run, range, mini, euclid,
   shape, s, n, choose, irand, osc, palette, bg, group, echo, _setBgSink,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
-  hasOnset, span, isOsc,
+  hasOnset, span, isOsc, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,
 };

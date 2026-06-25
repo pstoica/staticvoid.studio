@@ -415,6 +415,7 @@
         <code>.open(0..1)</code><p>arc/ring gap (use shape <code>arc</code>)</p>
         <code>.alpha(0..1) .opacity(0..1) .pan(0..1) .jitter(0..0.1)</code>
         <code>.attack(s) .decay(s)</code><p>fade-in / fade-out (s alias <code>.life</code>)</p>
+        <code>.attack(s, "outBack") .decay(s, "inOutSine")</code><p>shape the fade with a Penner curve (2nd arg)</p>
         <code>.blend("source-over"|"screen"|"lighter"|"multiply")</code>
       </section>
       <section data-cat="xform">
@@ -454,6 +455,8 @@
         <code>osc(2).rate(osc(0.1).range(1,4))</code><p>any osc param (rate · phase · range) can itself be an osc → cross-modulation (FM · PM · AM)</p>
         <code>.x(osc(0.2, "perlin").range(0, 1))</code><p>← a wandering dot</p>
         <code>.range(lo, hi)</code><p>remap a 0..1 signal, lo/hi may be numbers, patterns, or oscs</p>
+        <code>.quantize(n) .segment(n)</code><p>snap the <em>value</em> to n steps · snap the <em>time</em> to n steps/cycle (alias <code>.seg</code>)</p>
+        <code>.ease("outExpo")</code><p>shape a 0..1 signal/osc through a Penner curve <em>before</em> <code>.range()</code> — in/out/inOut × quad·cubic·quart·expo·sine·back·elastic·bounce. <code>saw.ease("outExpo").range(0,1)</code></p>
         <code>.add(x) .sub(x) .mul(x) .div(x)</code><p>x may be a number <em>or a pattern</em></p>
         <code>.x( saw.add(sine.range(0, 0.1)) )</code><p>← wobble a ramp by a sine</p>
       </section>

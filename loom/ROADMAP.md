@@ -6,11 +6,15 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
 
 ## Tier 1 — now (small, high-value, independent)
 
-1. **Easing as a primitive.** `.ease("outExpo")` etc. — a 0..1→0..1 remap usable on any
-   signal / osc / pattern output, plus easing-shaped envelopes (`.attack(s,"outBack")`,
-   `.decay(s,"inOutSine")`). Borrow the Penner/anime.js curve set (no runtime dep needed —
-   just the functions). *Why first:* it's the missing shaping vocabulary; tiny lift; pairs
-   with everything (osc, quantize, spring).
+1. **Easing as a primitive.** ✅ **Done.** `.ease("outExpo")` — a 0..1→0..1 Penner/anime.js
+   remap on any signal / osc output (shapes the unit signal *before* `.range()`), plus
+   easing-shaped envelopes (`.attack(s,"outBack")`, `.decay(s,"inOutSine")`). 24 curves +
+   `linear`; curve name is patternable. Lives in `pattern.js` (`EASE`/`ease`, `Pattern.ease`,
+   osc `ease` slot, `attack`/`decay` 2nd arg) + `main.js` (`evalOsc` pre-range slot, env calc).
+   No renderer change. Preset: `easing`.
+   - *Future fork:* the envelope currently drives alpha only, so overshoot curves clamp.
+     Could route the overshoot into a per-glyph **size pop** for a true bounce-in (touches
+     the renderer / per-glyph state — natural to fold in with the spring work, #3).
 
 2. **Named layers / `$` syntax (Strudel `$:`-style).** A `$(name?, pattern)` registry so a
    patch is several **named, separately-editable layers** instead of one giant
