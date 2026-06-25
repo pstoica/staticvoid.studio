@@ -1581,10 +1581,10 @@ $('#presaveas').addEventListener('click', () => savePreset(true));   // always a
 // ── right sidebar (swappable presets / guide) ──
 const side = $('#side');
 const panes = [...side.querySelectorAll('.tabpane')];
-const tabs = [...side.querySelectorAll('.tab')];
+const sideTitle = $('#sidetitle');
 function showTab(name) {
   panes.forEach((p) => { p.hidden = p.dataset.pane !== name; });
-  tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  if (sideTitle) sideTitle.textContent = name;   // the toolbar grid/? switch panes; this just names the open one
   localStorage.setItem('loom.sidetab', name);
 }
 
@@ -1618,7 +1618,7 @@ function setupGuide() {
     chip.addEventListener('click', () => {
       const headH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--guidehead-h')) || 96;
       const top = gpane.scrollTop + (sec.getBoundingClientRect().top - gpane.getBoundingClientRect().top) - headH;
-      gpane.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      gpane.scrollTop = Math.max(0, top);   // jump straight there — no smooth scroll
     });
     navEl.appendChild(chip);
     navChips.set(sec, chip);
@@ -1642,7 +1642,7 @@ function setupGuide() {
   const revealChip = (chip) => {
     const c = chip.getBoundingClientRect(), n = navEl.getBoundingClientRect();
     if (n.width && (c.left < n.left || c.right > n.right))
-      chip.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+      chip.scrollIntoView({ inline: 'nearest', block: 'nearest' });   // instant, no smooth glide
   };
   function syncActiveNav() {
     if (!gpane || !navChips.size) return;
@@ -1724,8 +1724,6 @@ function setSide(open, tab) {
   $('#helpbtn').classList.toggle('on', onGuide);
   localStorage.setItem('loom.side', open ? '1' : '0');
 }
-tabs.forEach((t) => t.addEventListener('click', () => setSide(true, t.dataset.tab)));
-$('#sideclose').addEventListener('click', () => setSide(false));
 // presets / guide each open the sidebar on their tab (and toggle it shut when already there)
 const onTab = (name) => !side.classList.contains('hidden') && side.querySelector(`[data-pane="${name}"]:not([hidden])`);
 $('#panelbtn').addEventListener('click', () => setSide(!onTab('presets'), 'presets'));
