@@ -1573,7 +1573,13 @@ function setupGuide() {
     chip.className = 'gnav'; chip.type = 'button'; chip.textContent = label;
     const cat = getComputedStyle(sec).getPropertyValue('--cat').trim();
     if (cat) chip.style.setProperty('--gc', cat);
-    chip.addEventListener('click', () => sec.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    // jump to the section — scroll the pane explicitly (offset by the sticky head) rather than
+    // scrollIntoView, which lands the title under the head and reads as "nothing moved".
+    chip.addEventListener('click', () => {
+      const headH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--guidehead-h')) || 96;
+      const top = gpane.scrollTop + (sec.getBoundingClientRect().top - gpane.getBoundingClientRect().top) - headH;
+      gpane.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    });
     navEl.appendChild(chip);
     navChips.set(sec, chip);
   }
@@ -1783,10 +1789,13 @@ function feedPointer(e) {
   pointerState.y = Math.max(0, Math.min(1, (e.clientY - r.top) / (r.height || 1)));
   syncPointer();
 }
-// mouseDown fires on any press (the editor doesn't gate it). To trigger without selecting code,
-// use Perform mode (below): it makes the editor click-through, so the whole screen is a surface.
+// mouseDown fires on a press over the canvas/background — NOT on the UI chrome (toolbar, rail/
+// editor, side panel), so clicking a button or dragging a slider never trips it. To trigger
+// without selecting code, use Perform mode (below): it makes the editor click-through, so the
+// whole screen becomes a clean trigger surface (presses then land on the canvas, not #rail).
+const onChrome = (e) => !!(e.target && e.target.closest && e.target.closest('#rail, #toolbar, #side'));
 window.addEventListener('pointermove', feedPointer, { passive: true });
-window.addEventListener('pointerdown', (e) => { feedPointer(e); pointerState.down = 1; syncPointer(); }, { passive: true });
+window.addEventListener('pointerdown', (e) => { feedPointer(e); if (!onChrome(e)) { pointerState.down = 1; syncPointer(); } }, { passive: true });
 window.addEventListener('pointerup', () => { pointerState.down = 0; syncPointer(); }, { passive: true });
 window.addEventListener('pointercancel', () => { pointerState.down = 0; syncPointer(); }, { passive: true });
 
