@@ -1597,9 +1597,10 @@ function setChromeHidden(on) { document.body.classList.toggle('chrome-hidden', o
 function setPerform(on) {
   document.body.classList.toggle('perform', on);
   $('#performbtn').classList.toggle('on', on);
-  const ew = $('#editwrap');                          // dim + click-through, applied inline (robust)
-  ew.style.opacity = on ? '0.16' : '';
-  ew.style.pointerEvents = on ? 'none' : '';
+  // editor text is click-through (set inline — reliable); the CODE is ghosted + the slider
+  // widgets stay bright/live via CSS (see body.perform rules). Sliders re-enable their own
+  // pointer-events, so they're still grabbable through the click-through editor.
+  $('#editwrap').style.pointerEvents = on ? 'none' : '';
 }
 const togglePerform = () => setPerform(!document.body.classList.contains('perform'));
 document.addEventListener('keydown', (e) => {

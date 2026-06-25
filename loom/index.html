@@ -43,9 +43,17 @@
   /* ⌘/Ctrl+Shift+H (or ⌘/Ctrl+.) hides every bit of chrome — just the drawing */
   body.chrome-hidden #rail, body.chrome-hidden #toolbar, body.chrome-hidden #side,
   body.chrome-hidden #hint { opacity:0; pointer-events:none; transition:opacity .35s var(--ease); }
-  /* Perform mode (⌘/Ctrl+Shift+E, or the eye button) dims the editor to a faint ghost and
-     makes it click-through (opacity + pointer-events set inline by setPerform), so the whole
-     screen is a clean trigger surface — no text selection. The controls stay live. */
+  /* Perform mode (⌘/Ctrl+Shift+E, or the perform button): ghost the CODE so the canvas reads,
+     but keep the slider + badge widgets bright + LIVE — they're your performance controls.
+     (Container opacity would cap the widgets, so we dim the text colour instead.) The editor is
+     click-through (set inline); the sliders re-enable pointer-events + highlight on hover. */
+  body.perform #editwrap .cm-content { color:rgba(233,233,234,.16) !important; }
+  body.perform #editwrap .cm-line span:not(.cm-loom-live):not(.cm-loom-slider) { color:rgba(233,233,234,.16) !important; }
+  body.perform #editwrap .cm-line { background:transparent; }
+  body.perform #editwrap .cm-cursor { opacity:0; }
+  body.perform #editwrap .cm-loom-slider { pointer-events:auto; }
+  body.perform #editwrap .cm-loom-slider input { transition:transform .12s var(--ease), filter .12s var(--ease); }
+  body.perform #editwrap .cm-loom-slider:hover input { transform:scale(1.22); filter:brightness(1.15) drop-shadow(0 0 5px rgba(255,255,255,.55)); }
 
   #brand { display:flex; align-items:baseline; gap:10px; padding:18px 22px 12px; }
   #brand h1 { font-family:"Unbounded",var(--font); font-weight:700; font-size:19px; margin:0;
@@ -137,8 +145,10 @@
   #runbtn kbd { font:inherit; opacity:.5; }
   /* instant styled tooltip under each icon button (replaces the slow native title) */
   #toolbar .btn[data-tip] { position:relative; }
+  /* the toolbar hugs the right edge, so anchor tooltips to the button's RIGHT (extend left)
+     — a centred tooltip on the rightmost button overflows off-screen. */
   #toolbar .btn[data-tip]::after { content:attr(data-tip); position:absolute; top:calc(100% + 8px);
-    left:50%; transform:translateX(-50%); background:rgba(0,0,0,.88); color:var(--ink);
+    right:0; background:rgba(0,0,0,.88); color:var(--ink);
     font:500 10.5px/1 var(--mono); letter-spacing:.04em; padding:6px 8px; white-space:nowrap;
     border:1px solid var(--line); pointer-events:none; opacity:0; transition:opacity .12s var(--ease); z-index:20; }
   #toolbar .btn[data-tip]:hover::after { opacity:1; }
@@ -325,6 +335,8 @@
       <div class="trow">
         <button class="btn" id="clockbtn" title="toggle the cycle playhead">
           <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg><span class="btxt">clock</span></button>
+        <button class="btn" id="performbtn" title="perform — dim the editor so it's click-through; sliders stay live (⌘⇧E)">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg><span class="btxt">perform</span></button>
         <span class="pair">
           <div class="num" id="cpsnum" title="drag ↔ or scroll · double-click to reset">speed <b id="cpsval">0.60</b></div>
           <div class="num" id="persistnum" title="drag ↔ or scroll · double-click to reset">decay <b id="decayval">1.5</b></div>
@@ -358,8 +370,6 @@
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></button>
     <button class="btn icon" id="helpbtn" aria-label="guide" data-tip="guide">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.3 2.4c-.8.3-1.3.9-1.3 1.7v.4"/><path d="M12 17h.01"/></svg></button>
-    <button class="btn icon" id="performbtn" aria-label="perform" data-tip="perform · dim the editor so it's click-through (⌘⇧E)">
-      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
   </nav>
 
   <aside id="side">

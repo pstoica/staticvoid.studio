@@ -396,9 +396,10 @@ which the pointer ignores; `.quantize(n)` snaps the *value* instead.)
 
 `mouseDown` fires on any press, so `group(pat).feedback(mouseDown.range(0, 0.92)).kaleido(mouseDown.range(0, 8))`
 switches the chain on while pressed (see the `press` preset). To trigger **without selecting
-code**, flip on **Perform mode** (the eye button, or **⌘/Ctrl+Shift+E**): it dims the editor to
-a ghost and makes it click-through, so the whole screen is a clean trigger surface (Escape or
-toggle again to edit). ⌘/Ctrl+. still fully hides all chrome.
+code**, flip on **Perform mode** (the *perform* button by the clock, or **⌘/Ctrl+Shift+E**): it
+ghosts the code and makes the editor click-through, so the whole screen is a clean trigger
+surface — but **sliders stay bright + live** (and highlight on hover), so they're your hands-on
+controls. Escape or toggle again to edit. ⌘/Ctrl+. still fully hides all chrome.
 
 | Method | Effect |
 | --- | --- |
