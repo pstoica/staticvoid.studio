@@ -37,7 +37,7 @@
   #feedcam[hidden] { display:none; }
   /* feed config card (top-right, under the toolbar) */
   #feedpanel { position:fixed; top:58px; right:calc(16px + var(--side-w, 0px)); z-index:8; width:220px;
-    display:flex; flex-direction:column; gap:9px; padding:13px 14px; border-radius:10px;
+    display:flex; flex-direction:column; gap:9px; padding:13px 14px; border-radius:0;
     background:rgba(15,15,17,.94); backdrop-filter:blur(10px); border:1px solid var(--line);
     box-shadow:0 14px 40px rgba(0,0,0,.5); font:500 11px/1.3 var(--mono); color:var(--ink); }
   #feedpanel[hidden] { display:none; }
@@ -45,15 +45,15 @@
   .fphdr { display:flex; align-items:center; gap:7px; font:600 10px/1 var(--mono); letter-spacing:.08em;
     text-transform:uppercase; color:var(--muted); padding-bottom:3px; }
   .fpdot { width:7px; height:7px; border-radius:50%; background:#555; flex:none; transition:.2s var(--ease); }
-  .fpdot.on { background:#56d364; box-shadow:0 0 7px #56d364; }
-  .fpdot.wait { background:#d9a441; box-shadow:0 0 7px #d9a441; }
+  .fpdot.on { background:#56d364; }
+  .fpdot.wait { background:#d9a441; }
   .fpstat { margin-left:auto; font-weight:500; letter-spacing:0; text-transform:none; }
   .fprow { display:flex; align-items:center; gap:8px; cursor:pointer; }
   .fprow input[type="checkbox"] { accent-color:var(--accent); width:14px; height:14px; cursor:pointer; flex:none; }
   .fprow.fphost, .fprow.fpop { cursor:default; }
   .fphost span, .fpop span { color:var(--muted); min-width:46px; }
   #feedhostin { flex:1; min-width:0; font:500 11px/1 var(--mono); color:var(--ink);
-    background:rgba(255,255,255,.05); border:1px solid var(--line); border-radius:5px; padding:6px 7px; }
+    background:rgba(255,255,255,.05); border:1px solid var(--line); border-radius:0; padding:6px 7px; }
   #feedhostin:focus { outline:none; border-color:rgba(255,255,255,.28); }
   #feedop { flex:1; min-width:0; accent-color:var(--accent); }
   .fpballs { font-size:10px; color:var(--muted); border-top:1px solid var(--line); padding-top:8px; min-height:13px; }
@@ -102,7 +102,7 @@
   #presbar { position:sticky; top:0; z-index:3; display:flex; gap:8px; align-items:center;
     margin:0 -18px 8px; padding:16px 18px 9px; background:#0f0f11; border-bottom:1px solid var(--line); }
   #presbar .mini { height:32px; padding:0 12px; font-size:11px; color:var(--muted);
-    background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:7px;
+    background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:0;
     display:inline-flex; align-items:center; transition:.14s var(--ease); }
   #presbar .mini:hover { color:var(--ink); border-color:rgba(255,255,255,.24); }
   #preslist { display:flex; flex-direction:column; gap:3px; }
@@ -122,7 +122,9 @@
     border:1px solid transparent; border-left:2px solid transparent; border-radius:0; transition:.14s var(--ease);
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .presrow .load:hover { color:var(--ink); background:rgba(255,255,255,.06); }
-  .presrow.active .load { color:var(--ink); background:rgba(255,255,255,.07); border-left-color:var(--ink); }
+  /* the loaded preset — what "save" overwrites. Strong, and distinct from a plain hover. */
+  .presrow.active .load { color:var(--ink); background:rgba(255,255,255,.1); border-left:2px solid var(--ink); font-weight:600; }
+  .presrow.active .load::after { content:"●"; float:right; font-size:7px; line-height:16px; color:var(--ink); opacity:.7; }
   .presrow .del { width:30px; height:34px; flex:none; cursor:pointer; border-radius:0;
     border:1px solid var(--line); background:rgba(255,255,255,.025); color:var(--muted); font-size:14px; line-height:1;
     transition:.14s var(--ease); }
@@ -277,15 +279,13 @@
   #side section[data-cat="pal"]    { --cat:#ff9f6b; }
   #side h3 { font:700 13px/1 var(--mono); color:var(--cat); letter-spacing:.06em;
     text-transform:uppercase; margin:0 0 11px; display:flex; align-items:center; gap:8px; }
-  #side h3::before { content:""; width:8px; height:8px; border-radius:2px; flex:none;
-    background:var(--cat); box-shadow:0 0 10px -1px var(--cat); }
+  #side h3::before { content:""; width:7px; height:7px; flex:none; background:var(--cat); }
   #side h3 span { color:var(--muted); text-transform:none; font-weight:400; letter-spacing:0; }
   #side code { font:500 12px/1.5 var(--mono); color:var(--ink);
-    background:rgba(255,255,255,.045); border:1px solid var(--line); border-radius:6px;
+    background:rgba(255,255,255,.045); border:1px solid var(--line); border-radius:0;
     padding:1px 6px; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; }
   #side section > .grow > code:first-child, #side section > code {
-    display:block; padding:5px 9px 5px 11px; margin:7px 0 2px;
-    border-left:2px solid color-mix(in srgb, var(--cat) 55%, transparent); }
+    display:block; padding:6px 10px; margin:7px 0 2px; }
   #side p code { background:rgba(255,255,255,.08); border-color:transparent; color:var(--cat); }
   #side p { font:400 11.5px/1.5 var(--font); color:var(--muted); margin:0 0 7px 2px; }
   #side p.shapes { font-family:var(--mono); color:rgba(238,241,246,.7); margin-top:8px; }
@@ -309,7 +309,7 @@
   #guidenav { display:flex; flex-wrap:nowrap; gap:5px; padding:0 0 9px; overflow-x:auto; scrollbar-width:none; }
   #guidenav::-webkit-scrollbar { display:none; }
   .gnav { font:600 9.5px/1 var(--mono); letter-spacing:.05em; text-transform:uppercase; cursor:pointer; white-space:nowrap; flex:none;
-    color:var(--muted); background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:999px; padding:5px 8px;
+    color:var(--muted); background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:0; padding:5px 8px;
     transition:.12s var(--ease); }
   .gnav:hover { color:var(--gc, var(--ink)); border-color:var(--gc, rgba(255,255,255,.28)); background:rgba(255,255,255,.07); }
   .gnav.active { color:#0a0a0c; background:var(--gc, var(--ink)); border-color:var(--gc, var(--ink)); }   /* current section */
@@ -322,11 +322,11 @@
     background:#0f0f11; }
   #side section h3::after { content:""; position:absolute; left:0; right:0; bottom:100%; height:14px; background:#0f0f11; pointer-events:none; }
   #guidefilter { flex:1; min-width:0; font:500 12px/1 var(--mono); color:var(--ink);
-    background:rgba(255,255,255,.05); border:1px solid var(--line); border-radius:7px; padding:9px 11px; }
+    background:rgba(255,255,255,.05); border:1px solid var(--line); border-radius:0; padding:9px 11px; }
   #guidefilter::placeholder { color:var(--muted); }
   #guidefilter:focus { outline:none; border-color:rgba(255,255,255,.28); background:rgba(255,255,255,.08); }
   #guidecopy { font:600 10px/1 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
-    background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:7px; padding:0 12px; cursor:pointer;
+    background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:0; padding:0 12px; cursor:pointer;
     white-space:nowrap; flex:none; transition:.14s var(--ease); }
   #guidecopy:hover { color:var(--ink); border-color:rgba(255,255,255,.24); }
   #guidecopy.done { color:#6df0c2; border-color:rgba(109,240,194,.45); background:rgba(109,240,194,.08); }
@@ -335,12 +335,12 @@
 
   /* palette swatches */
   #palswatches { display:flex; flex-direction:column; gap:4px; margin-top:4px; }
-  .palrow { display:flex; align-items:center; gap:10px; padding:3px 4px; border-radius:6px;
+  .palrow { display:flex; align-items:center; gap:10px; padding:3px 4px; border-radius:0;
     cursor:pointer; border:1px solid transparent; }
   .palrow:hover { background:rgba(255,255,255,.05); border-color:var(--line); }
   .palname { font:500 11px/1 var(--mono); color:var(--muted); width:62px; flex:none; }
   .palrow:hover .palname { color:var(--ink); }
-  .palgrad { height:15px; flex:1; border-radius:4px; border:1px solid rgba(255,255,255,.14); }
+  .palgrad { height:15px; flex:1; border-radius:0; border:1px solid rgba(255,255,255,.14); }
   .palrow .palhint { font:500 10px/1 var(--mono); color:transparent; flex:none; }
   .palrow:hover .palhint { color:var(--muted); }
   .palrow.copied .palhint { color:#6df0c2; }
