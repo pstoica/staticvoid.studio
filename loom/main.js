@@ -1573,9 +1573,14 @@ function setupGuide() {
   function syncActiveNav() {
     if (!gpane || !navChips.size) return;
     const headH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--guidehead-h')) || 100;
-    const y = gpane.scrollTop + headH + 8;
+    // measure each section against the scroll viewport (getBoundingClientRect), not offsetTop —
+    // offsetTop is relative to the positioned #side, so it carries a constant skew vs scrollTop.
+    const paneTop = gpane.getBoundingClientRect().top;
     let active = null;
-    for (const sec of sections) { if (sec.hidden || sec.classList.contains('lineage')) continue; if (sec.offsetTop <= y) active = sec; }
+    for (const sec of sections) {
+      if (sec.hidden || sec.classList.contains('lineage')) continue;
+      if (sec.getBoundingClientRect().top - paneTop <= headH + 4) active = sec;
+    }
     navChips.forEach((chip, sec) => chip.classList.toggle('active', sec === (active || sections.find((s) => navChips.has(s)))));
   }
   if (gpane) { gpane.addEventListener('scroll', syncActiveNav, { passive: true }); requestAnimationFrame(syncActiveNav); }

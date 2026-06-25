@@ -261,11 +261,16 @@
   /* filter + LLM-copy bar (sticky atop the guide) */
   /* sticky head: search bar + section nav, pinned at the top of the scrolling guide. Opaque
      background — translucent leaked the scrolling code through it. */
-  .guidehead { position:sticky; top:0; z-index:5; margin:-16px -18px 14px; padding:14px 18px 0;
+  /* guide pane: kill the top padding so the sticky head sits flush at the scroll origin —
+     a negative top margin + sticky leaves a strip the scrolling content leaks through. */
+  .tabpane[data-pane="guide"] { padding-top:0; }
+  .guidehead { position:sticky; top:0; z-index:5; margin:0 -18px 14px; padding:16px 18px 0;
     background:#0f0f11; border-bottom:1px solid var(--line); }
   .guidebar { display:flex; gap:8px; padding:0 0 10px; }
-  #guidenav { display:flex; flex-wrap:wrap; gap:5px; padding:0 0 12px; }
-  .gnav { font:600 9.5px/1 var(--mono); letter-spacing:.05em; text-transform:uppercase; cursor:pointer;
+  /* one horizontally-scrollable row, not a wrapped block that eats half the panel */
+  #guidenav { display:flex; flex-wrap:nowrap; gap:5px; padding:0 0 12px; overflow-x:auto; scrollbar-width:none; }
+  #guidenav::-webkit-scrollbar { display:none; }
+  .gnav { font:600 9.5px/1 var(--mono); letter-spacing:.05em; text-transform:uppercase; cursor:pointer; white-space:nowrap; flex:none;
     color:var(--muted); background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:999px; padding:5px 8px;
     transition:.12s var(--ease); }
   .gnav:hover { color:var(--gc, var(--ink)); border-color:var(--gc, rgba(255,255,255,.28)); background:rgba(255,255,255,.07); }
