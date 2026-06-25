@@ -7,7 +7,7 @@
 // Phase 2 (inline slider widgets) builds on this — it just adds decorations + a parser.
 
 import { EditorState } from '@codemirror/state';
-import { EditorView, keymap, drawSelection } from '@codemirror/view';
+import { EditorView, keymap, drawSelection, Decoration, ViewPlugin, WidgetType } from '@codemirror/view';
 import { history, historyKeymap, defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { StreamLanguage, HighlightStyle, syntaxHighlighting, indentUnit } from '@codemirror/language';
 import { Tag } from '@lezer/highlight';
@@ -15,7 +15,7 @@ import { Tag } from '@lezer/highlight';
 // ── Loom vocabulary (highlight only — kept in sync with the DSL) ──
 const FN = new Set(['shape', 's', 'n', 'stack', 'cat', 'slowcat', 'fastcat', 'seq', 'sequence', 'timecat',
   'pure', 'silence', 'run', 'range', 'mini', 'euclid', 'fast', 'slow', 'rev', 'choose', 'irand', 'osc',
-  'palette', 'bg', 'group', 'echo', 'spring', 'physics', '$']);
+  'palette', 'bg', 'group', 'echo', 'spring', 'physics', 'slider', '$']);
 const SIG = new Set(['sine', 'cosine', 'saw', 'isaw', 'tri', 'square', 'rand', 'perlin', 'fbm', 'brown',
   'gauss', 'white', 'mouseX', 'mouseY', 'mouseDown']);
 const METHOD = new Set(['fast', 'slow', 'rev', 'every', 'iter', 'palindrome', 'jux', 'superimpose', 'off',
@@ -96,9 +96,85 @@ const loomTheme = EditorView.theme({
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--ink)', borderLeftWidth: '2px' },
   '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': { backgroundColor: 'rgba(255,255,255,.18)' },
   '.cm-selectionMatch': { backgroundColor: 'rgba(255,255,255,.10)' },
+  // inline slider widget (after a slider(...) call)
+  '.cm-loom-slider': { display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle', margin: '0 2px 0 5px' },
+  '.cm-loom-slider input[type=range]': { width: '78px', height: '4px', cursor: 'ew-resize', accentColor: 'var(--t-ctrl)', verticalAlign: 'middle' },
 }, { dark: true });
 
-// Create the editor into `parent`. opts: { doc, onRun, onChange, onFocus }.
+// ── inline slider widgets ───────────────────────────────────────────────────────────
+// A `slider(value, min?, max?)` call in the source renders an inline draggable slider after
+// it; dragging rewrites `value` in the source and re-runs (the Strudel idea). We re-find the
+// slider by its ordinal each drag so edits never desync from shifting offsets.
+const NUM = /^\s*(-?\d*\.?\d+)/;
+function scanSliders(text) {
+  const out = [];
+  const re = /\bslider\s*\(/g; let m;
+  while ((m = re.exec(text))) {
+    let i = m.index + m[0].length;
+    const a = NUM.exec(text.slice(i));
+    if (!a) continue;
+    const argFrom = i + (a[0].length - a[1].length), argTo = i + a[0].length;
+    let j = argTo, nums = [];
+    for (let k = 0; k < 2; k++) {                          // up to two more numeric args (min/max)
+      const c = /^\s*,\s*(-?\d*\.?\d+)/.exec(text.slice(j));
+      if (!c) break; nums.push(parseFloat(c[1])); j += c[0].length;
+    }
+    const close = text.indexOf(')', j);
+    if (close < 0) continue;
+    // 1 arg → 0..1 · 2 args → 0..max · 3 args → min..max
+    const min = nums.length >= 2 ? nums[0] : 0;
+    const max = nums.length >= 2 ? nums[1] : nums.length === 1 ? nums[0] : 1;
+    out.push({ argFrom, argTo, val: parseFloat(a[1]), min, max, end: close + 1 });
+    re.lastIndex = close + 1;
+  }
+  return out;
+}
+const fmtNum = (v) => String(Math.round(v * 1000) / 1000);
+const niceStep = (min, max) => { const r = Math.abs(max - min) || 1; return r <= 2 ? 0.01 : r <= 20 ? 0.1 : r <= 200 ? 1 : 10; };
+
+class SliderWidget extends WidgetType {
+  constructor(idx, val, min, max) { super(); this.idx = idx; this.val = val; this.min = min; this.max = max; }
+  eq(o) { return o.idx === this.idx && o.val === this.val && o.min === this.min && o.max === this.max; }
+  toDOM(view) {
+    const wrap = document.createElement('span');
+    wrap.className = 'cm-loom-slider';
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = this.min; input.max = this.max; input.step = niceStep(this.min, this.max); input.value = this.val;
+    input.title = `slider ${this.min}…${this.max}`;
+    const idx = this.idx;
+    input.addEventListener('input', () => {
+      // re-find THIS slider by ordinal (offsets shift as the value text grows/shrinks)
+      const s = scanSliders(view.state.doc.toString())[idx];
+      if (!s) return;
+      view.dispatch({ changes: { from: s.argFrom, to: s.argTo, insert: fmtNum(+input.value) } });
+      if (view.loomRerun) view.loomRerun();
+    });
+    input.addEventListener('pointerdown', (e) => e.stopPropagation());  // don't start a CM selection
+    wrap.appendChild(input);
+    return wrap;
+  }
+  // update in place so the dragged <input> isn't recreated mid-drag (keeps it smooth)
+  updateDOM(dom) {
+    const input = dom.querySelector('input'); if (!input) return false;
+    input.min = this.min; input.max = this.max; input.step = niceStep(this.min, this.max);
+    if (+input.value !== this.val) input.value = this.val;
+    return true;
+  }
+  ignoreEvent() { return true; }
+}
+
+function buildSliderDecos(view) {
+  const sliders = scanSliders(view.state.doc.toString());
+  const ranges = sliders.map((s, idx) => Decoration.widget({ widget: new SliderWidget(idx, s.val, s.min, s.max), side: 1 }).range(s.end));
+  return Decoration.set(ranges, true);
+}
+const sliderPlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.decorations = buildSliderDecos(view); }
+  update(u) { if (u.docChanged || u.viewportChanged) this.decorations = buildSliderDecos(u.view); }
+}, { decorations: (v) => v.decorations });
+
+// Create the editor into `parent`. opts: { doc, onRun, onChange, onFocus, rerun }.
 // Returns { view, getCode, setCode, insert, focus, hasFocus }.
 export function createEditor(parent, opts = {}) {
   const runKeys = keymap.of([
@@ -118,12 +194,14 @@ export function createEditor(parent, opts = {}) {
       loomLang,
       syntaxHighlighting(loomHighlight),
       loomTheme,
+      sliderPlugin,
       runKeys,
       keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
       listeners,
     ],
   });
   const view = new EditorView({ state, parent });
+  view.loomRerun = opts.rerun;   // the inline sliders call this to re-run on drag (no flash)
 
   const getCode = () => view.state.doc.toString();
   const setCode = (text) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });

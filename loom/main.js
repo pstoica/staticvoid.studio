@@ -34,6 +34,7 @@ const cpsLabel = $('#cpsval');
 const editor = createEditor($('#editwrap'), {
   onRun: () => { run(); flash(); },
   onFocus: (focused) => { document.body.classList.toggle('editing', focused); activity(); },
+  rerun: () => run(),   // inline slider drags re-run live (no flash)
 });
 
 // ── canvas sizing (DPR-aware) ───────────────────────────────────────────────────
@@ -1229,6 +1230,19 @@ $("rings", shape("ring*5")
     .size(sine.range(0.02, 0.05).fast(3))
     .color(palette("ice").at(saw.range(0, 1)))
     .weight(0.004).decay(1.6)
+)`,
+
+  // inline sliders: each slider(value, min, max) renders a draggable control right in the
+  // code — drag it to retune the patch live (it rewrites the number + re-runs). The number
+  // you see IS the control; share the URL and the values travel with it.
+  'sliders': `stack(
+  bg("#06060f"),
+  shape("circle*8")
+    .radius(slider(0.3, 0, 0.45))
+    .size(slider(0.05, 0.01, 0.12))
+    .color(palette("neon").at(saw.range(0, 1)))
+    .spin(slider(0.1, -1, 1))
+    .decay(slider(2.5, 0.5, 6))
 )`,
 
   // ── shader FX (WebGL): each group() runs a post-process chain on its layer ──

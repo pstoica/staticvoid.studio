@@ -431,6 +431,7 @@
         <code>.degrade() .sometimes(p=&gt;…) .often(…) .rarely(…)</code>
         <code>stack(…) cat(…) seq(…) fastcat(…)</code>
         <code>$("name", pat)</code><p>named, separately-editable layers — each <code>$</code> line is a voice, auto-stacked (name optional). Bare patches still work. Chips under the editor: click a name to <em>mute</em>, the dot to <em>solo</em> — live</p>
+        <code>slider(value, min, max)</code><p>a number with a <em>draggable slider inline in the code</em> — drag to retune live (rewrites the source + re-runs). Use anywhere a number works. The URL captures the value</p>
         <code>group(pat)</code><p>render a layer to its own buffer, then run a shader FX chain on it</p>
         <code>physics(pat, {gravity, bounce, drag, vel, spin, windx})</code><p>spawn each onset as a 2D rigid body — falls, bounces off the edges, collides with the others. Opts patternable. <em>rapier2d lazy-loads on first use</em></p>
         <code>physics(pat, {gravity:0, attract, swirl, ax, ay, turbulence, turbScale})</code><p>force-fields: pull toward / orbit a (moving) point, or drift through a curl-noise flow — emergent swarming</p>

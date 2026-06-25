@@ -75,6 +75,12 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
 
 ## Shipped outside the tiers
 
+- **CodeMirror 6 editor + inline `slider()` widgets** ✅ Replaced the textarea/regex-overlay
+  with CM6 (`editor.js`): faithful Loom highlighting (StreamLanguage → the same `--t-*`
+  colours), ⌘↵ / Tab / undo, floating-over-canvas theme. Then `slider(value, min?, max?)` —
+  a number that renders a draggable slider inline over the call; dragging rewrites the source
+  + re-runs live (re-found by ordinal so offsets never desync). Preset: `sliders`. *Substrate
+  for more inline widgets:* colour pickers, XY pads, a `select()`/toggle.
 - **Interaction — live pointer signals** ✅ `mouseX` / `mouseY` / `mouseDown` (mouse + touch)
   as signals: frozen-at-onset on per-glyph controls (trail where things spawn), re-read each
   frame as FX/physics params (cursor-driven attractor). Reuses the signal + evalGlobal paths,

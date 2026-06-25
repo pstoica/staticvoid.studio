@@ -345,6 +345,24 @@ $("orbits", shape("dot*16").angle(saw.range(0,2)).radius(saw.range(0.06,0.46))
 Any layer can hold a `group(...)` with its own FX chain, so layers and shader FX compose.
 The running patch's layer names are exposed on `window.loom.layers`.
 
+## Sliders (`slider`)
+
+`slider(value, min?, max?)` is just a **number** in the patch — but the editor renders a
+**draggable slider inline** over the call, so you can retune it by feel. Dragging rewrites
+the number in the source and re-runs live; the number you see *is* the control.
+
+```js
+shape("circle*8")
+  .radius(slider(0.3, 0, 0.45))     // drag the inline slider 0 → 0.45
+  .size(slider(0.05, 0.01, 0.12))
+  .spin(slider(0.1, -1, 1))
+```
+
+Use it anywhere a number works — controls, FX params (`.feedback(slider(0.9), slider(1.04))`),
+physics opts (`{ gravity: slider(1, -2, 2) }`). Forms: `slider(v)` → range `0..1`,
+`slider(v, max)` → `0..max`, `slider(v, min, max)` → `min..max`. Because the value lives in
+the source, **the share URL captures wherever you dragged it**.
+
 ---
 
 ## Signals & maths

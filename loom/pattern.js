@@ -364,6 +364,13 @@ const mouseX = signal(() => _pointer.x);
 const mouseY = signal(() => _pointer.y);
 const mouseDown = signal(() => _pointer.down);
 
+// slider(value, min?, max?): just returns `value` — it's a plain number in the patch. The
+// editor renders an inline draggable slider over the call (see editor.js); dragging rewrites
+// `value` in the source and re-runs, so the number you see IS the control. min/max (default
+// 0..1; 2-arg form is (0, max)) only bound the widget. Use it anywhere a number works:
+// `.size(slider(0.05, 0, 0.2))`, `.feedback(slider(0.9), slider(1.04))`, `{ gravity: slider(1, -2, 2) }`.
+function slider(value = 0, min, max) { return value; }
+
 // random discrete choice, fresh per onset: choose("#fff", "#000") or choose(0, 3, 7)
 function choose(...xs) { return signal((t) => xs[Math.min(xs.length - 1, Math.floor(timeRand(t) * xs.length))]); }
 // random integer in 0..n-1
@@ -793,7 +800,7 @@ function rev(p) { return reify(p).rev(); }
 export const DSL = {
   Pattern, pure, silence, stack, slowcat, fastcat, cat, seq, sequence, timecat,
   fast, slow, rev, run, range, mini, euclid,
-  shape, s, n, choose, irand, osc, palette, bg, group, echo, spring, physics, _setBgSink,
+  shape, s, n, choose, irand, osc, palette, bg, group, echo, spring, physics, slider, _setBgSink,
   $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   mouseX, mouseY, mouseDown, _setPointer,
