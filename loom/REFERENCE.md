@@ -417,6 +417,30 @@ surface — but the **sliders stay live**, subdued until you reach for them (the
 hover), so they're your hands-on controls. Escape or toggle again to edit. ⌘/Ctrl+. still fully
 hides all chrome.
 
+### MIDI (`cc` / `gate` / `vel` / `note` / `bend`)
+
+Live MIDI input as signals (Web MIDI — Chrome/Edge; Loom hooks every input it sees, plug-and-play). Like the pointer, they're sampled-and-frozen on a per-glyph control and re-read live on an FX/physics param.
+
+| signal | is | range |
+| --- | --- | --- |
+| `cc(num, ch?)` | control-change `num` | `0..1` (the `0..127` value ÷127) |
+| `gate(ch?)` | `1` while any note is held, else `0` | `0` / `1` |
+| `vel(ch?)` | velocity of the last note pressed | `0..1` |
+| `note(ch?)` | pitch of the last note pressed | `0..1` (the note number ÷127) |
+| `bend(ch?)` | pitch-bend wheel | `-1..1` (centred at `0`) |
+
+`ch` is the MIDI channel **1–16**; omit it (or pass `0`) for **omni** — any channel. So one
+controller's knobs map straight onto a patch — `shape("dot*8").x(cc(16)).y(cc(17)).color(cc(18))` —
+and a keyboard drives note-shaped visuals: `physics(shape("star*3").size(vel().range(0.02, 0.12)), { gravity: gate().range(0, 2) })`,
+where holding a key lets the swarm fall.
+
+> The **juggling-balls** plan: each ball is its **own channel** sending CCs for its x/y, so
+> `cc(7, 1)` / `cc(7, 2)` / … read ball 1, 2, … independently.
+
+`bend` is bipolar (`-1` ← centre `0` → `+1`), so it pairs with `.range(-w, w)` for a symmetric
+push. Per-channel CC reads stay independent; an omni `cc(num)` mirrors whichever channel last
+moved that controller.
+
 | Method | Effect |
 | --- | --- |
 | `.range(lo, hi)` | remap a `0..1` signal into `[lo, hi]`; **`lo`/`hi` may each be a number, pattern, or osc** |

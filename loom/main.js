@@ -980,7 +980,8 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   get layers() { return activeLayers.slice(); }, get muted() { return [...mutedLayers]; }, get soloed() { return [...soloLayers]; },
   mute: (n) => toggleMute(n), solo: (n) => toggleSolo(n),
   ensurePhysics: () => ensureRapier(), physReady: () => !!rapierReady(),
-  get bodies() { return particles.filter((p) => p.body).length; }, get pointer() { return pointerState; } };
+  get bodies() { return particles.filter((p) => p.body).length; }, get pointer() { return pointerState; },
+  midi: (status, d1, d2) => DSL._midiInput(status, d1, d2) };   // inject a MIDI message (for tooling/testing)
 
 // ── $-layer mute / solo chips ───────────────────────────────────────────────────────
 // One chip per live $ layer: click the name to mute (dimmed + struck), click the dot to
@@ -1760,6 +1761,21 @@ window.addEventListener('pointermove', feedPointer, { passive: true });
 window.addEventListener('pointerdown', (e) => { feedPointer(e); pointerState.down = 1; syncPointer(); }, { passive: true });
 window.addEventListener('pointerup', () => { pointerState.down = 0; syncPointer(); }, { passive: true });
 window.addEventListener('pointercancel', () => { pointerState.down = 0; syncPointer(); }, { passive: true });
+
+// ── MIDI input (Web MIDI) → the cc/gate/vel/note/bend signals ──────────────────────
+// Request access on load; pump every message from every input into the DSL. No-ops cleanly
+// when Web MIDI is unavailable or denied. window.loom.midi(status, d1, d2) lets tooling inject
+// messages without hardware.
+function initMidi() {
+  if (!navigator.requestMIDIAccess) return;
+  navigator.requestMIDIAccess().then((access) => {
+    const hook = (port) => { if (port && port.type === 'input') port.onmidimessage = (e) => DSL._midiInput(e.data[0], e.data[1], e.data[2]); };
+    access.inputs.forEach(hook);
+    access.onstatechange = (e) => hook(e.port);   // hot-plugged devices
+  }).catch(() => { /* no MIDI / denied — signals just stay 0 */ });
+}
+initMidi();
+
 resize();
 setCps(cps);
 setDecay(decayScale);

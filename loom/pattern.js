@@ -398,6 +398,40 @@ const mouseX = signal(() => _pointer.x);
 const mouseY = signal(() => _pointer.y);
 const mouseDown = signal(() => _pointer.down);
 
+// ── MIDI input (Web MIDI), as signals ────────────────────────────────────────────
+// Like the pointer, MIDI is external state mirrored into SIGNALS. main.js requests Web MIDI
+// access and pumps every message into _midiInput; the signals below read the latest state:
+//   cc(num, ch)  control change (0..1)        gate(ch)  1 while a note is held, else 0
+//   vel(ch)      last held note's velocity     note(ch)  last held note's pitch (0..1 = 0..127)
+//   bend(ch)     pitch bend (-1..1)
+// channel 0 = OMNI (any channel); 1..16 = a specific channel — so independent inputs (e.g.
+// the juggling balls, each on its own channel with its own CCs) map cleanly to channels. Being
+// signals, they obey the frozen/live rule: frozen at a glyph's onset (spawn a glyph per note),
+// live as an FX/physics param.
+const _midi = { cc: {}, notes: {}, bend: {} };
+function _midiInput(status, d1, d2) {
+  const type = status & 0xf0, ch = (status & 0x0f) + 1;          // 1..16
+  if (type === 0xB0) {                                            // control change → ch + omni
+    (_midi.cc[ch] || (_midi.cc[ch] = {}))[d1] = d2;
+    (_midi.cc[0] || (_midi.cc[0] = {}))[d1] = d2;
+  } else if (type === 0x90 && d2 > 0) {                           // note on
+    (_midi.notes[ch] || (_midi.notes[ch] = new Map())).set(d1, d2);
+  } else if (type === 0x80 || (type === 0x90 && d2 === 0)) {      // note off (or note-on vel 0)
+    if (_midi.notes[ch]) _midi.notes[ch].delete(d1);
+  } else if (type === 0xE0) {                                     // pitch bend (14-bit → -1..1)
+    const v = (((d2 << 7) | d1) - 8192) / 8192;
+    _midi.bend[ch] = v; _midi.bend[0] = v;
+  }
+}
+// the Map of notes held on channel `ch` (or any channel for omni 0), or null if none held
+const _held = (ch) => { if (ch) return (_midi.notes[ch] && _midi.notes[ch].size) ? _midi.notes[ch] : null; for (const c in _midi.notes) if (_midi.notes[c].size) return _midi.notes[c]; return null; };
+const _lastHeld = (ch) => { const m = _held(ch); let e = null; if (m) for (const x of m) e = x; return e; };   // [note, vel] most-recent held
+function cc(num, ch = 0) { return signal(() => ((_midi.cc[ch] && _midi.cc[ch][num]) || 0) / 127); }
+function gate(ch = 0) { return signal(() => (_held(ch) ? 1 : 0)); }
+function vel(ch = 0) { return signal(() => { const e = _lastHeld(ch); return e ? e[1] / 127 : 0; }); }
+function note(ch = 0) { return signal(() => { const e = _lastHeld(ch); return e ? e[0] / 127 : 0; }); }
+function bend(ch = 0) { return signal(() => _midi.bend[ch] || 0); }
+
 // slider(value, min?, max?, default?): just returns `value` — it's a plain number in the patch.
 // The editor renders an inline draggable slider over the call (see editor.js); dragging rewrites
 // `value` in the source and re-runs, so the number you see IS the control. min/max (default
@@ -857,6 +891,7 @@ export const DSL = {
   $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   mouseX, mouseY, mouseDown, _setPointer,
+  cc, gate, vel, note, bend, _midiInput,
   hasOnset, span, isOsc, isSpring, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,
 };
