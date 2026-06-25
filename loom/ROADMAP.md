@@ -82,7 +82,8 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
   source + re-runs live (re-found by ordinal so offsets never desync; fixed-width padded value
   so it doesn't jitter; styled track/thumb). Preset: `sliders`. Plus editor niceties: ⌘/
   comment toggle, undo/redo, highlight active line, chunky cursor, the per-line hugging code
-  box, and a live readout badge after each `mouseX/mouseY/mouseDown`. *Substrate for more
+  box; sliders are distinct rotating OKLCH colours + double-click-to-reset; a live readout
+  badge after each `mouseX/mouseY/mouseDown` tinted dark→light by value. *Substrate for more
   inline widgets:* colour pickers, XY pads, a `select()`/toggle.
 - **Interaction — live pointer signals** ✅ `mouseX` / `mouseY` / `mouseDown` (mouse + touch)
   as signals: frozen-at-onset on per-glyph controls (trail where things spawn), re-read each

@@ -349,9 +349,9 @@ The running patch's layer names are exposed on `window.loom.layers`.
 
 `slider(value, min?, max?)` is just a **number** in the patch — but the editor renders a
 **draggable slider inline** over the call, so you can retune it by feel. **Drag or scroll**
-it (the value stays a fixed width so it doesn't jitter); it rewrites the number in the source
-and re-runs live. The number you see *is* the control. The slider is **tinted by its value**
-(cool blue when low → hot red when high), so you read "higher / lower" at a glance.
+it (the value stays a fixed width so it doesn't jitter), or **double-click to reset** it to
+mid-range; it rewrites the number in the source and re-runs live. The number you see *is* the
+control. Each slider gets a **distinct colour** so you can tell several apart at a glance.
 
 ```js
 shape("circle*8")
@@ -378,7 +378,7 @@ a control takes a value.
 
 The live pointer (mouse **or touch**) as signals: `mouseX` / `mouseY` are its position
 (`0..1` of the canvas), `mouseDown` is `1` while pressed. (The editor shows a small **live
-readout badge** next to each, so you can see the value move.) Being signals, they follow Loom's
+readout badge** next to each — tinted **dark → light** with the value — so you can see it move.) Being signals, they follow Loom's
 frozen-vs-live rule, which gives two behaviours from one name:
 
 - On a **per-glyph control** they're sampled at each glyph's **onset and frozen**, so a

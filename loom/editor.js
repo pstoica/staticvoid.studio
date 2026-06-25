@@ -146,16 +146,14 @@ const stepDecimals = (step) => Math.max(0, -Math.floor(Math.log10(step) + 1e-9))
 // format to the step's decimal count, KEEPING trailing zeros — a fixed-width number so the
 // inline slider doesn't jitter/reflow as you drag (0.30 → 0.45, not 0.3 → 0.45).
 const fmtNum = (v, step) => v.toFixed(stepDecimals(step));
-// tint by the normalized value so you read "higher / lower" at a glance without the number:
-// low → cool dim blue, high → warm bright. Drives accent-color (thumb + filled track).
-const tintFor = (min, max, v) => {
-  const t = Math.max(0, Math.min(1, (max - min) ? (v - min) / (max - min) : 0.5));
-  return `hsl(${Math.round(212 - t * 212)} 82% ${Math.round(48 + t * 18)}%)`;   // cold blue (low) → hot red (high)
-};
+// each slider gets a DISTINCT solid colour (rotating hues) so you can tell several apart at a
+// glance. OKLCH keeps every hue at the same perceived lightness/chroma (unlike HSL).
+const SLIDER_HUES = [265, 200, 150, 95, 45, 330, 25, 175];
+const sliderColor = (i) => `oklch(0.74 0.15 ${SLIDER_HUES[((i % SLIDER_HUES.length) + SLIDER_HUES.length) % SLIDER_HUES.length]})`;
 
 class SliderWidget extends WidgetType {
-  constructor(val, min, max) { super(); this.val = val; this.min = min; this.max = max; }
-  eq(o) { return o.val === this.val && o.min === this.min && o.max === this.max; }
+  constructor(val, min, max, idx) { super(); this.val = val; this.min = min; this.max = max; this.idx = idx; }
+  eq(o) { return o.val === this.val && o.min === this.min && o.max === this.max && o.idx === this.idx; }
   toDOM(view) {
     const wrap = document.createElement('span');
     wrap.className = 'cm-loom-slider';
@@ -163,8 +161,8 @@ class SliderWidget extends WidgetType {
     const step = niceStep(this.min, this.max);
     input.type = 'range';
     input.min = this.min; input.max = this.max; input.step = step; input.value = this.val;
-    input.style.accentColor = tintFor(this.min, this.max, this.val);
-    input.title = `slider ${this.min}…${this.max} — drag or scroll`;
+    input.style.accentColor = sliderColor(this.idx);     // distinct per slider, not value-based
+    input.title = `slider ${this.min}…${this.max} — drag / scroll · double-click to reset`;
     const commit = (v) => {
       // re-find THIS slider by the widget's CURRENT doc position — robust to sibling edits
       const pos = view.posAtDOM(wrap);
@@ -173,13 +171,14 @@ class SliderWidget extends WidgetType {
       for (const c of list) { const d = Math.abs(c.end - pos); if (d < best) { best = d; s = c; } }
       if (!s) return;
       const cl = Math.max(this.min, Math.min(this.max, v));
-      input.value = cl; input.style.accentColor = tintFor(this.min, this.max, cl);
+      input.value = cl;
       view.dispatch({ changes: { from: s.argFrom, to: s.argTo, insert: fmtNum(cl, step) } });
       if (view.loomRerun) view.loomRerun();
     };
     input.addEventListener('input', () => commit(+input.value));
     input.addEventListener('pointerdown', (e) => e.stopPropagation());  // don't start a CM selection
     input.addEventListener('wheel', (e) => { e.preventDefault(); commit(+input.value + (e.deltaY < 0 ? step : -step)); }, { passive: false });
+    input.addEventListener('dblclick', (e) => { e.preventDefault(); commit((this.min + this.max) / 2); });   // reset to mid-range
     wrap.appendChild(input);
     return wrap;
   }
@@ -188,7 +187,7 @@ class SliderWidget extends WidgetType {
     const input = dom.querySelector('input'); if (!input) return false;
     input.min = this.min; input.max = this.max; input.step = niceStep(this.min, this.max);
     if (+input.value !== this.val) input.value = this.val;
-    input.style.accentColor = tintFor(this.min, this.max, this.val);
+    input.style.accentColor = sliderColor(this.idx);
     return true;
   }
   ignoreEvent() { return true; }
@@ -196,7 +195,7 @@ class SliderWidget extends WidgetType {
 
 function buildSliderDecos(view) {
   const ranges = scanSliders(view.state.doc.toString())
-    .map((s) => Decoration.widget({ widget: new SliderWidget(s.val, s.min, s.max), side: 1 }).range(s.end));
+    .map((s, i) => Decoration.widget({ widget: new SliderWidget(s.val, s.min, s.max, i), side: 1 }).range(s.end));
   return Decoration.set(ranges, true);
 }
 const sliderPlugin = ViewPlugin.fromClass(class {
@@ -216,7 +215,15 @@ function ensureLiveLoop() {
     for (const el of liveBadges) {
       if (!el.isConnected) { liveBadges.delete(el); continue; }
       const s = el.dataset.sig;
-      el.textContent = s === 'mouseDown' ? (p.down ? '●' : '○') : (s === 'mouseX' ? p.x : p.y).toFixed(2);
+      const v = s === 'mouseDown' ? p.down : s === 'mouseX' ? p.x : p.y;
+      el.textContent = s === 'mouseDown' ? (p.down ? '●' : '○') : v.toFixed(2);
+      // tint dark → light by value (OKLCH), so the magnitude reads at a glance; flip the
+      // text colour for contrast against the changing background.
+      const t = Math.max(0, Math.min(1, v));
+      const L = 0.26 + t * 0.62;
+      el.style.background = `oklch(${L.toFixed(3)} 0.07 290)`;
+      el.style.borderColor = `oklch(${Math.min(0.96, L + 0.12).toFixed(3)} 0.09 290)`;
+      el.style.color = L > 0.6 ? '#0a0a12' : '#e9e9ea';
     }
     liveRAF = liveBadges.size ? requestAnimationFrame(tick) : 0;
   };

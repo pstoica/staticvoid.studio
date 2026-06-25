@@ -1233,6 +1233,18 @@ $("rings", shape("ring*5")
     .weight(0.004).decay(1.6)
 )`,
 
+  // mousepress → FX chain: mouseDown is a 0/1 signal, and FX params resolve live, so range it
+  // into each effect (off-value at 0, on-value at 1). Hold the mouse / touch and the whole
+  // feedback + kaleido + prism chain switches on; release and it's clean rings again.
+  'press': `group(
+  shape("ring*5").radius(saw.range(0.04, 0.4))
+    .color(palette("neon").at(saw.range(0, 1)))
+    .weight(0.006).decay(1.5)
+)
+.feedback(mouseDown.range(0, 0.92), 1.05, 0.03)
+.kaleido(mouseDown.range(0, 8))
+.rgbshift(mouseDown.range(0, 0.012))`,
+
   // inline sliders: each slider(value, min, max) renders a draggable control right in the
   // code — drag it to retune the patch live (it rewrites the number + re-runs). The number
   // you see IS the control; share the URL and the values travel with it.
