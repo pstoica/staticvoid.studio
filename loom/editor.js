@@ -7,8 +7,8 @@
 // Phase 2 (inline slider widgets) builds on this — it just adds decorations + a parser.
 
 import { EditorState } from '@codemirror/state';
-import { EditorView, keymap, drawSelection, Decoration, ViewPlugin, WidgetType } from '@codemirror/view';
-import { history, historyKeymap, defaultKeymap, indentWithTab } from '@codemirror/commands';
+import { EditorView, keymap, drawSelection, Decoration, ViewPlugin, WidgetType, highlightActiveLine } from '@codemirror/view';
+import { history, historyKeymap, defaultKeymap, indentWithTab, toggleComment } from '@codemirror/commands';
 import { StreamLanguage, HighlightStyle, syntaxHighlighting, indentUnit } from '@codemirror/language';
 import { Tag } from '@lezer/highlight';
 
@@ -67,6 +67,7 @@ const loomLang = StreamLanguage.define({
     return null;
   },
   tokenTable: { fn: T.fn, sig: T.sig, method: T.method, ctrl: T.ctrl, str: T.str, num: T.num, com: T.com, punct: T.punct },
+  languageData: { commentTokens: { line: '//' } },        // ⌘/ toggles line comments
 });
 
 // map the tags → the same CSS-variable colours the old highlighter used
@@ -88,17 +89,27 @@ const loomTheme = EditorView.theme({
   '&': { color: 'var(--ink)', backgroundColor: 'transparent', height: '100%' },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': { fontFamily: 'var(--mono)', fontSize: '15px', lineHeight: '1.65', overflow: 'auto' },
-  '.cm-content': {
-    padding: '4px 0', letterSpacing: '.01em', caretColor: 'var(--ink)',
-    textShadow: '0 1px 3px rgba(2,3,5,.92), 0 0 2px rgba(2,3,5,.85)',
+  '.cm-content': { padding: '4px 0', letterSpacing: '.01em', caretColor: 'transparent' },
+  // per-line dark box that hugs the text (fit-content → ragged right), so the canvas stays
+  // visible around the code instead of a full-panel wash. A faint shadow softens the edge.
+  '.cm-line': {
+    padding: '0 8px', margin: '0 8px', width: 'fit-content', maxWidth: 'calc(100% - 16px)', borderRadius: '3px',
+    backgroundColor: 'rgba(7,8,11,.66)', textShadow: '0 1px 2px rgba(2,3,5,.6)',
   },
-  '.cm-line': { padding: '0 16px' },
-  '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--ink)', borderLeftWidth: '2px' },
-  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': { backgroundColor: 'rgba(255,255,255,.18)' },
+  '.cm-activeLine': { backgroundColor: 'rgba(36,40,52,.82)' },          // current line, a touch brighter
+  // a chunky, bright block-style caret (drawSelection draws it as .cm-cursor)
+  '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#ffd166', borderLeftWidth: '3px', marginLeft: '-1px' },
+  '&.cm-focused .cm-cursor': { borderLeftColor: '#ffd166' },
+  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': { backgroundColor: 'rgba(120,150,255,.30)' },
   '.cm-selectionMatch': { backgroundColor: 'rgba(255,255,255,.10)' },
-  // inline slider widget (after a slider(...) call)
+  // inline slider widget (after a slider(...) call) — detailed track/thumb styling in index.html
   '.cm-loom-slider': { display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle', margin: '0 2px 0 5px' },
-  '.cm-loom-slider input[type=range]': { width: '78px', height: '4px', cursor: 'ew-resize', accentColor: 'var(--t-ctrl)', verticalAlign: 'middle' },
+  // live-signal badge (after mouseX / mouseY / mouseDown)
+  '.cm-loom-live': {
+    display: 'inline-block', verticalAlign: 'middle', margin: '0 1px 0 4px', padding: '0 5px',
+    font: '500 11px/1.5 var(--mono)', color: 'var(--t-sig)', background: 'rgba(181,140,255,.14)',
+    border: '1px solid rgba(181,140,255,.3)', borderRadius: '999px', minWidth: '1.6em', textAlign: 'center',
+  },
 }, { dark: true });
 
 // ── inline slider widgets ───────────────────────────────────────────────────────────
@@ -129,8 +140,11 @@ function scanSliders(text) {
   }
   return out;
 }
-const fmtNum = (v) => String(Math.round(v * 1000) / 1000);
 const niceStep = (min, max) => { const r = Math.abs(max - min) || 1; return r <= 2 ? 0.01 : r <= 20 ? 0.1 : r <= 200 ? 1 : 10; };
+const stepDecimals = (step) => Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
+// format to the step's decimal count, KEEPING trailing zeros — a fixed-width number so the
+// inline slider doesn't jitter/reflow as you drag (0.30 → 0.45, not 0.3 → 0.45).
+const fmtNum = (v, step) => v.toFixed(stepDecimals(step));
 
 class SliderWidget extends WidgetType {
   constructor(idx, val, min, max) { super(); this.idx = idx; this.val = val; this.min = min; this.max = max; }
@@ -139,18 +153,23 @@ class SliderWidget extends WidgetType {
     const wrap = document.createElement('span');
     wrap.className = 'cm-loom-slider';
     const input = document.createElement('input');
+    const step = niceStep(this.min, this.max);
     input.type = 'range';
-    input.min = this.min; input.max = this.max; input.step = niceStep(this.min, this.max); input.value = this.val;
-    input.title = `slider ${this.min}…${this.max}`;
+    input.min = this.min; input.max = this.max; input.step = step; input.value = this.val;
+    input.title = `slider ${this.min}…${this.max} — drag or scroll`;
     const idx = this.idx;
-    input.addEventListener('input', () => {
+    const commit = (v) => {
       // re-find THIS slider by ordinal (offsets shift as the value text grows/shrinks)
       const s = scanSliders(view.state.doc.toString())[idx];
       if (!s) return;
-      view.dispatch({ changes: { from: s.argFrom, to: s.argTo, insert: fmtNum(+input.value) } });
+      const cl = Math.max(this.min, Math.min(this.max, v));
+      input.value = cl;
+      view.dispatch({ changes: { from: s.argFrom, to: s.argTo, insert: fmtNum(cl, step) } });
       if (view.loomRerun) view.loomRerun();
-    });
+    };
+    input.addEventListener('input', () => commit(+input.value));
     input.addEventListener('pointerdown', (e) => e.stopPropagation());  // don't start a CM selection
+    input.addEventListener('wheel', (e) => { e.preventDefault(); commit(+input.value + (e.deltaY < 0 ? step : -step)); }, { passive: false });
     wrap.appendChild(input);
     return wrap;
   }
@@ -174,6 +193,47 @@ const sliderPlugin = ViewPlugin.fromClass(class {
   update(u) { if (u.docChanged || u.viewportChanged) this.decorations = buildSliderDecos(u.view); }
 }, { decorations: (v) => v.decorations });
 
+// ── live-signal badges (mouseX / mouseY / mouseDown) ──────────────────────────────────
+// A tiny readout after each pointer-signal token, so it reads as a LIVE value at a glance
+// (handy for debugging / awareness). One shared rAF updates them from window.loom.pointer.
+const liveBadges = new Set();
+let liveRAF = 0;
+function ensureLiveLoop() {
+  if (liveRAF) return;
+  const tick = () => {
+    const p = (typeof window !== 'undefined' && window.loom && window.loom.pointer) || { x: 0.5, y: 0.5, down: 0 };
+    for (const el of liveBadges) {
+      if (!el.isConnected) { liveBadges.delete(el); continue; }
+      const s = el.dataset.sig;
+      el.textContent = s === 'mouseDown' ? (p.down ? '●' : '○') : (s === 'mouseX' ? p.x : p.y).toFixed(2);
+    }
+    liveRAF = liveBadges.size ? requestAnimationFrame(tick) : 0;
+  };
+  liveRAF = requestAnimationFrame(tick);
+}
+class LiveSigWidget extends WidgetType {
+  constructor(name) { super(); this.name = name; }
+  eq(o) { return o.name === this.name; }
+  toDOM() {
+    const el = document.createElement('span');
+    el.className = 'cm-loom-live'; el.dataset.sig = this.name; el.textContent = '·';
+    el.title = `${this.name} — live`;
+    liveBadges.add(el); ensureLiveLoop();
+    return el;
+  }
+  destroy(dom) { liveBadges.delete(dom); }
+  ignoreEvent() { return true; }
+}
+function buildLiveDecos(view) {
+  const re = /\b(mouseX|mouseY|mouseDown)\b/g; const text = view.state.doc.toString(); const ranges = []; let m;
+  while ((m = re.exec(text))) ranges.push(Decoration.widget({ widget: new LiveSigWidget(m[1]), side: 1 }).range(m.index + m[0].length));
+  return Decoration.set(ranges, true);
+}
+const liveSigPlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.decorations = buildLiveDecos(view); }
+  update(u) { if (u.docChanged || u.viewportChanged) this.decorations = buildLiveDecos(u.view); }
+}, { decorations: (v) => v.decorations });
+
 // Create the editor into `parent`. opts: { doc, onRun, onChange, onFocus, rerun }.
 // Returns { view, getCode, setCode, insert, focus, hasFocus }.
 export function createEditor(parent, opts = {}) {
@@ -189,14 +249,21 @@ export function createEditor(parent, opts = {}) {
     extensions: [
       history(),
       drawSelection(),
+      highlightActiveLine(),
       EditorView.lineWrapping,
       indentUnit.of('  '),                               // Tab inserts 2 spaces (matches the old editor)
       loomLang,
       syntaxHighlighting(loomHighlight),
       loomTheme,
       sliderPlugin,
+      liveSigPlugin,
       runKeys,
-      keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
+      keymap.of([
+        indentWithTab,
+        { key: 'Mod-/', run: toggleComment },             // ⌘/ toggle line comment
+        ...defaultKeymap,
+        ...historyKeymap,
+      ]),
       listeners,
     ],
   });

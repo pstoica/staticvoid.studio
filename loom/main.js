@@ -70,6 +70,7 @@ let bgSource = DEFAULT_BG; // raw bg arg (string/number/pattern/osc), resolved e
 let showClock = localStorage.getItem('loom.clock') !== '0'; // playhead sweep on/off
 let traceMode = false; // trace path, UI toggle removed for now; renderer support stays
 let lastT = performance.now();
+const pointerState = { x: 0.5, y: 0.5, down: 0 };   // live pointer, mirrored to the mouseX/Y signals + editor badges
 
 const particles = [];
 
@@ -979,7 +980,7 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   get layers() { return activeLayers.slice(); }, get muted() { return [...mutedLayers]; }, get soloed() { return [...soloLayers]; },
   mute: (n) => toggleMute(n), solo: (n) => toggleSolo(n),
   ensurePhysics: () => ensureRapier(), physReady: () => !!rapierReady(),
-  get bodies() { return particles.filter((p) => p.body).length; } };
+  get bodies() { return particles.filter((p) => p.body).length; }, get pointer() { return pointerState; } };
 
 // ── $-layer mute / solo chips ───────────────────────────────────────────────────────
 // One chip per live $ layer: click the name to mute (dimmed + struck), click the dot to
@@ -1656,16 +1657,16 @@ DSL._setBgSink((c) => { bgSource = c; });   // bg("…") stores its (raw) arg he
 // feed the live pointer (mouse + touch) into the mouseX/mouseY/mouseDown signals. Position
 // is 0..1 of the canvas; clamped so off-canvas reads stay in range. Pointer events cover
 // touch, so it works on phones too. We keep the last position so a release holds it.
-let ptrX = 0.5, ptrY = 0.5;
 function feedPointer(e, down) {
   const r = activeCanvas.getBoundingClientRect();
-  ptrX = Math.max(0, Math.min(1, (e.clientX - r.left) / (r.width || 1)));
-  ptrY = Math.max(0, Math.min(1, (e.clientY - r.top) / (r.height || 1)));
-  DSL._setPointer(ptrX, ptrY, down != null ? down : e.buttons ? 1 : 0);
+  pointerState.x = Math.max(0, Math.min(1, (e.clientX - r.left) / (r.width || 1)));
+  pointerState.y = Math.max(0, Math.min(1, (e.clientY - r.top) / (r.height || 1)));
+  pointerState.down = down != null ? down : e.buttons ? 1 : 0;
+  DSL._setPointer(pointerState.x, pointerState.y, pointerState.down);
 }
 window.addEventListener('pointermove', (e) => feedPointer(e), { passive: true });
 window.addEventListener('pointerdown', (e) => feedPointer(e, 1), { passive: true });
-window.addEventListener('pointerup', () => DSL._setPointer(ptrX, ptrY, 0), { passive: true });
+window.addEventListener('pointerup', () => { pointerState.down = 0; DSL._setPointer(pointerState.x, pointerState.y, 0); }, { passive: true });
 resize();
 setCps(cps);
 setDecay(decayScale);
