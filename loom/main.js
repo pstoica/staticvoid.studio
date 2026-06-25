@@ -1570,6 +1570,16 @@ function setupGuide() {
   if (head) new ResizeObserver(() => document.documentElement.style.setProperty('--guidehead-h', head.offsetHeight + 'px')).observe(head);
   // scrollspy: light up the nav chip of the section currently under the head
   const gpane = document.querySelector('#side .tabpane[data-pane="guide"]');
+  // keep the active chip within the single-row nav's horizontal view. scrollIntoView reads no
+  // geometry itself (immune to the unsettled-layout 0-width reads); we only gate it on a rect
+  // check so we don't re-scroll a chip that's already visible. Ungated by a "changed" flag so a
+  // tick that fired mid-transition (no-op) self-heals on the next real scroll. inline-only:
+  // block:'nearest' keeps it from nudging the vertical page scroll.
+  const revealChip = (chip) => {
+    const c = chip.getBoundingClientRect(), n = navEl.getBoundingClientRect();
+    if (n.width && (c.left < n.left || c.right > n.right))
+      chip.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+  };
   function syncActiveNav() {
     if (!gpane || !navChips.size) return;
     const headH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--guidehead-h')) || 100;
@@ -1581,7 +1591,9 @@ function setupGuide() {
       if (sec.hidden || sec.classList.contains('lineage')) continue;
       if (sec.getBoundingClientRect().top - paneTop <= headH + 4) active = sec;
     }
-    navChips.forEach((chip, sec) => chip.classList.toggle('active', sec === (active || sections.find((s) => navChips.has(s)))));
+    active = active || sections.find((s) => navChips.has(s));
+    navChips.forEach((chip, sec) => chip.classList.toggle('active', sec === active));
+    const chip = navChips.get(active); if (chip) revealChip(chip);
   }
   if (gpane) { gpane.addEventListener('scroll', syncActiveNav, { passive: true }); requestAnimationFrame(syncActiveNav); }
 
