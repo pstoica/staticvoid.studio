@@ -16,12 +16,12 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
      Could route the overshoot into a per-glyph **size pop** for a true bounce-in (touches
      the renderer / per-glyph state — natural to fold in with the spring work, #3).
 
-2. **Named layers / `$` syntax (Strudel `$:`-style).** A `$(name?, pattern)` registry so a
-   patch is several **named, separately-editable layers** instead of one giant
-   `stack(...)`. `compile()` collects all `$(...)` calls and stacks them; bare-expression
-   patches still work. *Why early:* directly fixes the "cram everything into one stack/group"
-   pain felt now, AND it's the substrate for per-layer **mute/solo/FX** and the scene mixer
-   later. Renderer-independent.
+2. **Named layers / `$` syntax (Strudel `$:`-style).** ✅ **Done.** A `$(name?, pattern)`
+   registry (`pattern.js`); `compile()` (`main.js`) collects every `$(...)` call and stacks
+   them — expression-mode first (bare patches unchanged), statement-mode fallback for
+   multi-line `$` patches. Names are first-class + unique (collisions `#2`-suffixed), exposed
+   on `window.loom.layers`. Preset: `layers`. *Substrate ready for* per-layer mute/solo/FX +
+   the scene mixer (just needs a UI + a mute set consulted at stack time).
 
 ## Tier 2 — dynamics (kinematic → physical)
 

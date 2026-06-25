@@ -522,6 +522,27 @@ function echo(g, n = 4) {
   return grp;
 }
 
+// ── named layers ($) ──────────────────────────────────────────────────────────
+// A patch can be several named, separately-editable layers instead of one giant
+// stack(...). Each `$(name?, pattern)` call registers a layer; compile() in main.js
+// collects every call in the patch and stacks them (so a bare-expression patch still
+// works, and a lone `$(...)` returns its pattern). Names are first-class — labels for
+// the future mute/solo + scene mixer — kept unique (collisions auto-suffixed). The
+// registry is reset each compile, like _resetGroups.
+let _layers = [];
+function _resetLayers() { _layers = []; }
+function _getLayers() { return _layers; }
+function layer(name, pat) {
+  if (pat === undefined) { pat = name; name = null; }      // $(pattern) — anonymous
+  const p = reify(pat);
+  let nm = name != null ? String(name) : `$${_layers.length}`;
+  if (_layers.some((l) => l.name === nm)) {                // keep names unique for the mixer
+    let k = 2; while (_layers.some((l) => l.name === `${nm}#${k}`)) k++; nm = `${nm}#${k}`;
+  }
+  _layers.push({ name: nm, pat: p });
+  return p;                                                // a lone $(...) still evaluates to the pattern
+}
+
 // ── combine two patterns: structure from the left, value sampled from right ────
 function appLeft(pf, pv) {
   return new Pattern((s) => {
@@ -709,6 +730,7 @@ export const DSL = {
   Pattern, pure, silence, stack, slowcat, fastcat, cat, seq, sequence, timecat,
   fast, slow, rev, run, range, mini, euclid,
   shape, s, n, choose, irand, osc, palette, bg, group, echo, _setBgSink,
+  $: layer, _resetLayers, _getLayers,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   hasOnset, span, isOsc, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,

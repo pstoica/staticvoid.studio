@@ -32,7 +32,7 @@ const cpsLabel = $('#cpsval');
 // A transparent <textarea> sits over a <pre>; we re-render coloured HTML into the
 // <pre> on every edit and keep their scroll positions synced.
 const HL_FN = new Set(['shape','s','n','stack','cat','slowcat','fastcat','seq','sequence','timecat',
-  'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand','osc','palette','bg','group']);
+  'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand','osc','palette','bg','group','echo','$']);
 const HL_SIG = new Set(['sine','cosine','saw','isaw','tri','square','rand','perlin','fbm','brown','gauss','white']);
 const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux','superimpose','off','degrade','degradeBy',
   'unDegradeBy','sometimes','sometimesBy','often','rarely','early','late','range','add','sub','mul','div',
@@ -106,14 +106,32 @@ let lastT = performance.now();
 const particles = [];
 
 // ── compile user code into a Pattern ──────────────────────────────────────────────
+let activeLayers = [];   // names of the running patch's $(...) layers (substrate for the mixer)
 function compile(code) {
   DSL._resetGroups();                    // stable group ids by creation order (live-FX diffing)
+  DSL._resetLayers();                    // $(...) layer registry, collected below
   const names = Object.keys(DSL);
   const vals = names.map((k) => DSL[k]);
-  // Wrap as an expression so a bare `stack(...)` evaluates to a value.
-  const body = `"use strict";\nreturn (\n${code}\n);`;
-  const fn = new Function(...names, body);
-  const result = fn(...vals);
+  let result;
+  try {
+    // Bare-expression patch (or a single $() call): wrap so `stack(...)` evaluates to a value.
+    result = new Function(...names, `"use strict";\nreturn (\n${code}\n);`)(...vals);
+  } catch (e) {
+    // A multi-line $-layer patch is several statements, not one expression — that's a
+    // parse error in expression mode (thrown at construction, before any code runs, so no
+    // double side effects). Re-run as a statement block; the $() calls register as we go.
+    if (!(e instanceof SyntaxError)) throw e;
+    new Function(...names, `"use strict";\n${code}`)(...vals);
+    result = null;
+  }
+  // If the patch used $(...), it IS the stack of those layers (a bare top-level value is
+  // ignored — don't nest $ inside other combinators). Otherwise it's the bare expression.
+  const layers = DSL._getLayers();
+  if (layers.length) {
+    activeLayers = layers.map((l) => l.name);
+    return layers.length === 1 ? layers[0].pat : DSL.stack(...layers.map((l) => l.pat));
+  }
+  activeLayers = [];
   if (!result || typeof result.query !== 'function') throw new Error('expression did not evaluate to a pattern');
   return result;
 }
@@ -794,7 +812,7 @@ function tick(dt) {
 
 // debug stepper, lets tooling drive frames when the tab is backgrounded (the
 // browser pauses requestAnimationFrame while hidden). Harmless in production.
-window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); }, particles, setDecay: (v) => { decayScale = v; }, setCps, glr };
+window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); }, particles, setDecay: (v) => { decayScale = v; }, setCps, glr, get layers() { return activeLayers.slice(); } };
 
 // ── presets ───────────────────────────────────────────────────────────────────────
 const PRESETS = {
@@ -932,6 +950,21 @@ stack(
     .attack(0.4, "outBack")
     .decay(2.4, "inOutSine")
 )`,
+
+  // named layers: each $ line is its own editable voice, auto-stacked — no giant
+  // stack(...). Edit/mute one without touching the others (substrate for the mixer).
+  'layers': `$("sky", bg("#06060f"))
+$("ring", shape("ring*4").radius(0.32)
+  .color("#56b6ff").weight(0.006).decay(3))
+$("orbits", shape("dot*16")
+  .angle(saw.range(0, 2))
+  .radius(saw.ease("outExpo").range(0.06, 0.46))
+  .color(palette("neon").at(saw.range(0, 1)))
+  .size(0.02).decay(2))
+$("spark", shape("plus*3").radius(0.12)
+  .rotate(saw.range(0, 1).slow(4))
+  .color("#ffd166").size(0.05)
+  .attack(0.3, "outBack").decay(1.5))`,
 
   // ── shader FX (WebGL): each group() runs a post-process chain on its layer ──
 

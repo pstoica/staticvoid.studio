@@ -264,6 +264,33 @@ Combinators that reshape a pattern. All return a pattern, so they chain.
 
 ---
 
+## Named layers (`$`)
+
+Instead of cramming everything into one `stack(...)`, split a patch into **named,
+separately-editable layers**. Each `$(name, pattern)` line is its own voice; they're
+collected and stacked automatically (Strudel's `$:` idea):
+
+```js
+$("sky",    bg("#06060f"))
+$("ring",   shape("ring*4").radius(0.32).color("#56b6ff").weight(0.006))
+$("orbits", shape("dot*16").angle(saw.range(0,2)).radius(saw.range(0.06,0.46))
+              .color(palette("neon").at(saw.range(0,1))).size(0.02).decay(2))
+```
+
+- The **name is optional** — `$(pattern)` is an anonymous layer (auto-named `$0`, `$1`…).
+- Names are kept **unique** (a collision is suffixed `#2`), so each layer has a stable
+  handle — the substrate for upcoming per-layer **mute / solo** and the scene mixer.
+- A **bare-expression** patch (a single `stack(...)` or chain, no `$`) still works exactly
+  as before — `$` is purely opt-in.
+- `$` lines are **top-level layer declarations**; don't nest `$` inside another combinator.
+  A lone `$(...)` does return its pattern, but if a patch uses `$` at all, the patch *is*
+  the stack of its `$` layers.
+
+Any layer can hold a `group(...)` with its own FX chain, so layers and shader FX compose.
+The running patch's layer names are exposed on `window.loom.layers`.
+
+---
+
 ## Signals & maths
 
 Continuous patterns in `0..1`, sampled at each event's onset. Use them anywhere
