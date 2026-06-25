@@ -76,22 +76,11 @@
 
   /* highlighted editor: a transparent <textarea> sits exactly over a <pre> that
      renders the coloured code, floating directly on the visuals (no box). */
-  #editwrap { flex:1; min-height:0; position:relative; margin:2px 22px 0; }
-  #hl, #code { position:absolute; inset:0; margin:0; border:0; background:transparent;
-    font:500 15px/1.65 var(--mono); padding:4px 16px; letter-spacing:.01em; tab-size:2;
-    white-space:pre-wrap; overflow-wrap:break-word; overflow:auto; }
-  #hl { color:var(--ink); pointer-events:none; z-index:0; }
-  /* per-line dark box that hugs only the text (ragged right), so the rest of the
-     canvas stays clean — no full-panel wash, no text-shadow. */
-  #hl .hlwrap { background:rgba(7,8,11,.72); box-decoration-break:clone;
-    -webkit-box-decoration-break:clone; border-radius:2px; }
-  #code { color:transparent; -webkit-text-fill-color:transparent; caret-color:var(--ink);
-    resize:none; outline:none; z-index:1; }
-  #code::selection { background:rgba(255,255,255,.18); }
-  /* token colours */
-  .t-com{color:var(--t-com);font-style:italic} .t-str{color:var(--t-str)} .t-num{color:var(--t-num)}
-  .t-fn{color:var(--t-fn)} .t-sig{color:var(--t-sig)} .t-ctrl{color:var(--t-ctrl)}
-  .t-method{color:var(--t-method)} .t-op,.t-punct{color:var(--t-punct)}
+  /* the editor (CodeMirror 6) floats over the canvas; token colours + look live in
+     editor.js (theme + highlight), reusing the --t-* vars above. */
+  #editwrap { flex:1; min-height:0; margin:2px 22px 0; font-weight:500; }
+  #editwrap .cm-editor { height:100%; background:transparent; }
+  #editwrap .cm-scroller { font-weight:500; }
 
   #err { font:500 12px/1.4 var(--mono); color:#ff8a9b; margin:0 22px; max-height:0;
     overflow:hidden; opacity:0; transition:.18s var(--ease); }
@@ -322,10 +311,7 @@
       <span class="sub">a pattern language for drawing</span>
     </div>
 
-    <div id="editwrap">
-      <pre id="hl" aria-hidden="true"></pre>
-      <textarea id="code" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" wrap="soft"></textarea>
-    </div>
+    <div id="editwrap"></div>
     <div id="err"></div>
     <div id="hint">edit the pattern · ⌘⏎ to run</div>
 

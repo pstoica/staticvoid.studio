@@ -15,7 +15,12 @@
     "vite": "^5.4.10"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.10.4",
+    "@codemirror/language": "^6.12.3",
+    "@codemirror/state": "^6.7.0",
+    "@codemirror/view": "^6.43.2",
     "@dimforge/rapier2d-compat": "^0.19.3",
+    "@lezer/highlight": "^1.2.3",
     "@web-kits/audio": "^0.1.0",
     "animejs": "^4.4.1",
     "react": "^19.2.6",

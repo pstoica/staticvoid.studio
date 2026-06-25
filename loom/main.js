@@ -8,6 +8,7 @@
 import { DSL } from './pattern.js';
 import { GLRenderer } from './gl/renderer.js';
 import { ensureRapier, rapierReady, PhysWorld } from './physics.js';
+import { createEditor } from './editor.js';
 import REFERENCE from './REFERENCE.md?raw';   // full cheatsheet text, for the "copy for LLM" button
 
 const $ = (sel) => document.querySelector(sel);
@@ -24,54 +25,16 @@ const glCanvas = $('#glstage');
 const glr = USE_GL ? new GLRenderer(glCanvas) : null;
 if (USE_GL) { canvas.hidden = true; glCanvas.hidden = false; }
 const activeCanvas = USE_GL ? glCanvas : canvas;   // the visible canvas drives sizing
-const editor = $('#code');
-const hl = $('#hl');
 const errBar = $('#err');
 const cpsLabel = $('#cpsval');
 
-// ── syntax highlighting ────────────────────────────────────────────────────────────
-// A transparent <textarea> sits over a <pre>; we re-render coloured HTML into the
-// <pre> on every edit and keep their scroll positions synced.
-const HL_FN = new Set(['shape','s','n','stack','cat','slowcat','fastcat','seq','sequence','timecat',
-  'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand','osc','palette','bg','group','echo','spring','physics','$']);
-const HL_SIG = new Set(['sine','cosine','saw','isaw','tri','square','rand','perlin','fbm','brown','gauss','white','mouseX','mouseY','mouseDown']);
-const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux','superimpose','off','degrade','degradeBy',
-  'unDegradeBy','sometimes','sometimesBy','often','rarely','early','late','range','add','sub','mul','div',
-  'color','size','x','y','radius','angle','grid','rotate','rotateX','rotateY','spin','blend','alpha','opacity','pan','jitter','fill','stroke','weight','outline','shade','pixelate',
-  'blur','feedback','trails','hue','brightness','contrast','saturate','negative','invert','displace','kaleido','mirror',
-  'cap','join','open','vertex','attack','decay','life','set','spread','phase','rate','quantize','ease','segment','seg','spring']);
-const HL_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+(?:\.\d+)?\b|=>|\.[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*|[(){}\[\],.]/g;
-const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-function classOf(tok) {
-  if (tok.startsWith('//') || tok.startsWith('/*')) return 't-com';
-  const c = tok[0];
-  if (c === '"' || c === "'" || c === '`') return 't-str';
-  if (/\d/.test(c)) return 't-num';
-  if (tok === '=>') return 't-op';
-  if (c === '.') return HL_METHOD.has(tok.slice(1)) ? 't-ctrl' : 't-method';
-  if (HL_SIG.has(tok)) return 't-sig';
-  if (HL_FN.has(tok)) return 't-fn';
-  if ('(){}[],.'.includes(tok)) return 't-punct';
-  return null;
-}
-function highlight(code) {
-  let out = '', last = 0, m;
-  HL_RE.lastIndex = 0;
-  while ((m = HL_RE.exec(code))) {
-    out += escHtml(code.slice(last, m.index));
-    const tok = m[0], cls = classOf(tok);
-    out += cls ? `<span class="${cls}">${escHtml(tok)}</span>` : escHtml(tok);
-    last = m.index + tok.length;
-  }
-  // wrap in an inline span so a per-line background hugs the text (box-decoration-break),
-  // legible over busy art without washing the whole panel dark. trailing \n stays outside.
-  return `<span class="hlwrap">${out}${escHtml(code.slice(last))}</span>\n`;
-}
-function refreshHL() {
-  hl.innerHTML = highlight(editor.value);
-  hl.scrollTop = editor.scrollTop;
-  hl.scrollLeft = editor.scrollLeft;
-}
+// ── the code editor (CodeMirror 6; see editor.js) ────────────────────────────────────
+// Drives like the old textarea via a small API: editor.getCode() / setCode() / insert() /
+// focus() / hasFocus(). ⌘↵ runs; tab inserts spaces; highlighting + undo are built in.
+const editor = createEditor($('#editwrap'), {
+  onRun: () => { run(); flash(); },
+  onFocus: (focused) => { document.body.classList.toggle('editing', focused); activity(); },
+});
 
 // ── canvas sizing (DPR-aware) ───────────────────────────────────────────────────
 let W = 0, H = 0, DPR = 1;
@@ -153,7 +116,7 @@ function compile(code) {
 function run() {
   try {
     bgSource = DEFAULT_BG;                // bg("…") in the patch overrides this during compile
-    pattern = compile(editor.value);
+    pattern = compile(editor.getCode());
     // Soft re-run: keep the live glyphs so editing the patch doesn't blank the screen.
     // Group ids are stable by creation order, so each frame the live glyphs re-read their
     // group's CURRENT fx (see the tick loop) — editing/removing an effect line applies to
@@ -184,7 +147,7 @@ function run() {
     for (const pid of [...physWorlds.keys()]) if (!activePhys.has(pid)) { physWorlds.get(pid).dispose(); physWorlds.delete(pid); }
     errBar.textContent = '';
     errBar.classList.remove('show');
-    localStorage.setItem('loom.code', editor.value);
+    localStorage.setItem('loom.code', editor.getCode());
     syncURL();
   } catch (e) {
     errBar.textContent = String(e.message || e);
@@ -1362,7 +1325,7 @@ function applyPreset(val) {
   const code = kind === 'u' ? loadUser()[name] : PRESETS[name];
   if (code == null) return;
   mutedLayers.clear(); soloLayers.clear();                          // clean slate: drop mute/solo
-  editor.value = code; refreshHL(); clearParticles(); run();       // preset switch = clean slate
+  editor.setCode(code); clearParticles(); run();                   // preset switch = clean slate
 }
 
 // ── shareable URLs: ?p=<name> for a built-in preset, ?c=<base64> for any custom
@@ -1371,8 +1334,8 @@ const b64e = (s) => btoa(encodeURIComponent(s)).replace(/\+/g, '-').replace(/\//
 const b64d = (s) => decodeURIComponent(atob(s.replace(/-/g, '+').replace(/_/g, '/')));
 const builtinFor = (code) => Object.keys(PRESETS).find((n) => PRESETS[n].trim() === code.trim()) || null;
 function syncURL() {
-  const name = builtinFor(editor.value);
-  const qs = name ? 'p=' + encodeURIComponent(name) : 'c=' + b64e(editor.value);
+  const name = builtinFor(editor.getCode());
+  const qs = name ? 'p=' + encodeURIComponent(name) : 'c=' + b64e(editor.getCode());
   try { history.replaceState(null, '', location.pathname + '?' + qs); } catch { /* ignore */ }
 }
 
@@ -1417,13 +1380,8 @@ function attachScrub(el, { min, max, step, get, set }) {
   }
 }
 
-editor.addEventListener('keydown', (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run(); flash(); }
-  // tab inserts two spaces instead of leaving the field
-  if (e.key === 'Tab') { e.preventDefault(); const s = editor.selectionStart; editor.setRangeText('  ', s, editor.selectionEnd, 'end'); refreshHL(); }
-});
-editor.addEventListener('input', refreshHL);
-editor.addEventListener('scroll', () => { hl.scrollTop = editor.scrollTop; hl.scrollLeft = editor.scrollLeft; });
+// ⌘↵ to run, Tab → spaces, undo/redo, highlighting + scroll are all handled inside the
+// CodeMirror editor (see editor.js); no textarea event wiring needed here.
 
 let flashT = 0;
 // the wordmark is one solid colour per letter; each run shifts the palette by one
@@ -1499,7 +1457,7 @@ renderClock();
 
 function newPatch() {
   mutedLayers.clear(); soloLayers.clear();                                                  // clean slate: drop mute/solo
-  editor.value = DEFAULT_PATCH; refreshHL(); clearParticles(); run(); setActive('');       // new = clean slate
+  editor.setCode(DEFAULT_PATCH); clearParticles(); run(); setActive('');                    // new = clean slate
   if (isMobile()) setSide(false);
 }
 $('#newbtn').addEventListener('click', newPatch);
@@ -1509,7 +1467,7 @@ $('#savebtn').addEventListener('click', () => {
   const cur = activeVal.startsWith('u:') ? activeVal.slice(2) : '';
   const name = (prompt('Save preset as:', cur) || '').trim();
   if (!name) return;
-  const user = loadUser(); user[name] = editor.value; saveUser(user);
+  const user = loadUser(); user[name] = editor.getCode(); saveUser(user);
   rebuildPresetList(); setActive('u:' + name); syncURL();
 });
 
@@ -1547,10 +1505,7 @@ function setupGuide() {
     row.querySelector('.palname').textContent = name;
     row.querySelector('.palgrad').style.background = grad;
     row.addEventListener('click', () => {
-      const snip = `palette("${name}")`, ta = editor, a = ta.selectionStart, b = ta.selectionEnd;
-      ta.value = ta.value.slice(0, a) + snip + ta.value.slice(b);
-      ta.selectionStart = ta.selectionEnd = a + snip.length;
-      ta.focus(); refreshHL();
+      editor.insert(`palette("${name}")`);   // insert at the cursor (replaces any selection) + focus
       row.classList.add('copied'); setTimeout(() => row.classList.remove('copied'), 700);
     });
     palc.appendChild(row);
@@ -1658,14 +1613,13 @@ function setIdle(on) { rail.classList.toggle('idle', on); hintEl.classList.toggl
 function activity() {
   setIdle(false);
   clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => { if (document.activeElement !== editor) setIdle(true); }, 2600);
+  idleTimer = setTimeout(() => { if (!editor.hasFocus()) setIdle(true); }, 2600);
 }
 ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart'].forEach((ev) =>
   window.addEventListener(ev, activity, { passive: true }));
-editor.addEventListener('focus', () => { document.body.classList.add('editing'); activity(); });
-editor.addEventListener('blur', () => { document.body.classList.remove('editing'); activity(); });
+// editor focus/blur (→ editing class + activity) is wired via the editor's onFocus callback.
 // mouse leaving the window → fade right away (unless we're mid-edit)
-document.addEventListener('mouseleave', () => { if (document.activeElement !== editor) setIdle(true); });
+document.addEventListener('mouseleave', () => { if (!editor.hasFocus()) setIdle(true); });
 
 // ── boot ────────────────────────────────────────────────────────────────────────────
 // one-time photosensitivity disclosure, shown until acknowledged (saved in localStorage)
@@ -1708,14 +1662,13 @@ setSide(localStorage.getItem('loom.side') !== '0');
 const _params = new URLSearchParams(location.search);
 const _urlC = _params.get('c'), _urlP = _params.get('p');
 let _booted = false;
-if (_urlC) { try { editor.value = b64d(_urlC); _booted = true; } catch { /* malformed link */ } }
-else if (_urlP && PRESETS[_urlP]) { editor.value = PRESETS[_urlP]; setActive('b:' + _urlP); _booted = true; }
+if (_urlC) { try { editor.setCode(b64d(_urlC)); _booted = true; } catch { /* malformed link */ } }
+else if (_urlP && PRESETS[_urlP]) { editor.setCode(PRESETS[_urlP]); setActive('b:' + _urlP); _booted = true; }
 if (!_booted) {
   const saved = localStorage.getItem('loom.code');   // restore last-worked-on patch; threads if none
-  editor.value = saved || PRESETS.threads;
+  editor.setCode(saved || PRESETS.threads);
   if (!saved) setActive('b:threads');
 }
-refreshHL();
 // hold the engine behind the photosensitivity warning; startEngine() runs on ack
 if (needsWarning) warn.hidden = false;
 else startEngine();
