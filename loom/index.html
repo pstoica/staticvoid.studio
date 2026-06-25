@@ -81,16 +81,9 @@
   #editwrap { flex:1; min-height:0; margin:2px 22px 0; font-weight:500; }
   #editwrap .cm-editor { height:100%; background:transparent; }
   #editwrap .cm-scroller { font-weight:500; }
-  /* inline slider() widget: a thin track with a Loom-accent thumb */
-  .cm-loom-slider input[type=range] { -webkit-appearance:none; appearance:none; width:78px; height:14px;
-    background:transparent; cursor:ew-resize; vertical-align:middle; }
-  .cm-loom-slider input[type=range]::-webkit-slider-runnable-track { height:3px; border-radius:2px; background:rgba(255,255,255,.2); }
-  .cm-loom-slider input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none;
-    width:11px; height:11px; margin-top:-4px; border-radius:50%; background:var(--t-ctrl); box-shadow:0 1px 3px rgba(0,0,0,.55); }
-  .cm-loom-slider input[type=range]:hover::-webkit-slider-thumb { background:#7fd0ff; }
-  .cm-loom-slider input[type=range]::-moz-range-track { height:3px; border-radius:2px; background:rgba(255,255,255,.2); }
-  .cm-loom-slider input[type=range]::-moz-range-thumb { width:11px; height:11px; border:0; border-radius:50%;
-    background:var(--t-ctrl); box-shadow:0 1px 3px rgba(0,0,0,.55); }
+  /* inline slider() widget: native range, accent-color set per value (tints by magnitude;
+     fills the lower track in Chrome so position reads too). The accent is overridden inline. */
+  .cm-loom-slider input[type=range] { width:82px; height:13px; cursor:ew-resize; vertical-align:middle; accent-color:var(--t-ctrl); }
 
   #err { font:500 12px/1.4 var(--mono); color:#ff8a9b; margin:0 22px; max-height:0;
     overflow:hidden; opacity:0; transition:.18s var(--ease); }

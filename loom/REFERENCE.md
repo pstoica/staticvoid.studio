@@ -350,7 +350,8 @@ The running patch's layer names are exposed on `window.loom.layers`.
 `slider(value, min?, max?)` is just a **number** in the patch — but the editor renders a
 **draggable slider inline** over the call, so you can retune it by feel. **Drag or scroll**
 it (the value stays a fixed width so it doesn't jitter); it rewrites the number in the source
-and re-runs live. The number you see *is* the control.
+and re-runs live. The number you see *is* the control. The slider is **tinted by its value**
+(cool blue when low → hot red when high), so you read "higher / lower" at a glance.
 
 ```js
 shape("circle*8")

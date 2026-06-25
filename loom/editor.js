@@ -114,8 +114,9 @@ const loomTheme = EditorView.theme({
 
 // ── inline slider widgets ───────────────────────────────────────────────────────────
 // A `slider(value, min?, max?)` call in the source renders an inline draggable slider after
-// it; dragging rewrites `value` in the source and re-runs (the Strudel idea). We re-find the
-// slider by its ordinal each drag so edits never desync from shifting offsets.
+// it; dragging rewrites `value` in the source and re-runs (the Strudel idea). At commit time
+// we re-find THIS slider by the widget's current DOM position (not a captured ordinal), so it
+// never links to a sibling when the doc shifts (a slider added/removed earlier, value resized).
 const NUM = /^\s*(-?\d*\.?\d+)/;
 function scanSliders(text) {
   const out = [];
@@ -145,10 +146,16 @@ const stepDecimals = (step) => Math.max(0, -Math.floor(Math.log10(step) + 1e-9))
 // format to the step's decimal count, KEEPING trailing zeros — a fixed-width number so the
 // inline slider doesn't jitter/reflow as you drag (0.30 → 0.45, not 0.3 → 0.45).
 const fmtNum = (v, step) => v.toFixed(stepDecimals(step));
+// tint by the normalized value so you read "higher / lower" at a glance without the number:
+// low → cool dim blue, high → warm bright. Drives accent-color (thumb + filled track).
+const tintFor = (min, max, v) => {
+  const t = Math.max(0, Math.min(1, (max - min) ? (v - min) / (max - min) : 0.5));
+  return `hsl(${Math.round(212 - t * 212)} 82% ${Math.round(48 + t * 18)}%)`;   // cold blue (low) → hot red (high)
+};
 
 class SliderWidget extends WidgetType {
-  constructor(idx, val, min, max) { super(); this.idx = idx; this.val = val; this.min = min; this.max = max; }
-  eq(o) { return o.idx === this.idx && o.val === this.val && o.min === this.min && o.max === this.max; }
+  constructor(val, min, max) { super(); this.val = val; this.min = min; this.max = max; }
+  eq(o) { return o.val === this.val && o.min === this.min && o.max === this.max; }
   toDOM(view) {
     const wrap = document.createElement('span');
     wrap.className = 'cm-loom-slider';
@@ -156,14 +163,17 @@ class SliderWidget extends WidgetType {
     const step = niceStep(this.min, this.max);
     input.type = 'range';
     input.min = this.min; input.max = this.max; input.step = step; input.value = this.val;
+    input.style.accentColor = tintFor(this.min, this.max, this.val);
     input.title = `slider ${this.min}…${this.max} — drag or scroll`;
-    const idx = this.idx;
     const commit = (v) => {
-      // re-find THIS slider by ordinal (offsets shift as the value text grows/shrinks)
-      const s = scanSliders(view.state.doc.toString())[idx];
+      // re-find THIS slider by the widget's CURRENT doc position — robust to sibling edits
+      const pos = view.posAtDOM(wrap);
+      const list = scanSliders(view.state.doc.toString());
+      let s = null, best = Infinity;
+      for (const c of list) { const d = Math.abs(c.end - pos); if (d < best) { best = d; s = c; } }
       if (!s) return;
       const cl = Math.max(this.min, Math.min(this.max, v));
-      input.value = cl;
+      input.value = cl; input.style.accentColor = tintFor(this.min, this.max, cl);
       view.dispatch({ changes: { from: s.argFrom, to: s.argTo, insert: fmtNum(cl, step) } });
       if (view.loomRerun) view.loomRerun();
     };
@@ -178,14 +188,15 @@ class SliderWidget extends WidgetType {
     const input = dom.querySelector('input'); if (!input) return false;
     input.min = this.min; input.max = this.max; input.step = niceStep(this.min, this.max);
     if (+input.value !== this.val) input.value = this.val;
+    input.style.accentColor = tintFor(this.min, this.max, this.val);
     return true;
   }
   ignoreEvent() { return true; }
 }
 
 function buildSliderDecos(view) {
-  const sliders = scanSliders(view.state.doc.toString());
-  const ranges = sliders.map((s, idx) => Decoration.widget({ widget: new SliderWidget(idx, s.val, s.min, s.max), side: 1 }).range(s.end));
+  const ranges = scanSliders(view.state.doc.toString())
+    .map((s) => Decoration.widget({ widget: new SliderWidget(s.val, s.min, s.max), side: 1 }).range(s.end));
   return Decoration.set(ranges, true);
 }
 const sliderPlugin = ViewPlugin.fromClass(class {
