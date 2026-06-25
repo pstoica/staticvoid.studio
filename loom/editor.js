@@ -7,7 +7,7 @@
 // Phase 2 (inline slider widgets) builds on this — it just adds decorations + a parser.
 
 import { EditorState } from '@codemirror/state';
-import { EditorView, keymap, drawSelection, Decoration, ViewPlugin, WidgetType, highlightActiveLine } from '@codemirror/view';
+import { EditorView, keymap, Decoration, ViewPlugin, WidgetType, highlightActiveLine } from '@codemirror/view';
 import { history, historyKeymap, defaultKeymap, indentWithTab, toggleComment } from '@codemirror/commands';
 import { StreamLanguage, HighlightStyle, syntaxHighlighting, indentUnit } from '@codemirror/language';
 import { Tag } from '@lezer/highlight';
@@ -89,7 +89,7 @@ const loomTheme = EditorView.theme({
   '&': { color: 'var(--ink)', backgroundColor: 'transparent', height: '100%' },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': { fontFamily: 'var(--mono)', fontSize: '15px', lineHeight: '1.65', overflow: 'auto' },
-  '.cm-content': { padding: '4px 0', letterSpacing: '.01em', caretColor: 'transparent' },
+  '.cm-content': { padding: '4px 0', letterSpacing: '.01em', caretColor: '#ffd166', caretWidth: '2px' },
   // per-line dark box that hugs the text (fit-content → ragged right), so the canvas stays
   // visible around the code instead of a full-panel wash. A faint shadow softens the edge.
   '.cm-line': {
@@ -97,13 +97,10 @@ const loomTheme = EditorView.theme({
     backgroundColor: 'rgba(7,8,11,.42)', textShadow: '0 1px 3px rgba(2,3,5,.9), 0 0 2px rgba(2,3,5,.75)',
   },
   '.cm-activeLine': { backgroundColor: 'rgba(40,48,68,.42)' },          // current line: a touch lighter, same low weight (not an opaque block)
-  // a chunky, bright block-style caret (drawSelection draws it as .cm-cursor)
-  '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#ffd166', borderLeftWidth: '3px', marginLeft: '-1px' },
-  '&.cm-focused .cm-cursor': { borderLeftColor: '#ffd166' },
-  // lift the selection ABOVE the per-line boxes (CM puts the layer at z-index -2, so the dark
-  // boxes paint over it and it reads as opaque) — now it's a translucent highlight on top.
-  '.cm-selectionLayer': { zIndex: '1 !important' },
-  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': { backgroundColor: 'rgba(120,150,255,.32)' },
+  // Selection is the NATIVE browser selection (no drawSelection layer) — it highlights the text
+  // glyphs inline, so the text stays visible and it layers correctly over the per-line box
+  // (a drawSelection layer either hid behind the box = "opaque", or above the text = hid it).
+  // Styled in index.html via ::selection. Caret is the native bright caret (caretColor above).
   '.cm-selectionMatch': { backgroundColor: 'rgba(255,255,255,.10)' },
   // inline slider widget (after a slider(...) call) — detailed track/thumb styling in index.html
   '.cm-loom-slider': { display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle', margin: '0 2px 0 5px' },
@@ -273,7 +270,6 @@ export function createEditor(parent, opts = {}) {
     doc: opts.doc || '',
     extensions: [
       history(),
-      drawSelection(),
       highlightActiveLine(),
       EditorView.lineWrapping,
       indentUnit.of('  '),                               // Tab inserts 2 spaces (matches the old editor)

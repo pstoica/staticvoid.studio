@@ -43,6 +43,9 @@
   /* ⌘/Ctrl+Shift+H (or ⌘/Ctrl+.) hides every bit of chrome — just the drawing */
   body.chrome-hidden #rail, body.chrome-hidden #toolbar, body.chrome-hidden #side,
   body.chrome-hidden #hint { opacity:0; pointer-events:none; transition:opacity .35s var(--ease); }
+  /* `#rail > *` / `#toolbar > *` re-enable pointer-events on children, so hidden chrome stayed
+     interactable (the editor still caught the pointer). Disable everything when hidden. */
+  body.chrome-hidden #rail > *, body.chrome-hidden #toolbar > * { pointer-events:none; }
   /* Perform mode (⌘/Ctrl+Shift+E, or the perform button): ghost the CODE so the canvas reads,
      but keep the slider + badge widgets bright + LIVE — they're your performance controls.
      (Container opacity would cap the widgets, so we dim the text colour instead.) The editor is
@@ -94,6 +97,8 @@
   #editwrap { flex:1; min-height:0; margin:2px 22px 0; font-weight:500; transition:opacity .3s var(--ease); }
   #editwrap .cm-editor { height:100%; background:transparent; }
   #editwrap .cm-scroller { font-weight:500; }
+  /* native text selection — a translucent highlight on the glyphs, so text stays readable */
+  #editwrap .cm-content ::selection, #editwrap .cm-line::selection, #editwrap ::selection { background:rgba(120,150,255,.45); }
   /* inline slider() widget: native range, accent-color set per value (tints by magnitude;
      fills the lower track in Chrome so position reads too). The accent is overridden inline. */
   .cm-loom-slider input[type=range] { width:82px; height:13px; cursor:ew-resize; vertical-align:middle; accent-color:var(--t-ctrl); }
@@ -224,7 +229,7 @@
 
   .helpbody { max-width:none; }
   /* per-section accent colour (type hierarchy + a little life) */
-  #side section { margin:0 0 22px; --cat:var(--accent); }
+  #side section { margin:0 0 22px; --cat:var(--accent); scroll-margin-top:var(--guidehead-h, 92px); }
   #side section[data-cat="mini"]   { --cat:#b58cff; }
   #side section[data-cat="src"]    { --cat:#56b6ff; }
   #side section[data-cat="ctrl"]   { --cat:#6df0c2; }
@@ -254,8 +259,19 @@
   #side em { color:var(--cat); font-style:normal; }
 
   /* filter + LLM-copy bar (sticky atop the guide) */
-  .guidebar { position:sticky; top:0; z-index:3; display:flex; gap:8px; margin:0 0 16px;
-    padding:2px 0 12px; background:linear-gradient(rgba(13,13,14,.98) 72%, rgba(13,13,14,0)); }
+  /* sticky head: search bar + section nav, pinned at the top of the scrolling guide */
+  .guidehead { position:sticky; top:0; z-index:5; margin:-16px -18px 14px; padding:14px 18px 0;
+    background:rgba(13,13,14,.97); border-bottom:1px solid var(--line); }
+  .guidebar { display:flex; gap:8px; padding:0 0 10px; }
+  #guidenav { display:flex; flex-wrap:wrap; gap:5px; padding:0 0 12px; }
+  .gnav { font:600 9.5px/1 var(--mono); letter-spacing:.05em; text-transform:uppercase; cursor:pointer;
+    color:var(--muted); background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:999px; padding:5px 8px;
+    transition:.12s var(--ease); }
+  .gnav:hover { color:var(--gc, var(--ink)); border-color:var(--gc, rgba(255,255,255,.28)); background:rgba(255,255,255,.07); }
+  .gnav[hidden] { display:none; }
+  /* sticky section headers, pinned just below the head as you scroll */
+  #side section h3 { position:sticky; top:var(--guidehead-h, 92px); z-index:2; margin:0 -18px 11px; padding:7px 18px;
+    background:rgba(13,13,14,.96); }
   #guidefilter { flex:1; min-width:0; font:500 12px/1 var(--mono); color:var(--ink);
     background:rgba(255,255,255,.05); border:1px solid var(--line); border-radius:7px; padding:9px 11px; }
   #guidefilter::placeholder { color:var(--muted); }
@@ -393,9 +409,12 @@
 
     <div class="tabpane" data-pane="guide" hidden>
     <div class="helpbody">
-      <div class="guidebar">
-        <input id="guidefilter" type="search" placeholder="filter the guide…" autocomplete="off" spellcheck="false">
-        <button id="guidecopy" title="copy the full reference as text — paste into an LLM to teach it Loom">copy for LLM</button>
+      <div class="guidehead">
+        <div class="guidebar">
+          <input id="guidefilter" type="search" placeholder="filter the guide…" autocomplete="off" spellcheck="false">
+          <button id="guidecopy" title="copy the full reference as text — paste into an LLM to teach it Loom">copy for LLM</button>
+        </div>
+        <nav id="guidenav" aria-label="jump to section"></nav>
       </div>
       <p class="guideempty" hidden>no matches.</p>
       <section data-cat="mini">

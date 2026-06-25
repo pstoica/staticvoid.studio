@@ -1550,6 +1550,24 @@ function setupGuide() {
     }
   }
 
+  // section nav: a chip per section that jumps to it, coloured by the section's --cat. Skip the
+  // lineage/credits. The sticky head's height drives the sticky-header offset + scroll-margin.
+  const navEl = $('#guidenav'), navChips = new Map();
+  if (navEl) for (const sec of sections) {
+    if (sec.classList.contains('lineage')) continue;
+    const h3 = sec.querySelector('h3'); if (!h3) continue;
+    const label = (h3.childNodes[0] && h3.childNodes[0].textContent || h3.textContent).trim();
+    const chip = document.createElement('button');
+    chip.className = 'gnav'; chip.type = 'button'; chip.textContent = label;
+    const cat = getComputedStyle(sec).getPropertyValue('--cat').trim();
+    if (cat) chip.style.setProperty('--gc', cat);
+    chip.addEventListener('click', () => sec.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    navEl.appendChild(chip);
+    navChips.set(sec, chip);
+  }
+  const head = document.querySelector('.guidehead');
+  if (head) new ResizeObserver(() => document.documentElement.style.setProperty('--guidehead-h', head.offsetHeight + 'px')).observe(head);
+
   // palette swatches → click inserts palette("name") at the cursor
   const pals = DSL.PALETTES, palc = $('#palswatches');
   if (pals && palc) for (const name of Object.keys(pals)) {
@@ -1580,6 +1598,7 @@ function setupGuide() {
         r.hidden = !m; if (m) secVis = true;
       }
       sec.hidden = q ? (!secVis && !hMatch) : false;
+      const chip = navChips.get(sec); if (chip) chip.hidden = sec.hidden;
       if (!sec.hidden) anyVisible = true;
     }
     if (empty) empty.hidden = anyVisible || !q;
