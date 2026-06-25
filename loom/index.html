@@ -43,6 +43,9 @@
   /* ⌘/Ctrl+Shift+H (or ⌘/Ctrl+.) hides every bit of chrome — just the drawing */
   body.chrome-hidden #rail, body.chrome-hidden #toolbar, body.chrome-hidden #side,
   body.chrome-hidden #hint { opacity:0; pointer-events:none; transition:opacity .35s var(--ease); }
+  /* Perform mode (⌘/Ctrl+Shift+E, or the eye button) dims the editor to a faint ghost and
+     makes it click-through (opacity + pointer-events set inline by setPerform), so the whole
+     screen is a clean trigger surface — no text selection. The controls stay live. */
 
   #brand { display:flex; align-items:baseline; gap:10px; padding:18px 22px 12px; }
   #brand h1 { font-family:"Unbounded",var(--font); font-weight:700; font-size:19px; margin:0;
@@ -78,7 +81,7 @@
      renders the coloured code, floating directly on the visuals (no box). */
   /* the editor (CodeMirror 6) floats over the canvas; token colours + look live in
      editor.js (theme + highlight), reusing the --t-* vars above. */
-  #editwrap { flex:1; min-height:0; margin:2px 22px 0; font-weight:500; }
+  #editwrap { flex:1; min-height:0; margin:2px 22px 0; font-weight:500; transition:opacity .3s var(--ease); }
   #editwrap .cm-editor { height:100%; background:transparent; }
   #editwrap .cm-scroller { font-weight:500; }
   /* inline slider() widget: native range, accent-color set per value (tints by magnitude;
@@ -355,6 +358,8 @@
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></button>
     <button class="btn icon" id="helpbtn" aria-label="guide" data-tip="guide">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.3 2.4c-.8.3-1.3.9-1.3 1.7v.4"/><path d="M12 17h.01"/></svg></button>
+    <button class="btn icon" id="performbtn" aria-label="perform" data-tip="perform · dim the editor so it's click-through (⌘⇧E)">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
   </nav>
 
   <aside id="side">

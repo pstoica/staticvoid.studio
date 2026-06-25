@@ -394,10 +394,11 @@ frozen-vs-live rule, which gives two behaviours from one name:
 `mouseX.sample(8)`) — for a quantized-in-time feel. (`segment` won't: it samples pattern-time,
 which the pointer ignores; `.quantize(n)` snaps the *value* instead.)
 
-`mouseDown` fires on a press over the **canvas** — clicks on the editor / controls just edit
-them — or **anywhere with ⌥/⌘ held**, so you can trigger effects while the editor is open:
-`group(pat).feedback(mouseDown.range(0, 0.92)).kaleido(mouseDown.range(0, 8))` switches the
-chain on while pressed (see the `press` preset).
+`mouseDown` fires on any press, so `group(pat).feedback(mouseDown.range(0, 0.92)).kaleido(mouseDown.range(0, 8))`
+switches the chain on while pressed (see the `press` preset). To trigger **without selecting
+code**, flip on **Perform mode** (the eye button, or **⌘/Ctrl+Shift+E**): it dims the editor to
+a ghost and makes it click-through, so the whole screen is a clean trigger surface (Escape or
+toggle again to edit). ⌘/Ctrl+. still fully hides all chrome.
 
 | Method | Effect |
 | --- | --- |

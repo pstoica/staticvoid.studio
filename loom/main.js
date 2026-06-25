@@ -1592,15 +1592,30 @@ $('#helpbtn').addEventListener('click', () => setSide(!onTab('guide'), 'guide'))
 // fully hide all chrome (⌘/Ctrl+Shift+H or ⌘/Ctrl+.) so the drawing has the whole
 // screen; any of Escape / the same combo brings it back.
 function setChromeHidden(on) { document.body.classList.toggle('chrome-hidden', on); }
+// Perform mode (⌘/Ctrl+Shift+E or the eye button): dim the editor + make it click-through, so
+// you can trigger mouseDown / drive the canvas without selecting code. Controls stay live.
+function setPerform(on) {
+  document.body.classList.toggle('perform', on);
+  $('#performbtn').classList.toggle('on', on);
+  const ew = $('#editwrap');                          // dim + click-through, applied inline (robust)
+  ew.style.opacity = on ? '0.16' : '';
+  ew.style.pointerEvents = on ? 'none' : '';
+}
+const togglePerform = () => setPerform(!document.body.classList.contains('perform'));
 document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && (e.key === '.' || ((e.shiftKey) && (e.key === 'H' || e.key === 'h')))) {
     e.preventDefault(); setChromeHidden(!document.body.classList.contains('chrome-hidden')); return;
   }
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
+    e.preventDefault(); togglePerform(); return;
+  }
   if (e.key === 'Escape') {
     if (document.body.classList.contains('chrome-hidden')) { setChromeHidden(false); return; }
+    if (document.body.classList.contains('perform')) { setPerform(false); return; }
     setSide(false);
   }
 });
+$('#performbtn').addEventListener('click', togglePerform);
 const isMobile = () => window.matchMedia('(max-width:760px)').matches;
 // tap the canvas (outside the sidebar and the control rail) to close the sidebar
 document.addEventListener('pointerdown', (e) => {
@@ -1676,15 +1691,10 @@ function feedPointer(e) {
   pointerState.y = Math.max(0, Math.min(1, (e.clientY - r.top) / (r.height || 1)));
   syncPointer();
 }
-// A press on the editor / controls should EDIT, not fire mouseDown. So mouseDown triggers only
-// on a press over the canvas — or anywhere with ⌥/⌘ held (the "cmd-click" performance trigger),
-// so you can fire effects even while the editor is open.
-const inChrome = (t) => !!(t && t.closest && t.closest('#rail, #toolbar, #side, #warn'));
+// mouseDown fires on any press (the editor doesn't gate it). To trigger without selecting code,
+// use Perform mode (below): it makes the editor click-through, so the whole screen is a surface.
 window.addEventListener('pointermove', feedPointer, { passive: true });
-window.addEventListener('pointerdown', (e) => {
-  feedPointer(e);
-  if (e.altKey || e.metaKey || !inChrome(e.target)) { pointerState.down = 1; syncPointer(); }
-}, { passive: true });
+window.addEventListener('pointerdown', (e) => { feedPointer(e); pointerState.down = 1; syncPointer(); }, { passive: true });
 window.addEventListener('pointerup', () => { pointerState.down = 0; syncPointer(); }, { passive: true });
 window.addEventListener('pointercancel', () => { pointerState.down = 0; syncPointer(); }, { passive: true });
 resize();
