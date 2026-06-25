@@ -470,6 +470,8 @@
         <code>.displace(amount, scale)</code><p>warp / melt the layer</p>
         <code>.hue(t) .brightness(b) .contrast(c) .saturate(s)</code><p>colour grade</p>
         <code>.pixelate(osc(0.2).range(3,26))</code><p>FX params take numbers, patterns, or oscs (global time), so the effect itself moves</p>
+        <p>editing/removing an FX line and re-running applies to glyphs <em>already on screen</em> — no wipe, no waiting for them to fade (glyph content still cross-fades)</p>
+        <code>echo(group(...), n)</code><p>opt a group into <em>accumulating</em> edits: each re-run forks a frozen generation (keeping that edit's FX) while older ones decay out, so alternating effects stack into a fading palimpsest. <code>n</code> caps how many linger</p>
       </section>
       <section data-cat="sig">
         <h3>signals &amp; maths <span>(0..1 unless ranged)</span></h3>
@@ -494,6 +496,14 @@
         <code>palette("sunset").at(saw.range(0,1))</code>
         <p>named ramps, interpolated in OKLCH — click a swatch to drop it in your patch:</p>
         <div id="palswatches"></div>
+      </section>
+      <section data-cat="keys">
+        <h3>keys <span>(⌘ = Ctrl on Windows/Linux)</span></h3>
+        <code>⌘⏎</code><p>run the patch</p>
+        <code>⌘/</code><p>toggle line comment · ⌘Z undo</p>
+        <code>⌘⇧K</code><p>clear the canvas</p>
+        <code>⌘⇧E</code><p>perform mode — dim/ghost the editor &amp; make it click-through; sliders stay live</p>
+        <code>⌘.</code><p>hide all chrome (Esc brings it back)</p>
       </section>
       <section class="lineage">
         <h3>lineage</h3>
