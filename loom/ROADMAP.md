@@ -25,12 +25,14 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
 
 ## Tier 2 — dynamics (kinematic → physical)
 
-3. **Spring primitive.** `.spring(stiffness, damping)` value modifier — per-glyph 1D state
-   integrated toward a target each frame. The **momentum / overshoot / settle** that osc and
-   easing fundamentally can't do (they're pure functions of time; a spring has state and
-   *reacts* to a changing target). Gorgeous with `quantize` (settling between grid steps) and
-   onset-jumping targets. *Why here:* it's the bridge from stateless shaping to real dynamics —
-   closer to easing than to Rapier, useful on its own, and proves the per-glyph-state plumbing.
+3. **Spring primitive.** ✅ **Done.** `osc(...).spring(stiffness, damping)` (+ free fn
+   `spring(target, k, d)`) — per-glyph 1D state (velocity + value) integrated toward a live
+   target each frame; semi-implicit Euler, substepped for stiff-spring stability. The
+   **momentum / overshoot / settle** osc & easing can't do. `pattern.js`: `spring`/`isSpring`
+   descriptor + osc method. `main.js`: per-glyph `springs`/`_spr` on the particle, integrated
+   in `tick()`, read by `resolvePos` (position) + `glResolve`/`drawGlyph` (scalars). Drives
+   x/y/radius/angle/pan + size/rotate/rotateX/rotateY/weight/outline/open/alpha/shade (not
+   color). Proves the **per-glyph-state plumbing** for physics (#4). Preset: `spring`.
 
 4. **Physics mode (Rapier + Three).** A `physics(pattern, { gravity, drag, bounce, … })`
    group (parallel to `group()` for FX): events spawn **rigid bodies** into a shared world;

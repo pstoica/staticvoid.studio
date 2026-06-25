@@ -385,9 +385,27 @@ function makeOsc(o) {
     // same rule as Pattern.ease, so `osc(0.2).ease("inOutSine").range(0,0.4)` matches the
     // signal form. (A dedicated pre-range slot, not an op, which run post-range.)
     ease(name) { return makeOsc({ ...o, ease: name }); },
+    // spring(stiffness, damping): chase THIS osc's output with a damped spring (this osc
+    // is the target). See spring() below — the per-glyph momentum/overshoot/settle that
+    // ease & osc can't do. Great after .quantize (settle between steps).
+    spring(stiffness, damping) { return spring(makeOsc(o), stiffness, damping); },
   };
 }
 const isOsc = (a) => a != null && typeof a === 'object' && a.__osc !== undefined;
+
+// ── spring: a STATEFUL value modifier ────────────────────────────────────────────
+// Unlike a signal/osc (pure functions of time, frozen or live) a spring has state —
+// velocity + current value — that the renderer integrates toward a TARGET every frame,
+// per glyph. That's momentum, overshoot and settle: it *reacts* to a changing target
+// instead of replaying a fixed curve. The target is normally an osc (often `.quantize`d
+// or a stepped `rand`/`square` shape) so the value lurches to each new step and rings
+// down. stiffness = pull toward the target, damping = how fast the wobble dies
+// (under-damped → overshoot; over-damped → glide). The renderer owns the integration;
+// here we just package the target + constants. Use on x/y/radius/angle/size/rotate/etc.
+function spring(target, stiffness = 120, damping = 14) {
+  return { __spring: { target, k: stiffness, d: damping } };
+}
+const isSpring = (a) => a != null && typeof a === 'object' && a.__spring !== undefined;
 
 // ── palettes ───────────────────────────────────────────────────────────────────
 // Built-in colour ramps, usable by name: palette("sunset"). Interpolated in
@@ -729,9 +747,9 @@ function rev(p) { return reify(p).rev(); }
 export const DSL = {
   Pattern, pure, silence, stack, slowcat, fastcat, cat, seq, sequence, timecat,
   fast, slow, rev, run, range, mini, euclid,
-  shape, s, n, choose, irand, osc, palette, bg, group, echo, _setBgSink,
+  shape, s, n, choose, irand, osc, palette, bg, group, echo, spring, _setBgSink,
   $: layer, _resetLayers, _getLayers,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
-  hasOnset, span, isOsc, ease, EASE,
+  hasOnset, span, isOsc, isSpring, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,
 };

@@ -328,6 +328,31 @@ It works the same on a **live `osc`** (shapes the waveform before its range), so
 `[0,1]` (that swing is the point). The curve name is itself sampled from the right, so it
 can be a mini-notation pattern: `.ease("<inOutSine outBack>")` alternates curves per cycle.
 
+### Spring
+
+A signal/osc is a pure function of time — it replays a fixed curve. A **spring has state**
+(velocity + current value) and *reacts*: each frame it's pulled toward a **target**, giving
+the **momentum / overshoot / settle** easing can't. `osc(...).spring(stiffness, damping)`
+chases that osc's output; the target is normally **stepped** (a `.quantize`d osc, or a
+`rand`/`square` shape) so the value lurches to each new step and rings down:
+
+```js
+shape("dot*7")
+  .x(osc(0.18,"saw").spread(1).quantize(8).spring(150, 11))   // settle between 8 columns
+  .y(saw.range(0.16, 0.84))
+shape("ring*5")
+  .radius(osc(0.3,"rand").spread(1).range(0.12,0.44).spring(120, 9))   // chase random radii
+```
+
+- **stiffness** (default `120`) = pull toward the target — higher snaps faster.
+- **damping** (default `14`) = how fast the wobble dies. **Under-damped** (`d < 2√k`)
+  overshoots and rings; **over-damped** glides in with no overshoot.
+- Free-function form: `spring(target, stiffness, damping)` (target = an osc or number).
+- Works on **position** (`x` `y` `radius` `angle` `pan`) and the **scalar** controls
+  (`size` `rotate` `rotateX` `rotateY` `weight` `outline` `open` `alpha` `shade`). Each
+  glyph carries its own spring state from birth, so glyphs settle independently. *(Not
+  `color` — it's not a scalar.)*
+
 `quantize` snaps amplitude, not time, so `sine.quantize(4)` lingers at the peaks/troughs (where the sine is slow) and flickers through the middle. For even rhythmic steps use `.segment(n)` (or drive it with a time-linear ramp like `saw`/`tri`). They compose: `perlin.segment(8).quantize(4)` = organic walk, plucked on 8ths, into 4 colours. `palette("rainbow").at(perlin.range(0,1).segment(8))` plucks the background on a grid.
 
 ### Live oscillators

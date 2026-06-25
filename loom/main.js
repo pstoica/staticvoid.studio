@@ -32,13 +32,13 @@ const cpsLabel = $('#cpsval');
 // A transparent <textarea> sits over a <pre>; we re-render coloured HTML into the
 // <pre> on every edit and keep their scroll positions synced.
 const HL_FN = new Set(['shape','s','n','stack','cat','slowcat','fastcat','seq','sequence','timecat',
-  'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand','osc','palette','bg','group','echo','$']);
+  'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand','osc','palette','bg','group','echo','spring','$']);
 const HL_SIG = new Set(['sine','cosine','saw','isaw','tri','square','rand','perlin','fbm','brown','gauss','white']);
 const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux','superimpose','off','degrade','degradeBy',
   'unDegradeBy','sometimes','sometimesBy','often','rarely','early','late','range','add','sub','mul','div',
   'color','size','x','y','radius','angle','grid','rotate','rotateX','rotateY','spin','blend','alpha','opacity','pan','jitter','fill','stroke','weight','outline','shade','pixelate',
   'blur','feedback','trails','hue','brightness','contrast','saturate','negative','invert','displace','kaleido','mirror',
-  'cap','join','open','vertex','attack','decay','life','set','spread','phase','rate','quantize','ease','segment','seg']);
+  'cap','join','open','vertex','attack','decay','life','set','spread','phase','rate','quantize','ease','segment','seg','spring']);
 const HL_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+(?:\.\d+)?\b|=>|\.[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*|[(){}\[\],.]/g;
 const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 function classOf(tok) {
@@ -182,10 +182,26 @@ function spawn(value, onset) {
   const jx = jit ? (Math.random() - 0.5) * jit : 0;
   const jy = jit ? (Math.random() - 0.5) * jit : 0;
 
+  // springs: stateful per-glyph modifiers. Capture initial state (start AT the target's
+  // birth value so there's no spawn jolt) + the spring constants; tick() integrates them
+  // each frame into p._spr, which resolvePos / glResolve read. A spring also makes
+  // position live (so resolvePos re-runs) and gives the base field a clean number (numAt
+  // would otherwise hand the spring object straight through and NaN it).
+  const springs = [];
+  const sprInit = {};
+  for (const f of SPRING_FIELDS) if (isSpring(v[f])) {
+    const sd = v[f].__spring;
+    const x0 = numAt(sd.target, 0, phase, elapsed, 0, cycle);
+    springs.push({ field: f, target: sd.target, k: sd.k, d: sd.d, x: x0, v: 0 });
+    sprInit[f] = x0;
+  }
+  const baseNum = (f, def) => (sprInit[f] != null ? sprInit[f] : numAt(v[f] != null ? v[f] : def, 0, phase));
+
   // position inputs may be numbers or live oscillators, recomputed each frame
-  // only when one is an osc; otherwise the spawn position stands.
+  // only when one is an osc/spring; otherwise the spawn position stands.
   const pin = { x: v.x, y: v.y, radius: v.radius, angle: v.angle, gridX: v.gridX, gridY: v.gridY, pan: v.pan, phase };
-  const posLive = isOsc(v.x) || isOsc(v.y) || isOsc(v.radius) || isOsc(v.angle) || isOsc(v.gridX) || isOsc(v.gridY) || isOsc(v.pan);
+  const posLive = isOsc(v.x) || isOsc(v.y) || isOsc(v.radius) || isOsc(v.angle) || isOsc(v.gridX) || isOsc(v.gridY) || isOsc(v.pan)
+    || springs.some((s) => SPRING_POS.has(s.field));
 
   // scalar/colour controls that are oscillators keep running over the lifetime
   const mods = [];
@@ -195,24 +211,24 @@ function spawn(value, onset) {
     pin, posLive, jx, jy, phase,
     shape: v.shape || 'dot',
     color: isOsc(v.color) ? oscColor(v.color.__osc, 0, phase) : resolveColor(v.color, phase),
-    size: numAt(v.size != null ? v.size : 0.06, 0, phase) * minDim,
-    rotTurns: numAt(v.rotate != null ? v.rotate : 0, 0, phase),       // Z, turns
-    rotX: numAt(v.rotateX != null ? v.rotateX : 0, 0, phase) * TAU,   // tilt (radians)
-    rotY: numAt(v.rotateY != null ? v.rotateY : 0, 0, phase) * TAU,
+    size: baseNum('size', 0.06) * minDim,
+    rotTurns: baseNum('rotate', 0),       // Z, turns
+    rotX: baseNum('rotateX', 0) * TAU,     // tilt (radians)
+    rotY: baseNum('rotateY', 0) * TAU,
     spin: (v.spin != null ? v.spin : 0) * TAU,                 // turns/sec (Z), age-driven
     fill: v.fill != null ? v.fill : 1,
     stroke: v.stroke != null ? v.stroke : 0,
     vertex: v.vertex != null ? v.vertex : 0,
-    weight: numAt(v.weight != null ? v.weight : 0.006, 0, phase),
-    outline: v.outline != null ? numAt(v.outline, 0, phase) : null,   // stroke as a fraction of radius (overrides weight)
+    weight: baseNum('weight', 0.006),
+    outline: (sprInit.outline != null || v.outline != null) ? baseNum('outline', 0) : null,   // stroke as a fraction of radius (overrides weight)
     // 3D shading amount. 3D primitives (cube/sphere/torus/octa, id 11–14) default
     // to a matte shaded look so they read as 3D (like a p5 sphere); 2D shapes stay
     // flat (0). Override either way with .shade(n).
-    shade: numAt(v.shade != null ? v.shade : (SHAPE_ID[v.shape] >= 11 ? 0.85 : 0), 0, phase),
+    shade: sprInit.shade != null ? sprInit.shade : numAt(v.shade != null ? v.shade : (SHAPE_ID[v.shape] >= 11 ? 0.85 : 0), 0, phase),
     cap: v.cap || 'square',
     join: v.join || 'miter',
-    open: numAt(v.open != null ? v.open : 0, 0, phase),
-    alpha: numAt(v.alpha != null ? v.alpha : 1, 0, phase),
+    open: baseNum('open', 0),
+    alpha: baseNum('alpha', 1),
     blend: v.blend || 'source-over',
     age: 0,
     ageCycles: 0,              // age in CYCLES, accumulated per frame → tempo-synced oscs survive a live cps change
@@ -224,6 +240,8 @@ function spawn(value, onset) {
     attackEase: v.attackEase || null,
     decayEase: v.decayEase || null,
     mods: mods.length ? mods : null,
+    springs: springs.length ? springs : null,             // [{field,target,k,d,x,v}] integrated in tick()
+    _spr: springs.length ? { ...sprInit } : null,         // field → current spring value (read by resolvePos/glResolve)
     spawnT: elapsed,           // global seconds at spawn → osc().drift() (free) reads this
     spawnCycle: cycle,         // global cycle at spawn → osc().drift() (synced) reads this
     gid: v._gid || 0,          // group layer id (0 = ungrouped, drawn to main canvas)
@@ -308,8 +326,13 @@ function interpPal(colors, t) {
 // ── live oscillators (LFOs): evaluated each frame against a glyph's age, so a
 // control keeps moving over the glyph's lifetime instead of freezing at spawn. ──
 const isOsc = DSL.isOsc;
+const isSpring = DSL.isSpring;
 const applyEase = DSL.ease;   // named Penner curve, 0..1 → 0..1 (shared with pattern.js)
 const MOD_FIELDS = ['size', 'color', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade'];
+// fields a .spring() can drive: position (resolved in resolvePos) + the scalar mods
+// (resolved in glResolve/drawGlyph). NOT color (non-scalar). Each holds per-glyph state.
+const SPRING_FIELDS = ['x', 'y', 'radius', 'angle', 'pan', 'size', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade'];
+const SPRING_POS = new Set(['x', 'y', 'radius', 'angle', 'pan']);
 const _h1 = (x) => { const s = Math.sin((x + 0.123) * 12.9898) * 43758.5453; return s - Math.floor(s); };
 const _snoise = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return _h1(i) * (1 - u) + _h1(i + 1) * u; };
 const _fbm = (x) => { let s = 0, a = 1, fr = 1, n = 0; for (let o = 0; o < 4; o++) { s += _snoise(x * fr) * a; n += a; fr *= 2; a *= 0.5; } return s / n; };
@@ -431,6 +454,18 @@ function glResolve(p, minDim, out) {
     else if (m.field === 'outline') olw = val;
     else if (m.field === 'shade') shade = val;
   }
+  if (p._spr) {                                          // springs (state integrated in tick), same field→unit mapping as mods
+    const s = p._spr;
+    if (s.size != null) sizePx = s.size * minDim;
+    if (s.rotate != null) rotTurns = s.rotate;
+    if (s.rotateX != null) rotX = s.rotateX * TAU;
+    if (s.rotateY != null) rotY = s.rotateY * TAU;
+    if (s.open != null) open = s.open;
+    if (s.alpha != null) alpha = s.alpha;
+    if (s.weight != null) weight = s.weight;
+    if (s.outline != null) olw = s.outline;
+    if (s.shade != null) shade = s.shade;
+  }
   if (!color) { if (!p._rgb) p._rgb = cssToRGB(p.color); color = p._rgb; }
   out.x = p.x; out.y = p.y;
   out.r = sizePx;
@@ -493,6 +528,9 @@ function resolvePos(p, minDim, age) {
   const { x, y, radius, angle, gridX, gridY, pan, phase } = p.pin;
   const st = p.spawnT || 0;                            // spawn time → osc().drift() (free)
   const ageC = p.ageCycles, stC = p.spawnCycle;        // cycle-time → tempo-synced oscs
+  const sp = p._spr;                                   // spring values, pre-integrated in tick()
+  // gv: a spring field reads its integrated value; otherwise sample the control (osc/number).
+  const gv = (name, raw) => (sp && sp[name] != null ? sp[name] : numAt(raw, age, phase, st, ageC, stC));
   let px, py;
   if (gridX != null) {                                 // grid: cell from onset phase
     const cols = Math.max(1, Math.round(numAt(gridX, age, phase, st, ageC, stC)));
@@ -501,17 +539,17 @@ function resolvePos(p, minDim, age) {
     px = ((cell % cols) + 0.5) / cols * W;
     py = ((Math.floor(cell / cols) % rows) + 0.5) / rows * H;
   } else {
-    px = (x != null ? numAt(x, age, phase, st, ageC, stC) : 0.5) * W;
-    py = (y != null ? numAt(y, age, phase, st, ageC, stC) : 0.5) * H;
+    px = (x != null ? gv('x', x) : 0.5) * W;
+    py = (y != null ? gv('y', y) : 0.5) * H;
   }
   const defR = (gridX == null && x == null && y == null && radius == null) ? 0.34 : 0;
-  const rad = (radius != null ? numAt(radius, age, phase, st, ageC, stC) : defR) * minDim;
+  const rad = (radius != null ? gv('radius', radius) : defR) * minDim;
   if (rad !== 0) {
-    const ang = (angle != null ? numAt(angle, age, phase, st, ageC, stC) : phase) * TAU - Math.PI / 2;
+    const ang = (angle != null ? gv('angle', angle) : phase) * TAU - Math.PI / 2;
     px += Math.cos(ang) * rad;
     py += Math.sin(ang) * rad;
   }
-  if (pan != null) px += (numAt(pan, age, phase, st, ageC, stC) - 0.5) * W * 0.42;
+  if (pan != null) px += (gv('pan', pan) - 0.5) * W * 0.42;
   return [px + p.jx * minDim, py + p.jy * minDim];
 }
 
@@ -628,6 +666,17 @@ function drawGlyph(g, p, minDim) {
     else if (m.field === 'alpha') alpha = val;
     else if (m.field === 'weight') weight = val;
     else if (m.field === 'outline') olw = val;
+  }
+  if (p._spr) {                                          // springs (state integrated in tick)
+    const s = p._spr;
+    if (s.size != null) sizePx = s.size * minDim;
+    if (s.rotate != null) rotTurns = s.rotate;
+    if (s.rotateX != null) rotX = s.rotateX * TAU;
+    if (s.rotateY != null) rotY = s.rotateY * TAU;
+    if (s.open != null) open = s.open;
+    if (s.alpha != null) alpha = s.alpha;
+    if (s.weight != null) weight = s.weight;
+    if (s.outline != null) olw = s.outline;
   }
   g.save();
   g.translate(p.x, p.y);
@@ -760,6 +809,22 @@ function tick(dt) {
     }
     p._env = Math.max(0, Math.min(1, env));
     p._a = p._env * p.alpha;                           // for trace mode
+    // springs: integrate each glyph's {x,v} toward its (live) target this frame, with
+    // semi-implicit Euler + substeps so stiff springs stay stable at large dt. Filled
+    // into p._spr for resolvePos / glResolve to read. Must run before resolvePos below.
+    if (p.springs) {
+      const sub = Math.min(8, Math.max(1, Math.ceil(dt / 0.008)));
+      const h = dt / sub;
+      for (const s of p.springs) {
+        const tgt = numAt(s.target, p.age, p.phase, p.spawnT, p.ageCycles, p.spawnCycle);
+        for (let k = 0; k < sub; k++) {
+          s.v += (s.k * (tgt - s.x) - s.d * s.v) * h;
+          s.x += s.v * h;
+        }
+        if (!Number.isFinite(s.x)) { s.x = tgt; s.v = 0; }   // guard absurd constants
+        p._spr[s.field] = s.x;
+      }
+    }
     if (p.posLive) { const r = resolvePos(p, minDim, p.age); p.x = r[0]; p.y = r[1]; }
     particles[w++] = p;
     live.push(p);
@@ -965,6 +1030,19 @@ $("spark", shape("plus*3").radius(0.12)
   .rotate(saw.range(0, 1).slow(4))
   .color("#ffd166").size(0.05)
   .attack(0.3, "outBack").decay(1.5))`,
+
+  // spring: a stateful modifier that CHASES a (stepped) target with momentum — overshoot
+  // + settle that osc/easing can't. The dots lurch between 8 quantized x-columns and
+  // ring down; the rings spring toward fresh random radii. stiffness/damping tune the bounce.
+  'spring': `$("sky", bg("#06060f"))
+$("steps", shape("dot*7")
+  .x(osc(0.18, "saw").spread(1).quantize(8).spring(150, 11))
+  .y(saw.range(0.16, 0.84))
+  .color(palette("neon").at(saw.range(0, 1)))
+  .size(0.035).decay(3))
+$("rings", shape("ring*5")
+  .radius(osc(0.3, "rand").spread(1).range(0.12, 0.44).spring(120, 9))
+  .color("#56b6ff").weight(0.005).decay(2.5))`,
 
   // ── shader FX (WebGL): each group() runs a post-process chain on its layer ──
 
