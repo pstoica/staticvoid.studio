@@ -390,12 +390,22 @@ frozen-vs-live rule, which gives two behaviours from one name:
   `physics(pat, { gravity: 0, attract: 1, ax: mouseX, ay: mouseY })` — the swarm follows
   your pointer. (Drag on a phone.)
 
+`.sample(n)` gives a **stepped** pointer — sample-and-held `n` times per cycle (e.g.
+`mouseX.sample(8)`) — for a quantized-in-time feel. (`segment` won't: it samples pattern-time,
+which the pointer ignores; `.quantize(n)` snaps the *value* instead.)
+
+`mouseDown` fires on a press over the **canvas** — clicks on the editor / controls just edit
+them — or **anywhere with ⌥/⌘ held**, so you can trigger effects while the editor is open:
+`group(pat).feedback(mouseDown.range(0, 0.92)).kaleido(mouseDown.range(0, 8))` switches the
+chain on while pressed (see the `press` preset).
+
 | Method | Effect |
 | --- | --- |
 | `.range(lo, hi)` | remap a `0..1` signal into `[lo, hi]`; **`lo`/`hi` may each be a number, pattern, or osc** |
 | `.add(x)` `.sub(x)` `.mul(x)` `.div(x)` | arithmetic; **`x` may be a number or a pattern** |
 | `.quantize(n)` | snap the **value** to `n` steps (`Math.round(v*n)/n`). Discrete bands, but a continuous signal still crosses them on its own (uneven) timing |
 | `.segment(n)` (alias `.seg`) | snap the **time**: resample `n` times per cycle on an even grid and hold each value — Tidal's `segment`/`discretise`. `quantize` steps the value, `segment` steps the time |
+| `.sample(n)` | **sample-and-hold** a *live* signal `n` times per cycle: capture the value when each slot starts and hold it. Unlike `segment` (a fixed pattern-time), this snapshots the value at that moment, so it works on `mouseX`/`mouseY` — `mouseX.sample(8)` is the pointer stepped/held at 8/cycle (`segment` is a no-op there). |
 | `.ease(name)` | reshape the **0..1 signal** through an easing curve **before** `.range()` maps it — turn a linear ramp into an accelerating / decelerating / overshooting one |
 
 ### Easing

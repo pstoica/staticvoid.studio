@@ -199,6 +199,26 @@ class Pattern {
     }));
   }
   seg(n) { return this.segment(n); }                // Strudel alias
+  // sample(n): real-time sample-and-HOLD — capture this signal's value the first time each
+  // 1/n-cycle slot is reached, then hold it until the next slot. Unlike segment (which reads
+  // a fixed pattern-time midpoint), this snapshots whatever the source returns AT THAT MOMENT,
+  // so it works on EXTERNAL live signals like `mouseX` — where segment is a no-op, since the
+  // pointer ignores pattern-time. `mouseX.sample(8)` = the pointer stepped/held at 8/cycle.
+  sample(n) {
+    const src = this;
+    const cache = new Map();                         // slot → captured value (held)
+    return new Pattern((s) => {
+      const t = (s.begin + s.end) / 2;
+      const slot = Math.floor(t * n);
+      if (!cache.has(slot)) {
+        const vs = src.query(span(t, t));            // snapshot the source as of now
+        cache.set(slot, vs.length ? vs[vs.length - 1].value : undefined);
+        if (cache.size > 128) cache.delete(cache.keys().next().value);   // prune oldest
+      }
+      const v = cache.get(slot);
+      return v == null ? [] : [hap(undefined, s, v)];
+    });
+  }
 
   // ── control setters (structure from the left, value sampled from the right) ──
   set(name, arg) {

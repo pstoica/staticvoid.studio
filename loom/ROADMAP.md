@@ -87,9 +87,11 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
   inline widgets:* colour pickers, XY pads, a `select()`/toggle.
 - **Interaction — live pointer signals** ✅ `mouseX` / `mouseY` / `mouseDown` (mouse + touch)
   as signals: frozen-at-onset on per-glyph controls (trail where things spawn), re-read each
-  frame as FX/physics params (cursor-driven attractor). Reuses the signal + evalGlobal paths,
-  no new plumbing. Preset: `cursor`. *Next interaction ideas:* MIDI/OSC in as more signals,
-  audio-reactive (mic FFT → signals).
+  frame as FX/physics params (cursor-driven attractor). `.sample(n)` sample-and-holds a live
+  signal n/cycle (stepped pointer; `segment` is a no-op on it, `quantize` snaps the value).
+  `mouseDown` fires on a canvas press or ⌥/⌘-click (editor clicks just edit). Presets:
+  `cursor`, `press`. *Next interaction ideas:* MIDI/OSC in as more signals, audio-reactive
+  (mic FFT → signals).
 
 ## Backlog / jot-down (not now)
 

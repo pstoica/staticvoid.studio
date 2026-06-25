@@ -1669,16 +1669,24 @@ DSL._setBgSink((c) => { bgSource = c; });   // bg("…") stores its (raw) arg he
 // feed the live pointer (mouse + touch) into the mouseX/mouseY/mouseDown signals. Position
 // is 0..1 of the canvas; clamped so off-canvas reads stay in range. Pointer events cover
 // touch, so it works on phones too. We keep the last position so a release holds it.
-function feedPointer(e, down) {
+const syncPointer = () => DSL._setPointer(pointerState.x, pointerState.y, pointerState.down);
+function feedPointer(e) {
   const r = activeCanvas.getBoundingClientRect();
   pointerState.x = Math.max(0, Math.min(1, (e.clientX - r.left) / (r.width || 1)));
   pointerState.y = Math.max(0, Math.min(1, (e.clientY - r.top) / (r.height || 1)));
-  pointerState.down = down != null ? down : e.buttons ? 1 : 0;
-  DSL._setPointer(pointerState.x, pointerState.y, pointerState.down);
+  syncPointer();
 }
-window.addEventListener('pointermove', (e) => feedPointer(e), { passive: true });
-window.addEventListener('pointerdown', (e) => feedPointer(e, 1), { passive: true });
-window.addEventListener('pointerup', () => { pointerState.down = 0; DSL._setPointer(pointerState.x, pointerState.y, 0); }, { passive: true });
+// A press on the editor / controls should EDIT, not fire mouseDown. So mouseDown triggers only
+// on a press over the canvas — or anywhere with ⌥/⌘ held (the "cmd-click" performance trigger),
+// so you can fire effects even while the editor is open.
+const inChrome = (t) => !!(t && t.closest && t.closest('#rail, #toolbar, #side, #warn'));
+window.addEventListener('pointermove', feedPointer, { passive: true });
+window.addEventListener('pointerdown', (e) => {
+  feedPointer(e);
+  if (e.altKey || e.metaKey || !inChrome(e.target)) { pointerState.down = 1; syncPointer(); }
+}, { passive: true });
+window.addEventListener('pointerup', () => { pointerState.down = 0; syncPointer(); }, { passive: true });
+window.addEventListener('pointercancel', () => { pointerState.down = 0; syncPointer(); }, { passive: true });
 resize();
 setCps(cps);
 setDecay(decayScale);
