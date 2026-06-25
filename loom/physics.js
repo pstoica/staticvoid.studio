@@ -77,6 +77,12 @@ export class PhysWorld {
     this.world.createCollider(cd, body);
     return body;
   }
+  // Apply an acceleration (px/s²) to a body this frame, MASS-INDEPENDENT like gravity:
+  // impulse = mass · Δv, with Δv = accel · dt (converted to metres). Used by the force-fields.
+  applyAccel(body, axPx, ayPx, dt) {
+    const m = body.mass() || 1;
+    body.applyImpulse({ x: (axPx / SCALE) * m * dt, y: (ayPx / SCALE) * m * dt }, true);
+  }
   remove(body) { try { this.world.removeRigidBody(body); } catch (e) { /* already gone */ } }
   step(dt) { this.world.timestep = Math.min(1 / 30, Math.max(1 / 240, dt)); this.world.step(); }
   read(body) {

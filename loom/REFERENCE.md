@@ -206,9 +206,21 @@ stack(
 | `vel` | initial speed of each body (random direction; `1` ≈ a full-screen/sec burst) |
 | `spin` | initial random angular velocity (tumble) |
 
+**Force-fields** push the bodies each frame (on top of gravity), for emergent / organic
+motion the kinematic primitives can't do — set `gravity: 0` to let them take over:
+
+| opt | does |
+| --- | --- |
+| `attract` | pull toward a point (`ax`, `ay`, default centre). `+` attracts, `−` repels |
+| `swirl` | tangential force around that point → bodies orbit it (a vortex) |
+| `ax` `ay` | the attract/swirl centre, `0..1` of width/height (patternable → a moving attractor) |
+| `turbulence` | a curl-noise **flow field** — bodies drift along swirling streamlines |
+| `turbScale` | turbulence spatial frequency (higher = tighter eddies) |
+
 Every opt is **patternable** — a number, a mini-notation string, or an `osc`, resolved
-against **global time** each frame like FX params — so the field can move:
-`{ gravity: "<1 -1>" }` flips gravity each cycle, `{ windx: osc(0.1).range(-1, 1) }` sways.
+against **global time** each frame like FX params — so the whole field can move:
+`{ gravity: "<1 -1>" }` flips gravity each cycle, `{ windx: osc(0.1).range(-1, 1) }` sways,
+`{ attract: 0.5, ax: osc(0.05).range(0.2, 0.8) }` makes the swarm chase a drifting point.
 
 > The collider matches the drawn shape: a **tight convex polygon** for `tri` `pent` `hex`
 > `star` `plus`, a box for `square`/`box`, a circle for round / outline / 3D shapes — so

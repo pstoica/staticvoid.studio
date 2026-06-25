@@ -372,6 +372,19 @@ const SPRING_POS = new Set(['x', 'y', 'radius', 'angle', 'pan']);
 const _h1 = (x) => { const s = Math.sin((x + 0.123) * 12.9898) * 43758.5453; return s - Math.floor(s); };
 const _snoise = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return _h1(i) * (1 - u) + _h1(i + 1) * u; };
 const _fbm = (x) => { let s = 0, a = 1, fr = 1, n = 0; for (let o = 0; o < 4; o++) { s += _snoise(x * fr) * a; n += a; fr *= 2; a *= 0.5; } return s / n; };
+// 2D value noise + its curl, for the turbulence force-field (a divergence-free flow, so
+// bodies swirl along streamlines instead of all draining one way).
+function _noise2(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const h = (a, b) => { const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return s - Math.floor(s); };
+  const a = h(xi, yi), b = h(xi + 1, yi), c = h(xi, yi + 1), d = h(xi + 1, yi + 1);
+  return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+}
+const _curl2 = (x, y) => {                       // ∇×φ in 2D = (∂φ/∂y, −∂φ/∂x)
+  const e = 0.1;
+  return [(_noise2(x, y + e) - _noise2(x, y - e)) / (2 * e), -(_noise2(x + e, y) - _noise2(x - e, y)) / (2 * e)];
+};
 function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
   // every parameter may itself be an oscillator → cross-modulation (FM via rate,
   // PM via phase, AM via range lo/hi). gp = the glyph's onset phase. The osc's running
@@ -899,6 +912,7 @@ function tick(dt) {
   // are written back into x/y/rotation. Loom owns spawn + lifetime; the sim owns position.
   if (activePhys.size && rapierReady()) {
     const R = rapierReady();
+    const fields = new Map();                          // pid → resolved force-field params (once/frame)
     for (const [pid, opts] of activePhys) {
       let wd = physWorlds.get(pid);
       if (!wd) physWorlds.set(pid, wd = new PhysWorld(R));
@@ -907,6 +921,16 @@ function tick(dt) {
       const wind = evalGlobal(opts.windx != null ? opts.windx : 0, cycle, elapsed);
       wd.setGravity(wind * GBASE, gmul * GBASE);
       wd.setBounce(Math.max(0, Math.min(1, evalGlobal(opts.bounce != null ? opts.bounce : 0.6, cycle, elapsed))));
+      // force-fields (all patternable): attract/swirl pull toward / orbit a point (ax,ay);
+      // turbulence is a curl-noise flow. Resolved once per group, applied per body below.
+      fields.set(pid, {
+        attract: evalGlobal(opts.attract != null ? opts.attract : 0, cycle, elapsed),
+        swirl: evalGlobal(opts.swirl != null ? opts.swirl : 0, cycle, elapsed),
+        turb: evalGlobal(opts.turbulence != null ? opts.turbulence : 0, cycle, elapsed),
+        tscale: evalGlobal(opts.turbScale != null ? opts.turbScale : 3, cycle, elapsed),
+        cx: evalGlobal(opts.ax != null ? opts.ax : 0.5, cycle, elapsed) * W,
+        cy: evalGlobal(opts.ay != null ? opts.ay : 0.5, cycle, elapsed) * H,
+      });
     }
     for (const p of live) {                            // give each new physics glyph a body
       if (!p.pid || p.body) continue;
@@ -917,6 +941,21 @@ function tick(dt) {
       const av = evalGlobal(opts.spin != null ? opts.spin : 0, cycle, elapsed) * (Math.random() - 0.5) * 2 * TAU;
       const drag = Math.max(0, evalGlobal(opts.drag != null ? opts.drag : 0.05, cycle, elapsed));
       p.body = wd.addBody(p.x, p.y, Math.cos(a) * speed, Math.sin(a) * speed, av, drag, bodyCollider(p.shape, p.size));
+    }
+    for (const p of live) {                            // force-fields → per-body acceleration
+      if (!p.pid || !p.body) continue;
+      const f = fields.get(p.pid); if (!f || (!f.attract && !f.swirl && !f.turb)) continue;
+      let ax = 0, ay = 0;
+      if (f.attract || f.swirl) {
+        const dx = f.cx - p.x, dy = f.cy - p.y, d = Math.hypot(dx, dy) || 1;
+        if (f.attract) { ax += f.attract * GBASE * dx / d; ay += f.attract * GBASE * dy / d; }   // toward point (−repels)
+        if (f.swirl)   { ax += f.swirl * GBASE * -dy / d; ay += f.swirl * GBASE * dx / d; }       // tangential (orbit)
+      }
+      if (f.turb) {
+        const c = _curl2(p.x / minDim * f.tscale + elapsed * 0.15, p.y / minDim * f.tscale);
+        ax += f.turb * GBASE * c[0]; ay += f.turb * GBASE * c[1];
+      }
+      physWorlds.get(p.pid).applyAccel(p.body, ax, ay, dt);
     }
     for (const wd of physWorlds.values()) wd.step(dt);
     for (const p of live) {                            // sim → glyph transform
@@ -1185,6 +1224,27 @@ $("rings", shape("ring*5")
       .color(palette("candy").at(rand))
       .decay(7),
     { gravity: 1, bounce: 0.66, drag: 0.03, vel: 0.12, spin: 0.4 }
+  )
+)`,
+
+  // force-fields: no gravity — instead the bodies are pulled toward a slowly-drifting
+  // point (attract, the point ax/ay driven by oscs), orbit it (swirl), and wander through
+  // a curl-noise flow (turbulence). Emergent, organic swarming the kinematic primitives
+  // can't do. Every field param is patternable, so the whole flow can move.
+  'swarm': `stack(
+  bg("#06060f"),
+  physics(
+    shape("dot*3").fast(2)
+      .x(rand).y(rand)
+      .size(rand.range(0.012, 0.035))
+      .color(palette("neon").at(rand))
+      .decay(9),
+    { gravity: 0, drag: 1.2, bounce: 0.3,
+      attract: 0.5,
+      ax: osc(0.05).range(0.25, 0.75),
+      ay: osc(0.07, "tri").range(0.25, 0.75),
+      swirl: 0.3,
+      turbulence: 0.45, turbScale: 4 }
   )
 )`,
 

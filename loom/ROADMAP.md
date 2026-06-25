@@ -48,8 +48,11 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
    edge walls). `main.js`: per-glyph `body` lifecycle tied to the envelope, sim block in
    `tick()`, `physRot` into both resolvers. **Rapier (WASM, ~1.7 MB) is a separate lazy chunk**
    — patches without `physics()` never load it (verified in the build). Preset: `gravity`.
-   - *Deferred:* inter-body forces beyond gravity/wind (attractors/turbulence force-field),
-     per-body shape colliders (currently a ball per glyph), mass/density controls, 3D.
+   - **Force-fields** ✅ — pure-JS accelerations applied per body each frame (reusing the
+     evalGlobal param plumbing): `attract`/`swirl` toward/around a (patternable) point `ax,ay`,
+     and `turbulence` (a divergence-free curl-noise flow). Emergent swarming/orbiting/drift;
+     all patternable. Preset: `swarm`. Tighter **convex-hull colliders** per shape ✅ too.
+   - *Deferred:* mass/density controls, attractor *between* groups, 3D.
    - **Camera automation** (still TODO; lands with **3D depth**): the renderer is orthographic
      screen-space billboards with *faked* per-glyph perspective, so a real patternable camera
      (orbit/dolly/fov via `evalGlobal`) only becomes meaningful once there's a true 3D scene —
