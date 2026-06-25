@@ -37,17 +37,24 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
    an osc/pattern force-field (turbulence/attractors) the bodies integrate → emergent motion
    with real dynamics. *Biggest new capability; largest lift.* Engine: **Rapier** (WASM, 2D
    or 3D, thousands of bodies). Per-glyph osc still modulates color/size.
+   - **Camera automation** (lands with physics / 3D depth): a **patternable camera** —
+     position / target / fov / rotation driven by patterns/oscs (orbit, dolly, shake, follow).
+     Same `evalGlobal` mechanism; pairs naturally with physics and the existing perspective.
 
-## Tier 3 — performance & output
+## Tier 3 — output buses & performance
 
-5. **Scene mixer (VJ).** Hold N patches as **scenes**, each rendered to its own render target
-   (the FX/group target infra already exists), and **crossfade/blend** between them
-   (A/B + crossfader, or a 4-up grid). Builds on named layers (mute/solo) and the compositor.
-   *Why after Tier 1–2:* leans on the render-target infra + `$`-layers; high value for live use.
+5. **Named output buses** (Strudel `orbit` / Hydra `.out(o0)`). Route layers to N named render
+   buffers (`o0..oN`) instead of one screen; a buffer can be **referenced as a source** in
+   another chain — feedback/compositing *between* buses — and a final `render()`/blend picks
+   what's shown. The Hydra multi-output model. *Substrate for everything below;* builds directly
+   on the existing per-group render targets.
 
-6. **Output targets.** Second-window/projector output, NDI/Syphon (pipe into Resolume etc.),
-   MIDI/OSC out, recording. **[CLARIFY: what does "orbit" refer to — orbitalharp, a hardware
-   surface, an output protocol?]** Scope depends on the answer. Lower priority until 5 lands.
+6. **Scene mixer (VJ).** On top of buses: hold N patches as scenes (each → a bus) and
+   **crossfade/blend** between them (A/B crossfader, or a 4-up grid), with per-layer mute/solo
+   from `$`-layers. High value for live performance.
+
+7. **Hardware / external out** (later, optional): second-window/projector, NDI/Syphon (into
+   Resolume etc.), MIDI/OSC out, recording.
 
 ## Backlog / jot-down (not now)
 
@@ -62,6 +69,8 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
 
 ## Dependencies
 - 1 (easing), 2 (`$`-layers), 3 (spring) are each standalone.
-- 4 (physics) is standalone-ish; benefits from 3 proving per-glyph dynamics.
-- 5 (scene mixer) needs the render-target infra (have) + benefits from 2 (`$`-layers).
-- 6 (outputs) after 5; needs clarification.
+- 4 (physics) is standalone-ish; benefits from 3 proving per-glyph dynamics; camera
+  automation rides along with it.
+- 5 (output buses) builds on the existing per-group render targets.
+- 6 (scene mixer) sits on 5 (buses) + 2 (`$`-layers for mute/solo).
+- 7 (hardware out) after 6.
