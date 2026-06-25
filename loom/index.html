@@ -51,9 +51,10 @@
   body.perform #editwrap .cm-line span:not(.cm-loom-live):not(.cm-loom-slider) { color:rgba(233,233,234,.16) !important; }
   body.perform #editwrap .cm-line { background:transparent; }
   body.perform #editwrap .cm-cursor { opacity:0; }
-  body.perform #editwrap .cm-loom-slider { pointer-events:auto; }
-  body.perform #editwrap .cm-loom-slider input { transition:transform .12s var(--ease), filter .12s var(--ease); }
-  body.perform #editwrap .cm-loom-slider:hover input { transform:scale(1.22); filter:brightness(1.15) drop-shadow(0 0 5px rgba(255,255,255,.55)); }
+  /* controls stay subdued until you reach for them: dimmed by default, full on hover (no scale) */
+  body.perform #editwrap .cm-loom-slider { pointer-events:auto; opacity:.3; transition:opacity .15s var(--ease); }
+  body.perform #editwrap .cm-loom-slider:hover { opacity:1; }
+  body.perform #editwrap .cm-loom-live { opacity:.4; }
 
   #brand { display:flex; align-items:baseline; gap:10px; padding:18px 22px 12px; }
   #brand h1 { font-family:"Unbounded",var(--font); font-weight:700; font-size:19px; margin:0;

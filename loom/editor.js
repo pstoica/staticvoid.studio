@@ -94,13 +94,13 @@ const loomTheme = EditorView.theme({
   // visible around the code instead of a full-panel wash. A faint shadow softens the edge.
   '.cm-line': {
     padding: '0 8px', margin: '0 8px', width: 'fit-content', maxWidth: 'calc(100% - 16px)', borderRadius: '3px',
-    backgroundColor: 'rgba(7,8,11,.66)', textShadow: '0 1px 2px rgba(2,3,5,.6)',
+    backgroundColor: 'rgba(7,8,11,.42)', textShadow: '0 1px 3px rgba(2,3,5,.9), 0 0 2px rgba(2,3,5,.75)',
   },
-  '.cm-activeLine': { backgroundColor: 'rgba(36,40,52,.82)' },          // current line, a touch brighter
+  '.cm-activeLine': { backgroundColor: 'rgba(40,48,68,.42)' },          // current line: a touch lighter, same low weight (not an opaque block)
   // a chunky, bright block-style caret (drawSelection draws it as .cm-cursor)
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#ffd166', borderLeftWidth: '3px', marginLeft: '-1px' },
   '&.cm-focused .cm-cursor': { borderLeftColor: '#ffd166' },
-  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': { backgroundColor: 'rgba(120,150,255,.30)' },
+  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': { backgroundColor: 'rgba(120,150,255,.34)' },
   '.cm-selectionMatch': { backgroundColor: 'rgba(255,255,255,.10)' },
   // inline slider widget (after a slider(...) call) — detailed track/thumb styling in index.html
   '.cm-loom-slider': { display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle', margin: '0 2px 0 5px' },

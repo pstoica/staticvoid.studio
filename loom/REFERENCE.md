@@ -398,8 +398,9 @@ which the pointer ignores; `.quantize(n)` snaps the *value* instead.)
 switches the chain on while pressed (see the `press` preset). To trigger **without selecting
 code**, flip on **Perform mode** (the *perform* button by the clock, or **⌘/Ctrl+Shift+E**): it
 ghosts the code and makes the editor click-through, so the whole screen is a clean trigger
-surface — but **sliders stay bright + live** (and highlight on hover), so they're your hands-on
-controls. Escape or toggle again to edit. ⌘/Ctrl+. still fully hides all chrome.
+surface — but the **sliders stay live**, subdued until you reach for them (they brighten on
+hover), so they're your hands-on controls. Escape or toggle again to edit. ⌘/Ctrl+. still fully
+hides all chrome.
 
 | Method | Effect |
 | --- | --- |
