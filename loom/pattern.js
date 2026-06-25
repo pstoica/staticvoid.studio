@@ -159,6 +159,20 @@ class Pattern {
   often(f) { return this.sometimesBy(0.75, f); }
   rarely(f) { return this.sometimesBy(0.25, f); }
 
+  // ── value-driven branching ──
+  // when(cond, f): apply f to the events where `cond` is truthy (>0.5) at their onset, and
+  // leave the rest unchanged — a signal-driven cousin of `sometimes`. cond may be a number,
+  // mini-notation, or a signal: `.when("<1 0>", p => p.fast(2))` every other cycle;
+  // `.when(mouseDown, p => p.size(0.12))` makes glyphs spawned while pressed big.
+  when(cond, f) {
+    const c = reify(cond);
+    // sample cond at the event's onset. A tiny forward window (not a zero-width instant), so a
+    // discrete pattern like "1 0 1 0" returns the step covering the onset instead of collapsing.
+    const at = (t) => { const hs = c.query(span(t, t + 1e-6)); for (const h of hs) if (h.value != null) return +h.value; return 0; };
+    const split = (keep) => new Pattern((s) => this.query(s).filter((h) => (at((h.whole || h.part).begin) > 0.5) === keep));
+    return stack(f(split(true)), split(false));
+  }
+
   // ── continuous signal helpers ──
   // lo/hi may each be a number, a mini-notation string, or a pattern, sampled
   // (structure from the left) so the range itself can move: `sine.range(0, "1 2")`.
@@ -390,6 +404,23 @@ const mouseDown = signal(() => _pointer.down);
 // 0..1; 2-arg form is (0, max)) only bound the widget. Use it anywhere a number works:
 // `.size(slider(0.05, 0, 0.2))`, `.feedback(slider(0.9), slider(1.04))`, `{ gravity: slider(1, -2, 2) }`.
 function slider(value = 0, min, max) { return value; }
+
+// ── value-driven branching (free functions) ──────────────────────────────────────
+// pick(sel, list): choose one of `list` by a 0..1 selector (number, mini-notation, signal),
+// index = floor(sel·len). The selector gives structure; the chosen item is flattened in, so
+// it works for patterns OR plain values: `pick(saw, [shape("dot"), shape("ring")])` swaps as
+// saw sweeps; `.size(pick(mouseX, [0.02, 0.06, 0.1]))` picks a size by the pointer (the
+// selector is sampled at each onset). For a clean per-cycle swap use a discrete sel like "<0 1>".
+function pick(sel, list) {
+  const pats = (list || []).map(reify);
+  if (!pats.length) return silence;
+  return reify(sel).fmap((v) => pats[Math.max(0, Math.min(pats.length - 1, Math.floor((+v) * pats.length)))]).innerJoin();
+}
+// iff(cond, then, otherwise): if `cond` is truthy (>0.5) use `then`, else `otherwise` (default
+// silence). `iff(mouseDown, shape("star*5"), shape("dot*5"))` swaps the source while pressed.
+function iff(cond, then_, otherwise = silence) {
+  return reify(cond).fmap((v) => (+v > 0.5 ? reify(then_) : reify(otherwise))).innerJoin();
+}
 
 // random discrete choice, fresh per onset: choose("#fff", "#000") or choose(0, 3, 7)
 function choose(...xs) { return signal((t) => xs[Math.min(xs.length - 1, Math.floor(timeRand(t) * xs.length))]); }
@@ -820,7 +851,7 @@ function rev(p) { return reify(p).rev(); }
 export const DSL = {
   Pattern, pure, silence, stack, slowcat, fastcat, cat, seq, sequence, timecat,
   fast, slow, rev, run, range, mini, euclid,
-  shape, s, n, choose, irand, osc, palette, bg, group, echo, spring, physics, slider, _setBgSink,
+  shape, s, n, choose, irand, pick, iff, osc, palette, bg, group, echo, spring, physics, slider, _setBgSink,
   $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   mouseX, mouseY, mouseDown, _setPointer,

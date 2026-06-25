@@ -315,6 +315,20 @@ Combinators that reshape a pattern. All return a pattern, so they chain.
 | `seq(a, b, …)` / `fastcat(a, b, …)` | pack patterns into one cycle |
 | `fast(n, p)` `slow(n, p)` `rev(p)` | function forms of the methods |
 
+### Branching (value-driven)
+
+`<a b>`, `|`, `every`, and `sometimes` branch on **time / chance**. These branch on a
+**value or signal** — handy with the live pointer:
+
+| Helper | Effect |
+| --- | --- |
+| `pick(sel, [a, b, …])` | choose by a `0..1` selector (number / pattern / signal), index = `floor(sel·n)`. The chosen item is flattened in, so it works for patterns *or* values: `.size(pick(mouseX, [0.02, 0.06, 0.1]))` picks a size by the pointer; `pick("<0 1>", [shape("dot"), shape("ring")])` swaps per cycle |
+| `iff(cond, then, else?)` | if `cond > 0.5` use `then`, else `else` (default `silence`): `iff(mouseDown, shape("star*5"), shape("dot*5"))` swaps the source while pressed |
+| `.when(cond, f)` | apply `f` to the events where `cond` is truthy (`>0.5`) at their onset — a signal-driven `sometimes`: `.when("<1 0>", p => p.fast(2))`, `.when(mouseDown, p => p.size(0.12))` |
+
+The selector / condition is **sampled at each event's onset** (frozen per glyph), like any
+control. For a clean per-cycle swap use a discrete selector (`"<0 1>"`, `"1 0"`).
+
 ---
 
 ## Named layers (`$`)
