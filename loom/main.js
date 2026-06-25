@@ -1460,9 +1460,8 @@ function setPlaying(on) {
 }
 $('#playbtn').addEventListener('click', () => setPlaying(!playing));
 setPlaying(playing);
-$('#clearbtn').addEventListener('click', () => {
-  clearParticles(); ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H);
-});
+function clearCanvas() { clearParticles(); ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H); }
+$('#clearbtn').addEventListener('click', clearCanvas);
 const decayLabel = $('#decayval');
 function setDecay(v) { decayScale = Math.max(0.25, Math.min(6, v)); decayLabel.textContent = decayScale % 1 ? decayScale.toFixed(2) : decayScale.toString(); }
 attachScrub($('#cpsnum'), { min: 0.1, max: 2, step: 0.05, get: () => cps, set: setCps });
@@ -1609,6 +1608,9 @@ document.addEventListener('keydown', (e) => {
   }
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
     e.preventDefault(); togglePerform(); return;
+  }
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'K' || e.key === 'k')) {
+    e.preventDefault(); clearCanvas(); return;             // clear the canvas (works mid-edit too)
   }
   if (e.key === 'Escape') {
     if (document.body.classList.contains('chrome-hidden')) { setChromeHidden(false); return; }
