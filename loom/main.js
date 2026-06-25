@@ -1555,15 +1555,25 @@ function newPatch() {
 $('#newbtn').addEventListener('click', newPatch);
 $('#prenew').addEventListener('click', newPatch);   // the in-panel "+ new" button
 
-function savePreset() {
-  const cur = activeVal.startsWith('u:') ? activeVal.slice(2) : '';   // pre-fill the active name → same name overwrites
-  const name = (prompt('Save preset as:', cur) || '').trim();
-  if (!name) return;
+// save story: "save" commits to the preset you're editing (silent overwrite) — or, if you're on a
+// built-in / fresh patch, prompts for a name. "save as" always prompts for a new copy.
+function savePreset(forceNew) {
+  const onUser = activeVal.startsWith('u:');
+  let name;
+  if (onUser && !forceNew) name = activeVal.slice(2);                 // overwrite the active preset, no prompt
+  else { name = (prompt('Save preset as:', onUser ? activeVal.slice(2) : '') || '').trim(); if (!name) return; }
   const user = loadUser(); user[name] = editor.getCode(); saveUser(user);
-  rebuildPresetList(); setActive('u:' + name); syncURL();
+  rebuildPresetList(); setActive('u:' + name); syncURL(); flashSaved();
 }
-$('#savebtn').addEventListener('click', savePreset);
-$('#presave').addEventListener('click', savePreset);   // the in-panel save button
+function flashSaved() {
+  const b = $('#presave'); if (!b) return;
+  const t = b.dataset.label || (b.dataset.label = b.textContent);
+  b.textContent = 'saved ✓'; clearTimeout(b._t);
+  b._t = setTimeout(() => { b.textContent = t; }, 900);
+}
+$('#savebtn').addEventListener('click', () => savePreset(false));
+$('#presave').addEventListener('click', () => savePreset(false));    // in-panel save (overwrite current)
+$('#presaveas').addEventListener('click', () => savePreset(true));   // always a new copy
 // the presets toolbar is sticky; section heads stick just below it (offset = its height)
 { const pb = $('#presbar');
   if (pb) new ResizeObserver(() => document.documentElement.style.setProperty('--presbar-h', pb.offsetHeight + 'px')).observe(pb); }
