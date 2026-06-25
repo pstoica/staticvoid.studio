@@ -107,6 +107,15 @@ const particles = [];
 
 // ── compile user code into a Pattern ──────────────────────────────────────────────
 let activeLayers = [];   // names of the running patch's $(...) layers (substrate for the mixer)
+// live mute / solo: layers are skipped at DRAW time (not spawn), so toggling hides/shows
+// glyphs already on screen instantly and unmute is immediate. Solo wins over mute.
+const mutedLayers = new Set();
+const soloLayers = new Set();
+const anyLayerHidden = () => soloLayers.size > 0 || mutedLayers.size > 0;
+function audible(name) {
+  if (soloLayers.size) return name != null && soloLayers.has(name);   // solo isolates (bare glyphs hidden too)
+  return !(name != null && mutedLayers.has(name));
+}
 function compile(code) {
   DSL._resetGroups();                    // stable group ids by creation order (live-FX diffing)
   DSL._resetLayers();                    // $(...) layer registry, collected below
@@ -159,6 +168,10 @@ function run() {
         for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; if (p.echoFam === fam && !keep.has(p.gid)) particles.splice(i, 1); }
       }
     }
+    // drop mute/solo state for layers the new patch no longer has, then refresh the chips
+    // (mute on a still-present layer persists across a live ⌘⏎ re-run; preset/new clears it).
+    for (const set of [mutedLayers, soloLayers]) for (const nm of [...set]) if (!activeLayers.includes(nm)) set.delete(nm);
+    renderLayerChips();
     errBar.textContent = '';
     errBar.classList.remove('show');
     localStorage.setItem('loom.code', editor.value);
@@ -248,6 +261,7 @@ function spawn(value, onset) {
     fx: v._fx || null,         // group effect params (e.g. { pixelate })
     echoFam: v._echoFam || 0,  // echo() family (0 = not an echo layer); gid is its frozen generation
     echoCap: v._echoCap || 0,  // max generations to keep for this family
+    layer: v._layer || null,   // $(...) layer name (null = ungrouped) → live mute/solo
   };
   const xy = resolvePos(p, minDim, 0);
   p.x = xy[0]; p.y = xy[1];
@@ -837,15 +851,20 @@ function tick(dt) {
   // cross-fades. Cheap: one map lookup per live glyph.
   for (let i = 0; i < live.length; i++) { const p = live[i]; if (p.echoFam) continue; p.fx = p.gid ? (activeGroupFx.get(p.gid) || null) : null; }
 
+  // mute / solo: drop muted (or non-soloed) $-layer glyphs from what gets drawn this
+  // frame. Skipping at draw time (not spawn) means toggling hides/shows on-screen glyphs
+  // instantly and they keep aging, so unmute is immediate. (Glyphs still spawn + decay.)
+  const vis = anyLayerHidden() ? live.filter((p) => audible(p.layer)) : live;
+
   // trace mode: thread a line through the live points in spawn order, behind
   // the glyphs, rhythm becomes a connected path / constellation.
-  if (traceMode && live.length > 1 && !USE_GL) {
+  if (traceMode && vis.length > 1 && !USE_GL) {
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
     ctx.lineWidth = Math.max(1, 0.0014 * minDim);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    for (let i = 1; i < live.length; i++) {
-      const a = live[i - 1], b = live[i];
+    for (let i = 1; i < vis.length; i++) {
+      const a = vis[i - 1], b = vis[i];
       ctx.globalAlpha = Math.min(a._a, b._a) * 0.6;
       ctx.strokeStyle = b.color;
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
@@ -855,12 +874,13 @@ function tick(dt) {
 
   // draw glyphs (newest on top, since live is oldest→newest). Ungrouped glyphs
   // go straight to the main canvas; grouped glyphs render to a per-group buffer
-  // so a layer effect (pixelate) can be applied before compositing.
+  // so a layer effect (pixelate) can be applied before compositing. `vis` excludes
+  // muted / non-soloed layers.
   if (USE_GL) {
-    glr.render({ live, minDim, resolve: glResolve, evalGlobal, elapsed, W, H, cycle, showClock, traceMode });
+    glr.render({ live: vis, minDim, resolve: glResolve, evalGlobal, elapsed, W, H, cycle, showClock, traceMode });
   } else {
     const buckets = new Map();   // gid -> particle[]
-    for (const p of live) {
+    for (const p of vis) {
       if (p.gid) { let b = buckets.get(p.gid); if (!b) buckets.set(p.gid, b = []); b.push(p); }
       else drawGlyph(ctx, p, minDim);
     }
@@ -877,7 +897,38 @@ function tick(dt) {
 
 // debug stepper, lets tooling drive frames when the tab is backgrounded (the
 // browser pauses requestAnimationFrame while hidden). Harmless in production.
-window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); }, particles, setDecay: (v) => { decayScale = v; }, setCps, glr, get layers() { return activeLayers.slice(); } };
+window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); }, particles, setDecay: (v) => { decayScale = v; }, setCps, glr,
+  get layers() { return activeLayers.slice(); }, get muted() { return [...mutedLayers]; }, get soloed() { return [...soloLayers]; },
+  mute: (n) => toggleMute(n), solo: (n) => toggleSolo(n) };
+
+// ── $-layer mute / solo chips ───────────────────────────────────────────────────────
+// One chip per live $ layer: click the name to mute (dimmed + struck), click the dot to
+// solo (isolate). Both toggle live — the renderer skips muted/non-soloed layers per frame,
+// so on-screen glyphs hide/show instantly. Hidden entirely for a bare (no-$) patch.
+const layersEl = $('#layers');
+function toggleMute(name) { if (!activeLayers.includes(name)) return; mutedLayers.has(name) ? mutedLayers.delete(name) : mutedLayers.add(name); renderLayerChips(); }
+function toggleSolo(name) { if (!activeLayers.includes(name)) return; soloLayers.has(name) ? soloLayers.delete(name) : soloLayers.add(name); renderLayerChips(); }
+function renderLayerChips() {
+  if (!layersEl) return;
+  if (!activeLayers.length) { layersEl.hidden = true; layersEl.innerHTML = ''; return; }
+  layersEl.hidden = false;
+  layersEl.innerHTML = '';
+  const solo = soloLayers.size > 0;
+  for (const name of activeLayers) {
+    const muted = mutedLayers.has(name), soloed = soloLayers.has(name);
+    const off = soloed ? false : (solo ? true : muted);    // dimmed when not heard this frame
+    const chip = document.createElement('div');
+    chip.className = 'laychip' + (off ? ' off' : '') + (soloed ? ' solo' : '');
+    const dot = document.createElement('button');
+    dot.className = 'laysolo'; dot.title = soloed ? 'unsolo' : 'solo (isolate)';
+    dot.addEventListener('click', (e) => { e.stopPropagation(); toggleSolo(name); });
+    const lbl = document.createElement('button');
+    lbl.className = 'layname'; lbl.textContent = name; lbl.title = muted ? 'unmute' : 'mute';
+    lbl.addEventListener('click', () => toggleMute(name));
+    chip.appendChild(dot); chip.appendChild(lbl);
+    layersEl.appendChild(chip);
+  }
+}
 
 // ── presets ───────────────────────────────────────────────────────────────────────
 const PRESETS = {
@@ -1137,6 +1188,7 @@ function applyPreset(val) {
   const i = val.indexOf(':'); const kind = val.slice(0, i), name = val.slice(i + 1);
   const code = kind === 'u' ? loadUser()[name] : PRESETS[name];
   if (code == null) return;
+  mutedLayers.clear(); soloLayers.clear();                          // clean slate: drop mute/solo
   editor.value = code; refreshHL(); particles.length = 0; run();   // preset switch = clean slate
 }
 
@@ -1273,6 +1325,7 @@ renderClock();
 // trace button removed for now; the mode stays off (renderer code remains, dormant)
 
 function newPatch() {
+  mutedLayers.clear(); soloLayers.clear();                                                  // clean slate: drop mute/solo
   editor.value = DEFAULT_PATCH; refreshHL(); particles.length = 0; run(); setActive('');   // new = clean slate
   if (isMobile()) setSide(false);
 }

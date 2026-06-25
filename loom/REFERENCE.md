@@ -279,7 +279,10 @@ $("orbits", shape("dot*16").angle(saw.range(0,2)).radius(saw.range(0.06,0.46))
 
 - The **name is optional** — `$(pattern)` is an anonymous layer (auto-named `$0`, `$1`…).
 - Names are kept **unique** (a collision is suffixed `#2`), so each layer has a stable
-  handle — the substrate for upcoming per-layer **mute / solo** and the scene mixer.
+  handle. A row of **layer chips** appears under the editor: **click a chip's name to
+  mute** it, **click its dot to solo** (isolate). Both toggle *live* — glyphs already on
+  screen hide/show instantly, no re-run — the basis for the scene mixer. (Also on the
+  console: `loom.mute("name")`, `loom.solo("name")`, `loom.muted`.)
 - A **bare-expression** patch (a single `stack(...)` or chain, no `$`) still works exactly
   as before — `$` is purely opt-in.
 - `$` lines are **top-level layer declarations**; don't nest `$` inside another combinator.

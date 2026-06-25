@@ -557,8 +557,12 @@ function layer(name, pat) {
   if (_layers.some((l) => l.name === nm)) {                // keep names unique for the mixer
     let k = 2; while (_layers.some((l) => l.name === `${nm}#${k}`)) k++; nm = `${nm}#${k}`;
   }
-  _layers.push({ name: nm, pat: p });
-  return p;                                                // a lone $(...) still evaluates to the pattern
+  // tag every hap with its layer name (like group's _gid) so spawned glyphs know which
+  // layer they belong to — that's what lets the renderer mute/solo a layer live.
+  const tagged = new Pattern((s) => p.query(s).map((h) =>
+    hap(h.whole, h.part, (h.value && typeof h.value === 'object') ? Object.assign({}, h.value, { _layer: nm }) : h.value)));
+  _layers.push({ name: nm, pat: tagged });
+  return tagged;                                           // a lone $(...) still evaluates to the (tagged) pattern
 }
 
 // ── combine two patterns: structure from the left, value sampled from right ────

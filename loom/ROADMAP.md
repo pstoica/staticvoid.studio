@@ -20,8 +20,12 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
    registry (`pattern.js`); `compile()` (`main.js`) collects every `$(...)` call and stacks
    them — expression-mode first (bare patches unchanged), statement-mode fallback for
    multi-line `$` patches. Names are first-class + unique (collisions `#2`-suffixed), exposed
-   on `window.loom.layers`. Preset: `layers`. *Substrate ready for* per-layer mute/solo/FX +
-   the scene mixer (just needs a UI + a mute set consulted at stack time).
+   on `window.loom.layers`. Preset: `layers`.
+   - **Live mute / solo** ✅ — haps tagged with `_layer` (like group `_gid`); the renderer
+     skips muted / non-soloed layers at *draw* time, so toggling hides/shows on-screen glyphs
+     instantly (no re-run). Clickable **layer chips** under the editor (name = mute, dot =
+     solo) + `loom.mute/solo/muted`. This is half the **scene mixer** (#6) — what remains
+     there is crossfade/blend between *patches*, on top of output buses (#5).
 
 ## Tier 2 — dynamics (kinematic → physical)
 
