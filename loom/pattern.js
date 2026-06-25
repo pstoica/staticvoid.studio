@@ -398,12 +398,14 @@ const mouseX = signal(() => _pointer.x);
 const mouseY = signal(() => _pointer.y);
 const mouseDown = signal(() => _pointer.down);
 
-// slider(value, min?, max?): just returns `value` — it's a plain number in the patch. The
-// editor renders an inline draggable slider over the call (see editor.js); dragging rewrites
+// slider(value, min?, max?, default?): just returns `value` — it's a plain number in the patch.
+// The editor renders an inline draggable slider over the call (see editor.js); dragging rewrites
 // `value` in the source and re-runs, so the number you see IS the control. min/max (default
-// 0..1; 2-arg form is (0, max)) only bound the widget. Use it anywhere a number works:
-// `.size(slider(0.05, 0, 0.2))`, `.feedback(slider(0.9), slider(1.04))`, `{ gravity: slider(1, -2, 2) }`.
-function slider(value = 0, min, max) { return value; }
+// 0..1; 2-arg form is (0, max)) only bound the widget; `default` (4th) is the double-click reset
+// target (a stable home that survives dragging; else mid-range). All extra args are widget
+// metadata, ignored here. Use anywhere a number works: `.size(slider(0.05, 0, 0.2))`,
+// `.feedback(slider(0.9), slider(1.04))`, `{ gravity: slider(1, 0, 2, 1) }` (resets to 1).
+function slider(value = 0, min, max, def) { return value; }
 
 // ── value-driven branching (free functions) ──────────────────────────────────────
 // pick(sel, list): choose one of `list` by a 0..1 selector (number, mini-notation, signal),

@@ -117,10 +117,12 @@ const loomTheme = EditorView.theme({
 }, { dark: true });
 
 // ── inline slider widgets ───────────────────────────────────────────────────────────
-// A `slider(value, min?, max?)` call in the source renders an inline draggable slider after
-// it; dragging rewrites `value` in the source and re-runs (the Strudel idea). At commit time
-// we re-find THIS slider by the widget's current DOM position (not a captured ordinal), so it
-// never links to a sibling when the doc shifts (a slider added/removed earlier, value resized).
+// A `slider(value, min?, max?, default?)` call in the source renders an inline draggable
+// slider after it; dragging rewrites `value` in the source and re-runs (the Strudel idea). At
+// commit time we re-find THIS slider by the widget's current DOM position (not a captured
+// ordinal), so it never links to a sibling when the doc shifts. `default` (4th arg) is the
+// double-click reset target — a stable home value that survives dragging (which clobbers
+// `value`); without it, double-click resets to the mid-range.
 const NUM = /^\s*(-?\d*\.?\d+)/;
 function scanSliders(text) {
   const out = [];
@@ -131,16 +133,17 @@ function scanSliders(text) {
     if (!a) continue;
     const argFrom = i + (a[0].length - a[1].length), argTo = i + a[0].length;
     let j = argTo, nums = [];
-    for (let k = 0; k < 2; k++) {                          // up to two more numeric args (min/max)
+    for (let k = 0; k < 3; k++) {                          // up to three more numeric args (min, max, default)
       const c = /^\s*,\s*(-?\d*\.?\d+)/.exec(text.slice(j));
       if (!c) break; nums.push(parseFloat(c[1])); j += c[0].length;
     }
     const close = text.indexOf(')', j);
     if (close < 0) continue;
-    // 1 arg → 0..1 · 2 args → 0..max · 3 args → min..max
+    // 1 arg → 0..1 · 2 args → 0..max · 3+ args → min..max · 4th arg → reset default
     const min = nums.length >= 2 ? nums[0] : 0;
     const max = nums.length >= 2 ? nums[1] : nums.length === 1 ? nums[0] : 1;
-    out.push({ argFrom, argTo, val: parseFloat(a[1]), min, max, end: close + 1 });
+    const def = nums.length >= 3 ? nums[2] : (min + max) / 2;
+    out.push({ argFrom, argTo, val: parseFloat(a[1]), min, max, def, end: close + 1 });
     re.lastIndex = close + 1;
   }
   return out;
@@ -156,8 +159,8 @@ const SLIDER_HUES = [265, 200, 150, 95, 45, 330, 25, 175];
 const sliderColor = (i) => `oklch(0.74 0.15 ${SLIDER_HUES[((i % SLIDER_HUES.length) + SLIDER_HUES.length) % SLIDER_HUES.length]})`;
 
 class SliderWidget extends WidgetType {
-  constructor(val, min, max, idx) { super(); this.val = val; this.min = min; this.max = max; this.idx = idx; }
-  eq(o) { return o.val === this.val && o.min === this.min && o.max === this.max && o.idx === this.idx; }
+  constructor(val, min, max, def, idx) { super(); this.val = val; this.min = min; this.max = max; this.def = def; this.idx = idx; }
+  eq(o) { return o.val === this.val && o.min === this.min && o.max === this.max && o.def === this.def && o.idx === this.idx; }
   toDOM(view) {
     const wrap = document.createElement('span');
     wrap.className = 'cm-loom-slider';
@@ -166,7 +169,7 @@ class SliderWidget extends WidgetType {
     input.type = 'range';
     input.min = this.min; input.max = this.max; input.step = step; input.value = this.val;
     input.style.accentColor = sliderColor(this.idx);     // distinct per slider, not value-based
-    input.title = `slider ${this.min}…${this.max} — drag / scroll · double-click to reset`;
+    input.title = `slider ${this.min}…${this.max} — drag / scroll · double-click → ${this.def}`;
     const commit = (v) => {
       // re-find THIS slider by the widget's CURRENT doc position — robust to sibling edits
       const pos = view.posAtDOM(wrap);
@@ -182,7 +185,7 @@ class SliderWidget extends WidgetType {
     input.addEventListener('input', () => commit(+input.value));
     input.addEventListener('pointerdown', (e) => e.stopPropagation());  // don't start a CM selection
     input.addEventListener('wheel', (e) => { e.preventDefault(); commit(+input.value + (e.deltaY < 0 ? step : -step)); }, { passive: false });
-    input.addEventListener('dblclick', (e) => { e.preventDefault(); commit((this.min + this.max) / 2); });   // reset to mid-range
+    input.addEventListener('dblclick', (e) => { e.preventDefault(); commit(this.def); });   // reset to the default (4th arg, or mid-range)
     wrap.appendChild(input);
     return wrap;
   }
@@ -199,7 +202,7 @@ class SliderWidget extends WidgetType {
 
 function buildSliderDecos(view) {
   const ranges = scanSliders(view.state.doc.toString())
-    .map((s, i) => Decoration.widget({ widget: new SliderWidget(s.val, s.min, s.max, i), side: 1 }).range(s.end));
+    .map((s, i) => Decoration.widget({ widget: new SliderWidget(s.val, s.min, s.max, s.def, i), side: 1 }).range(s.end));
   return Decoration.set(ranges, true);
 }
 const sliderPlugin = ViewPlugin.fromClass(class {
