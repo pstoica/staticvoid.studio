@@ -1584,7 +1584,8 @@ const panes = [...side.querySelectorAll('.tabpane')];
 const sideTitle = $('#sidetitle');
 function showTab(name) {
   panes.forEach((p) => { p.hidden = p.dataset.pane !== name; });
-  if (sideTitle) sideTitle.textContent = name;   // the toolbar grid/? switch panes; this just names the open one
+  if (sideTitle) sideTitle.textContent = name;   // the toolbar grid/?/antenna switch panes; this just names the open one
+  if (name === 'feed') syncFeedUI();             // reflect current feed state into the controls
   localStorage.setItem('loom.sidetab', name);
 }
 
@@ -1718,10 +1719,11 @@ function setSide(open, tab) {
   side.classList.toggle('hidden', !open);
   document.body.classList.toggle('side-open', open);
   syncSideW();
-  // highlight only the button for the tab that's actually showing (or neither when closed)
-  const onGuide = open && !!side.querySelector('[data-pane="guide"]:not([hidden])');
-  $('#panelbtn').classList.toggle('on', open && !onGuide);
-  $('#helpbtn').classList.toggle('on', onGuide);
+  // light the toolbar button whose pane is actually showing (presets / guide / feed), or none
+  const active = open ? side.querySelector('.tabpane:not([hidden])')?.dataset.pane : null;
+  $('#panelbtn').classList.toggle('on', active === 'presets');
+  $('#helpbtn').classList.toggle('on', active === 'guide');
+  $('#feedbtn').classList.toggle('on', active === 'feed');
   localStorage.setItem('loom.side', open ? '1' : '0');
 }
 // presets / guide each open the sidebar on their tab (and toggle it shut when already there)
@@ -1760,11 +1762,10 @@ document.addEventListener('keydown', (e) => {
 });
 $('#performbtn').addEventListener('click', togglePerform);
 const isMobile = () => window.matchMedia('(max-width:760px)').matches;
-// tap the canvas (outside the sidebar and the control rail) to close the sidebar — but not the
-// floating feed panel, which is its own surface and shouldn't dismiss the sidebar behind it
+// tap the canvas (outside the sidebar and the control rail) to close the sidebar
 document.addEventListener('pointerdown', (e) => {
   if (side.classList.contains('hidden')) return;
-  if (side.contains(e.target) || e.target.closest('#rail, #toolbar, #feedpanel')) return;
+  if (side.contains(e.target) || e.target.closest('#rail, #toolbar')) return;
   setSide(false);
 });
 
@@ -1913,7 +1914,7 @@ function feedConnect() {
 function feedReset() { if (feedWS) { try { feedWS.close(); } catch {} feedWS = null; } feedConnect(); }
 
 // config card (toggled by #feedbtn): connect · host · selfie flip · camera overlay + opacity
-const fp = { btn: $('#feedbtn'), panel: $('#feedpanel'), on: $('#feedon'), host: $('#feedhostin'),
+const fp = { btn: $('#feedbtn'), pane: $('#side .tabpane[data-pane="feed"]'), on: $('#feedon'), host: $('#feedhostin'),
   flip: $('#feedflip'), video: $('#feedvideo'), op: $('#feedop'), dot: $('#feeddot'), stat: $('#feedstat'), balls: $('#feedballs') };
 function syncFeedUI() {
   if (!fp.on) return;
@@ -1921,15 +1922,15 @@ function syncFeedUI() {
   fp.video.checked = feedVideo; fp.op.value = feedOpacity; setFeedStatus();
 }
 if (fp.btn && feedShow) fp.btn.hidden = false;   // surface the toolbar button only when the feed's in use
-if (fp.btn) fp.btn.addEventListener('click', () => { fp.panel.hidden = !fp.panel.hidden; if (!fp.panel.hidden) syncFeedUI(); });
+if (fp.btn) fp.btn.addEventListener('click', () => setSide(!onTab('feed'), 'feed'));   // antenna = the feed pane's tab
 if (fp.on) fp.on.addEventListener('change', () => { feedOn = fp.on.checked; localStorage.setItem(FEED_ON_KEY, feedOn ? '1' : '0'); if (feedOn) feedConnect(); else if (feedWS) { try { feedWS.close(); } catch {} } setFeedStatus(); });
 if (fp.host) fp.host.addEventListener('change', () => { feedHost = fp.host.value.trim() || 'localhost:8080'; fp.host.value = feedHost; localStorage.setItem(FEED_HOST_KEY, feedHost); applyVideo(); if (feedOn) feedReset(); });
 if (fp.flip) fp.flip.addEventListener('change', () => { DSL._jug.flipX = fp.flip.checked; localStorage.setItem(FEED_FLIP_KEY, fp.flip.checked ? '1' : '0'); applyVideo(); });
 if (fp.video) fp.video.addEventListener('change', () => { feedVideo = fp.video.checked; localStorage.setItem(FEED_VID_KEY, feedVideo ? '1' : '0'); applyVideo(); });
 if (fp.op) fp.op.addEventListener('input', () => { feedOpacity = parseFloat(fp.op.value); localStorage.setItem(FEED_OP_KEY, String(feedOpacity)); applyVideo(); });
-// live "seeing: a · b" readout while the card is open
+// live "seeing: a · b" readout while the feed pane is open
 setInterval(() => {
-  if (!fp.panel || fp.panel.hidden || !fp.balls) return;
+  if (!fp.pane || fp.pane.hidden || !fp.balls) return;
   const b = DSL._jug.balls, seen = Object.keys(b).filter((k) => b[k].seen).map((k) => k.replace('ball_', '')).sort();
   fp.balls.textContent = seen.length ? 'seeing: ' + seen.join(' · ') : 'no balls';
 }, 250);
