@@ -792,9 +792,12 @@ export class GLRenderer {
     this.canvas = canvas;
     // preserveDrawingBuffer: keeps the last frame readable for screenshots/saving
     // (and for tooling that drives frames manually while rAF is paused).
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, premultipliedAlpha: false, preserveDrawingBuffer: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: true });
     this.renderer.autoClear = false;
     this.bg = new THREE.Color('#06070a');
+    // clearA = 1 → opaque background (normal). Set to 0 to clear transparent so a layer behind
+    // the canvas (the juggling camera feed) shows through. alpha:true makes the channel exist.
+    this.clearA = 1;
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.OrthographicCamera(0, 1, 0, 1, -1000, 1000);
@@ -947,7 +950,7 @@ export class GLRenderer {
   render(state) {
     const r = this.renderer;
     r.setRenderTarget(null);
-    r.setClearColor(this.bg, 1);
+    r.setClearColor(this.bg, this.clearA);
     r.clear(true, true, true);
     const live = (state && state.live) || [];
     this._minDim = state ? state.minDim : Math.min(this.W, this.H);

@@ -473,10 +473,16 @@ physics(shape("star*5").color(gyro("a")), { gravity: thrown("a").range(0, 3) })
 ```
 
 **Off by default** (Loom is also a public web app — it won't dial `ws://localhost` from every
-visitor's browser). Turn it on for a session: add **`?feed`** to the URL (default host
-`localhost:8080`), or **`?feed=host:port`**, or `window.loom.feed.enabled = true`. The choice +
-host persist. `window.loom.feed.flipX = true` mirrors `ballX` for a selfie view;
-`window.loom.jug(msg)` injects a feed message for testing without the host.
+visitor's browser). The **feed button** in the toolbar (antenna icon) opens a config card:
+**connect** on/off + a live status dot, the **host** (`host:port`), **flip X** (selfie mirror),
+**camera overlay** + opacity, and a live readout of which balls are in view. Everything persists.
+You can also enable it without the UI: add **`?feed`** to the URL (default host `localhost:8080`),
+or **`?feed=host:port`**, or `window.loom.feed.enabled = true`.
+
+The **camera overlay** streams the host's MJPEG (`http://host:8080/camera.mjpg`) *behind* the
+canvas — the visuals composite straight over the live camera, pixel-aligned with the ball coords
+(so a dot at `ballX/ballY` lands on the real ball). `window.loom.jug(msg)` injects a feed message
+for testing without the host.
 
 | Method | Effect |
 | --- | --- |

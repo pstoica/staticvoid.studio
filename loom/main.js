@@ -984,14 +984,16 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   get bodies() { return particles.filter((p) => p.body).length; }, get pointer() { return pointerState; },
   midi: (status, d1, d2) => DSL._midiInput(status, d1, d2),   // inject a MIDI message (for tooling/testing)
   jug: (m) => DSL._jugInput(m),   // inject a juggling-feed message (for tooling/testing)
-  feed: {   // juggling-feed config (host:port, on/off, selfie flip) — persists in localStorage
+  feed: {   // juggling-feed config (host:port, on/off, selfie flip, camera overlay) — persists
     get host() { return feedHost; },
-    set host(h) { feedHost = h; localStorage.setItem(FEED_HOST_KEY, h); if (feedOn) feedReset(); },
+    set host(h) { feedHost = h; localStorage.setItem(FEED_HOST_KEY, h); applyVideo(); if (feedOn) feedReset(); syncFeedUI(); },
     get enabled() { return feedOn; },
-    set enabled(v) { feedOn = !!v; localStorage.setItem(FEED_ON_KEY, v ? '1' : '0'); if (v) feedConnect(); else if (feedWS) { try { feedWS.close(); } catch {} } },
+    set enabled(v) { feedOn = !!v; localStorage.setItem(FEED_ON_KEY, v ? '1' : '0'); if (v) feedConnect(); else if (feedWS) { try { feedWS.close(); } catch {} } setFeedStatus(); syncFeedUI(); },
     get connected() { return !!feedWS && feedWS.readyState === 1; },
     get flipX() { return DSL._jug.flipX; },
-    set flipX(v) { DSL._jug.flipX = !!v; },
+    set flipX(v) { DSL._jug.flipX = !!v; localStorage.setItem(FEED_FLIP_KEY, v ? '1' : '0'); applyVideo(); syncFeedUI(); },
+    get video() { return feedVideo; },
+    set video(v) { feedVideo = !!v; localStorage.setItem(FEED_VID_KEY, v ? '1' : '0'); applyVideo(); syncFeedUI(); },
     get balls() { return DSL._jug.balls; } } };
 
 // ── $-layer mute / solo chips ───────────────────────────────────────────────────────
@@ -1822,20 +1824,67 @@ initMidi();
 //   • Turn on with ?feed (default host) / ?feed=host:port in the URL, or window.loom.feed.enabled
 //     = true. The choice + host persist in localStorage.
 //   • window.loom.jug(msg) injects a feed message for testing without the host.
-const FEED_HOST_KEY = 'loom.feedHost', FEED_ON_KEY = 'loom.feedOn';
+const FEED_HOST_KEY = 'loom.feedHost', FEED_ON_KEY = 'loom.feedOn', FEED_FLIP_KEY = 'loom.feedFlip',
+  FEED_VID_KEY = 'loom.feedVideo', FEED_OP_KEY = 'loom.feedOpacity';
 let feedHost = localStorage.getItem(FEED_HOST_KEY) || 'localhost:8080';
 let feedOn = localStorage.getItem(FEED_ON_KEY) === '1';
+let feedVideo = localStorage.getItem(FEED_VID_KEY) === '1';
+let feedOpacity = parseFloat(localStorage.getItem(FEED_OP_KEY)); if (!(feedOpacity >= 0 && feedOpacity <= 1)) feedOpacity = 1;
 let feedWS = null;
+DSL._jug.flipX = localStorage.getItem(FEED_FLIP_KEY) === '1';
 { const f = new URLSearchParams(location.search).get('feed'); if (f != null) { feedOn = true; if (f) feedHost = f; } }   // ?feed or ?feed=host:port
+
+const feedCam = $('#feedcam');
+// camera overlay: stream the host's MJPEG behind the canvas and clear the canvas transparent so
+// it shows through (GL only). flipX mirrors it to match the selfie ballX flip.
+function applyVideo() {
+  if (glr) glr.clearA = feedVideo ? 0 : 1;
+  if (!feedCam) return;
+  feedCam.style.opacity = feedOpacity;
+  feedCam.classList.toggle('flip', !!DSL._jug.flipX);
+  if (feedVideo) { const src = 'http://' + feedHost + '/camera.mjpg'; if (feedCam.getAttribute('src') !== src) feedCam.src = src; feedCam.hidden = false; }
+  else { feedCam.hidden = true; feedCam.removeAttribute('src'); }   // drop the stream when off
+}
+function setFeedStatus() {
+  if (!fp || !fp.dot) return;
+  const st = !feedOn ? 'off' : (feedWS && feedWS.readyState === 1) ? 'on' : 'wait';
+  fp.dot.className = 'fpdot' + (st === 'on' ? ' on' : st === 'wait' ? ' wait' : '');
+  fp.stat.textContent = st === 'on' ? 'live' : st === 'wait' ? 'connecting…' : 'off';
+}
 function feedConnect() {
-  if (!feedOn || feedWS) return;
+  if (!feedOn || feedWS) { setFeedStatus(); return; }
+  setFeedStatus();
   try { feedWS = new WebSocket('ws://' + feedHost + '/feed'); }
-  catch { feedWS = null; return; }
+  catch { feedWS = null; setFeedStatus(); return; }
+  feedWS.onopen = () => setFeedStatus();
   feedWS.onmessage = (e) => { try { DSL._jugInput(JSON.parse(e.data)); } catch { /* skip a bad frame */ } };
-  feedWS.onclose = () => { feedWS = null; if (feedOn) setTimeout(feedConnect, 1000); };   // reconnect while enabled
+  feedWS.onclose = () => { feedWS = null; setFeedStatus(); if (feedOn) setTimeout(feedConnect, 1000); };   // reconnect while enabled
   feedWS.onerror = () => { try { feedWS.close(); } catch {} };
 }
 function feedReset() { if (feedWS) { try { feedWS.close(); } catch {} feedWS = null; } feedConnect(); }
+
+// config card (toggled by #feedbtn): connect · host · selfie flip · camera overlay + opacity
+const fp = { btn: $('#feedbtn'), panel: $('#feedpanel'), on: $('#feedon'), host: $('#feedhostin'),
+  flip: $('#feedflip'), video: $('#feedvideo'), op: $('#feedop'), dot: $('#feeddot'), stat: $('#feedstat'), balls: $('#feedballs') };
+function syncFeedUI() {
+  if (!fp.on) return;
+  fp.on.checked = feedOn; fp.host.value = feedHost; fp.flip.checked = !!DSL._jug.flipX;
+  fp.video.checked = feedVideo; fp.op.value = feedOpacity; setFeedStatus();
+}
+if (fp.btn) fp.btn.addEventListener('click', () => { fp.panel.hidden = !fp.panel.hidden; if (!fp.panel.hidden) syncFeedUI(); });
+if (fp.on) fp.on.addEventListener('change', () => { feedOn = fp.on.checked; localStorage.setItem(FEED_ON_KEY, feedOn ? '1' : '0'); if (feedOn) feedConnect(); else if (feedWS) { try { feedWS.close(); } catch {} } setFeedStatus(); });
+if (fp.host) fp.host.addEventListener('change', () => { feedHost = fp.host.value.trim() || 'localhost:8080'; fp.host.value = feedHost; localStorage.setItem(FEED_HOST_KEY, feedHost); applyVideo(); if (feedOn) feedReset(); });
+if (fp.flip) fp.flip.addEventListener('change', () => { DSL._jug.flipX = fp.flip.checked; localStorage.setItem(FEED_FLIP_KEY, fp.flip.checked ? '1' : '0'); applyVideo(); });
+if (fp.video) fp.video.addEventListener('change', () => { feedVideo = fp.video.checked; localStorage.setItem(FEED_VID_KEY, feedVideo ? '1' : '0'); applyVideo(); });
+if (fp.op) fp.op.addEventListener('input', () => { feedOpacity = parseFloat(fp.op.value); localStorage.setItem(FEED_OP_KEY, String(feedOpacity)); applyVideo(); });
+// live "seeing: a · b" readout while the card is open
+setInterval(() => {
+  if (!fp.panel || fp.panel.hidden || !fp.balls) return;
+  const b = DSL._jug.balls, seen = Object.keys(b).filter((k) => b[k].seen).map((k) => k.replace('ball_', '')).sort();
+  fp.balls.textContent = seen.length ? 'seeing: ' + seen.join(' · ') : 'no balls';
+}, 250);
+
+applyVideo();
 feedConnect();
 
 resize();
