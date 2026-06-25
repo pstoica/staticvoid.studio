@@ -540,6 +540,32 @@ function echo(g, n = 4) {
   return grp;
 }
 
+// ── physics: rigid-body mode (parallel to group) ────────────────────────────────
+// physics(pattern, opts) tags its events so the renderer spawns each onset as a rapier2d
+// rigid BODY: the sim owns position, while Loom still owns when / where (spawn point) /
+// size / colour / lifetime, and per-glyph oscs still drive colour/size. opts —
+// { gravity, bounce, drag, vel, spin, windx } — are patternable (string → mini-notation),
+// resolved against GLOBAL time each frame like FX params, so gravity can move. pids are
+// stable by creation order + reset each compile, so editing opts updates the live world.
+// Rapier (rapier2d-compat, WASM) is lazy-loaded by main.js on first use; patches without
+// physics() never load it.
+let _pid = 0;
+const _physReg = new Map();
+function _resetPhysics() { _pid = 0; _physReg.clear(); }
+class Physics {
+  constructor(pat, opts) {
+    opts = opts || {};
+    for (const k in opts) if (typeof opts[k] === 'string') opts[k] = mini(opts[k]);   // patternable params
+    this._pat = reify(pat); this._pid = ++_pid; this._opts = opts; _physReg.set(this._pid, opts);
+  }
+  query(s) {
+    const pid = this._pid;
+    return this._pat.query(s).map((h) => hap(h.whole, h.part,
+      (h.value && typeof h.value === 'object') ? Object.assign({}, h.value, { _pid: pid }) : h.value));
+  }
+}
+function physics(pat, opts) { return new Physics(pat, opts); }
+
 // ── named layers ($) ──────────────────────────────────────────────────────────
 // A patch can be several named, separately-editable layers instead of one giant
 // stack(...). Each `$(name?, pattern)` call registers a layer; compile() in main.js
@@ -751,8 +777,8 @@ function rev(p) { return reify(p).rev(); }
 export const DSL = {
   Pattern, pure, silence, stack, slowcat, fastcat, cat, seq, sequence, timecat,
   fast, slow, rev, run, range, mini, euclid,
-  shape, s, n, choose, irand, osc, palette, bg, group, echo, spring, _setBgSink,
-  $: layer, _resetLayers, _getLayers,
+  shape, s, n, choose, irand, osc, palette, bg, group, echo, spring, physics, _setBgSink,
+  $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   hasOnset, span, isOsc, isSpring, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,

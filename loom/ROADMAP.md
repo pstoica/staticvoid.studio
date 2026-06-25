@@ -38,18 +38,22 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
    x/y/radius/angle/pan + size/rotate/rotateX/rotateY/weight/outline/open/alpha/shade (not
    color). Proves the **per-glyph-state plumbing** for physics (#4). Preset: `spring`.
 
-4. **Physics mode (Rapier + Three).** A `physics(pattern, { gravity, drag, bounce, … })`
-   group (parallel to `group()` for FX): events spawn **rigid bodies** into a shared world;
-   each frame the bodies' transforms feed the existing instance buffer. Loom stays the
-   *spawner/conductor* (when/where/initial-velocity/mass/shape/appearance + lifetime); the
-   sim owns position. **Patterns/oscs drive forces & gravity-as-params** — the elegant bit:
-   physics knobs become patternable exactly like FX params (`evalGlobal`). Optional hybrid:
-   an osc/pattern force-field (turbulence/attractors) the bodies integrate → emergent motion
-   with real dynamics. *Biggest new capability; largest lift.* Engine: **Rapier** (WASM, 2D
-   or 3D, thousands of bodies). Per-glyph osc still modulates color/size.
-   - **Camera automation** (lands with physics / 3D depth): a **patternable camera** —
-     position / target / fov / rotation driven by patterns/oscs (orbit, dolly, shake, follow).
-     Same `evalGlobal` mechanism; pairs naturally with physics and the existing perspective.
+4. **Physics mode (Rapier 2D).** ✅ **First cut done.** `physics(pattern, { gravity, bounce,
+   drag, vel, spin, windx })` group (parallel to `group()`): each onset spawns a **rapier2d
+   rigid body** in a per-group world; bodies fall, bounce off the canvas edges, and **collide
+   with each other**; transforms feed the instance buffer's x/y/rotation each frame. Loom owns
+   spawn (when/where/size/colour) + lifetime; the sim owns position. **Opts patternable** via
+   `evalGlobal` (gravity-as-osc, `windx`, etc.). `pattern.js`: `physics()`/`Physics` + registry.
+   New `physics.js`: lazy `ensureRapier()` + `PhysWorld` (screen-space, scaled metric sim,
+   edge walls). `main.js`: per-glyph `body` lifecycle tied to the envelope, sim block in
+   `tick()`, `physRot` into both resolvers. **Rapier (WASM, ~1.7 MB) is a separate lazy chunk**
+   — patches without `physics()` never load it (verified in the build). Preset: `gravity`.
+   - *Deferred:* inter-body forces beyond gravity/wind (attractors/turbulence force-field),
+     per-body shape colliders (currently a ball per glyph), mass/density controls, 3D.
+   - **Camera automation** (still TODO; lands with **3D depth**): the renderer is orthographic
+     screen-space billboards with *faked* per-glyph perspective, so a real patternable camera
+     (orbit/dolly/fov via `evalGlobal`) only becomes meaningful once there's a true 3D scene —
+     a separate, larger renderer change, not part of this 2D-physics cut.
 
 ## Tier 3 — output buses & performance
 

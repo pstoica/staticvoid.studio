@@ -175,6 +175,45 @@ generations linger (oldest dropped instantly). `echo(group(...).dots(8), 3)` —
 
 > The shader FX run on the WebGL renderer (the default). The legacy Canvas2D
 > renderer (append `?gl=0` to the URL) applies only `pixelate`.
+
+## Physics (`physics`)
+
+`physics(pattern, opts)` spawns each event onset as a **2D rigid body** in a shared
+world (parallel to `group()`). Loom stays the **spawner/conductor** — *when* (onset),
+*where* (the spawn point from `x/y/radius/angle`), *size*, *colour*, *lifetime* (`decay`),
+and per-glyph oscs still drive colour/size — but the **sim owns position**: bodies fall
+under gravity, **bounce off the canvas edges, and collide with each other** (the inter-body
+dynamics `spring`/`osc` can't do). A body lives as long as its glyph, then it's removed.
+
+```js
+stack(
+  bg("#06060f"),
+  physics(
+    shape("circle hex tri").fast(2)
+      .x(rand.range(0.15, 0.85)).y(0.08)        // rain in from the top, random column
+      .size(rand.range(0.03, 0.07)).color(palette("candy").at(rand)).decay(7),
+    { gravity: 1, bounce: 0.66, drag: 0.03, vel: 0.12, spin: 0.4 }
+  )
+)
+```
+
+| opt | does |
+| --- | --- |
+| `gravity` | downward pull (`1` ≈ a brisk fall; `0` = float; negative = rise) |
+| `windx` | sideways pull (a breeze); `+` right, `−` left |
+| `bounce` | restitution `0..1` (wall + body bounciness) |
+| `drag` | linear/angular damping (air resistance); higher = floatier |
+| `vel` | initial speed of each body (random direction; `1` ≈ a full-screen/sec burst) |
+| `spin` | initial random angular velocity (tumble) |
+
+Every opt is **patternable** — a number, a mini-notation string, or an `osc`, resolved
+against **global time** each frame like FX params — so the field can move:
+`{ gravity: "<1 -1>" }` flips gravity each cycle, `{ windx: osc(0.1).range(-1, 1) }` sways.
+
+> The collider is a circle sized to the glyph, whatever shape is drawn — so `tri`/`hex`
+> bodies tumble and pile like discs. The physics engine (`rapier2d`, WASM) is **lazy-loaded
+> on first use**: patches without `physics()` never download it, so the base app stays light
+> on phones. (Bodies appear a moment after a patch first uses `physics()`, while it loads.)
 | `.rotate(t)` | turns (`1` = 360°) | static Z rotation |
 | `.rotateX(t)` `.rotateY(t)` | turns | 3D tilt (foreshortening) around the horizontal / vertical axis |
 | `.spin(t)` | turns/second | continuous Z rotation |

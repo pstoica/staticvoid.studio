@@ -7,6 +7,7 @@
 
 import { DSL } from './pattern.js';
 import { GLRenderer } from './gl/renderer.js';
+import { ensureRapier, rapierReady, PhysWorld } from './physics.js';
 import REFERENCE from './REFERENCE.md?raw';   // full cheatsheet text, for the "copy for LLM" button
 
 const $ = (sel) => document.querySelector(sel);
@@ -32,7 +33,7 @@ const cpsLabel = $('#cpsval');
 // A transparent <textarea> sits over a <pre>; we re-render coloured HTML into the
 // <pre> on every edit and keep their scroll positions synced.
 const HL_FN = new Set(['shape','s','n','stack','cat','slowcat','fastcat','seq','sequence','timecat',
-  'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand','osc','palette','bg','group','echo','spring','$']);
+  'pure','silence','run','range','mini','euclid','fast','slow','rev','choose','irand','osc','palette','bg','group','echo','spring','physics','$']);
 const HL_SIG = new Set(['sine','cosine','saw','isaw','tri','square','rand','perlin','fbm','brown','gauss','white']);
 const HL_METHOD = new Set(['fast','slow','rev','every','iter','palindrome','jux','superimpose','off','degrade','degradeBy',
   'unDegradeBy','sometimes','sometimesBy','often','rarely','early','late','range','add','sub','mul','div',
@@ -91,6 +92,9 @@ new ResizeObserver(resize).observe(activeCanvas);
 // ── the pattern + clock ──────────────────────────────────────────────────────────
 let pattern = DSL.silence;
 let activeGroupFx = new Map();   // gid → fx for the running patch; live glyphs read their group's CURRENT fx
+const physWorlds = new Map();    // pid → PhysWorld (lazy; one rapier2d world per physics() group)
+let activePhys = new Map();      // pid → opts for the running patch (params resolved per frame)
+const GBASE = 2000;              // gravity multiplier 1 → px/s² downward (tuned for screen scale)
 let cps = 0.6;          // cycles per second
 let cycle = 0;          // current position in cycles (fractional)
 let elapsed = 0;        // wall-clock seconds since start, for global-time FX params
@@ -119,6 +123,7 @@ function audible(name) {
 function compile(code) {
   DSL._resetGroups();                    // stable group ids by creation order (live-FX diffing)
   DSL._resetLayers();                    // $(...) layer registry, collected below
+  DSL._resetPhysics();                   // physics() group registry (stable pids → live world editing)
   const names = Object.keys(DSL);
   const vals = names.map((k) => DSL[k]);
   let result;
@@ -172,6 +177,11 @@ function run() {
     // (mute on a still-present layer persists across a live ⌘⏎ re-run; preset/new clears it).
     for (const set of [mutedLayers, soloLayers]) for (const nm of [...set]) if (!activeLayers.includes(nm)) set.delete(nm);
     renderLayerChips();
+    // physics: snapshot the patch's physics() groups + their (patternable) params. Kick the
+    // lazy Rapier load on first use; drop worlds for physics groups the patch no longer has.
+    activePhys = new Map(DSL._physReg);
+    if (activePhys.size) ensureRapier();
+    for (const pid of [...physWorlds.keys()]) if (!activePhys.has(pid)) { physWorlds.get(pid).dispose(); physWorlds.delete(pid); }
     errBar.textContent = '';
     errBar.classList.remove('show');
     localStorage.setItem('loom.code', editor.value);
@@ -211,10 +221,12 @@ function spawn(value, onset) {
   const baseNum = (f, def) => (sprInit[f] != null ? sprInit[f] : numAt(v[f] != null ? v[f] : def, 0, phase));
 
   // position inputs may be numbers or live oscillators, recomputed each frame
-  // only when one is an osc/spring; otherwise the spawn position stands.
+  // only when one is an osc/spring; otherwise the spawn position stands. A physics body
+  // owns its own position (the sim drives x/y), so live-position resolution is off for it —
+  // x/y/radius/angle only set the spawn POINT.
   const pin = { x: v.x, y: v.y, radius: v.radius, angle: v.angle, gridX: v.gridX, gridY: v.gridY, pan: v.pan, phase };
-  const posLive = isOsc(v.x) || isOsc(v.y) || isOsc(v.radius) || isOsc(v.angle) || isOsc(v.gridX) || isOsc(v.gridY) || isOsc(v.pan)
-    || springs.some((s) => SPRING_POS.has(s.field));
+  const posLive = !v._pid && (isOsc(v.x) || isOsc(v.y) || isOsc(v.radius) || isOsc(v.angle) || isOsc(v.gridX) || isOsc(v.gridY) || isOsc(v.pan)
+    || springs.some((s) => SPRING_POS.has(s.field)));
 
   // scalar/colour controls that are oscillators keep running over the lifetime
   const mods = [];
@@ -262,6 +274,9 @@ function spawn(value, onset) {
     echoFam: v._echoFam || 0,  // echo() family (0 = not an echo layer); gid is its frozen generation
     echoCap: v._echoCap || 0,  // max generations to keep for this family
     layer: v._layer || null,   // $(...) layer name (null = ungrouped) → live mute/solo
+    pid: v._pid || 0,          // physics() group id (0 = not a body); body created lazily in tick
+    body: null,                // rapier rigid body handle once created
+    physRot: 0,                // body rotation (rad), synced from the sim each frame
   };
   const xy = resolvePos(p, minDim, 0);
   p.x = xy[0]; p.y = xy[1];
@@ -483,7 +498,7 @@ function glResolve(p, minDim, out) {
   if (!color) { if (!p._rgb) p._rgb = cssToRGB(p.color); color = p._rgb; }
   out.x = p.x; out.y = p.y;
   out.r = sizePx;
-  out.rot = rotTurns * TAU + p.spin * age;
+  out.rot = rotTurns * TAU + p.spin * age + p.physRot;   // physRot = rigid-body tumble (0 for non-physics)
   out.rotX = rotX; out.rotY = rotY;
   out.rgb = color;
   out.alpha = Math.max(0, Math.min(1, alpha * p._env));
@@ -697,7 +712,7 @@ function drawGlyph(g, p, minDim) {
   g.globalCompositeOperation = p.blend;
   g.globalAlpha = Math.max(0, Math.min(1, alpha * p._env));
   g.fillStyle = color; g.strokeStyle = color;
-  const zRot = rotTurns * TAU + p.spin * age;
+  const zRot = rotTurns * TAU + p.spin * age + p.physRot;   // physRot = rigid-body tumble (0 for non-physics)
   const lw = olw != null ? Math.max(0.75, olw * sizePx) : Math.max(0.75, weight * minDim);
   const outline = OUTLINE_SHAPES.has(p.shape);
   const stroke = outline ? (p.stroke || !p.vertex) : p.stroke;
@@ -807,7 +822,10 @@ function tick(dt) {
     const p = particles[i];
     p.age += dt;
     p.ageCycles += dt * cps;                          // accumulates at the live tempo (no retroactive warp)
-    if (p.age >= p.attack + p.decay) continue;        // expired → drop
+    if (p.age >= p.attack + p.decay) {                // expired → drop (and free its body)
+      if (p.body && p.pid) { const wd = physWorlds.get(p.pid); if (wd) wd.remove(p.body); p.body = null; }
+      continue;
+    }
     // attack rises 0→1, decay falls 1→0; an optional Penner curve shapes either
     // segment. For decay we ease the "amount remaining" (1−t) so the curve reads as
     // the shape of the fade. Clamp to 0..1: env drives alpha, so overshoot (outBack/
@@ -850,6 +868,40 @@ function tick(dt) {
   // render with; a removed group → no fx. Content stays as captured, so it still
   // cross-fades. Cheap: one map lookup per live glyph.
   for (let i = 0; i < live.length; i++) { const p = live[i]; if (p.echoFam) continue; p.fx = p.gid ? (activeGroupFx.get(p.gid) || null) : null; }
+
+  // physics: lazy rigid-body sim. One rapier2d world per physics() group; params resolved
+  // against global time each frame (so gravity/bounce/… can be patterns/oscs). Bodies are
+  // created for physics glyphs once Rapier + the world exist (so unloaded/just-spawned
+  // glyphs simply sit at their spawn point until then); after stepping, the body transforms
+  // are written back into x/y/rotation. Loom owns spawn + lifetime; the sim owns position.
+  if (activePhys.size && rapierReady()) {
+    const R = rapierReady();
+    for (const [pid, opts] of activePhys) {
+      let wd = physWorlds.get(pid);
+      if (!wd) physWorlds.set(pid, wd = new PhysWorld(R));
+      wd.setBounds(W, H);
+      const gmul = evalGlobal(opts.gravity != null ? opts.gravity : 1, cycle, elapsed);
+      const wind = evalGlobal(opts.windx != null ? opts.windx : 0, cycle, elapsed);
+      wd.setGravity(wind * GBASE, gmul * GBASE);
+      wd.setBounce(Math.max(0, Math.min(1, evalGlobal(opts.bounce != null ? opts.bounce : 0.6, cycle, elapsed))));
+    }
+    for (const p of live) {                            // give each new physics glyph a body
+      if (!p.pid || p.body) continue;
+      const wd = physWorlds.get(p.pid); if (!wd) continue;
+      const opts = activePhys.get(p.pid) || {};
+      const speed = evalGlobal(opts.vel != null ? opts.vel : 0, cycle, elapsed) * minDim;   // vel 1 ≈ minDim px/s
+      const a = Math.random() * TAU;
+      const av = evalGlobal(opts.spin != null ? opts.spin : 0, cycle, elapsed) * (Math.random() - 0.5) * 2 * TAU;
+      const drag = Math.max(0, evalGlobal(opts.drag != null ? opts.drag : 0.05, cycle, elapsed));
+      p.body = wd.addBody(p.x, p.y, p.size, Math.cos(a) * speed, Math.sin(a) * speed, av, drag);
+    }
+    for (const wd of physWorlds.values()) wd.step(dt);
+    for (const p of live) {                            // sim → glyph transform
+      if (!p.pid || !p.body) continue;
+      const wd = physWorlds.get(p.pid); if (!wd) continue;
+      const r = wd.read(p.body); p.x = r.x; p.y = r.y; p.physRot = r.rot;
+    }
+  }
 
   // mute / solo: drop muted (or non-soloed) $-layer glyphs from what gets drawn this
   // frame. Skipping at draw time (not spawn) means toggling hides/shows on-screen glyphs
@@ -899,7 +951,9 @@ function tick(dt) {
 // browser pauses requestAnimationFrame while hidden). Harmless in production.
 window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); }, particles, setDecay: (v) => { decayScale = v; }, setCps, glr,
   get layers() { return activeLayers.slice(); }, get muted() { return [...mutedLayers]; }, get soloed() { return [...soloLayers]; },
-  mute: (n) => toggleMute(n), solo: (n) => toggleSolo(n) };
+  mute: (n) => toggleMute(n), solo: (n) => toggleSolo(n),
+  ensurePhysics: () => ensureRapier(), physReady: () => !!rapierReady(),
+  get bodies() { return particles.filter((p) => p.body).length; } };
 
 // ── $-layer mute / solo chips ───────────────────────────────────────────────────────
 // One chip per live $ layer: click the name to mute (dimmed + struck), click the dot to
@@ -1094,6 +1148,22 @@ $("steps", shape("dot*7")
 $("rings", shape("ring*5")
   .radius(osc(0.3, "rand").spread(1).range(0.12, 0.44).spring(120, 9))
   .color("#56b6ff").weight(0.005).decay(2.5))`,
+
+  // physics: each onset spawns a rapier2d rigid BODY (the engine is lazy-loaded on first
+  // use). Shapes rain from the top, bounce off the floor/walls and COLLIDE with each other
+  // — the inter-body dynamics spring/osc can't do. opts (gravity/bounce/drag/vel/spin) are
+  // patternable: try gravity:"<1 -1>" to flip it each cycle, or windx for a side breeze.
+  'gravity': `stack(
+  bg("#06060f"),
+  physics(
+    shape("circle hex tri").fast(2)
+      .x(rand.range(0.15, 0.85)).y(0.08)
+      .size(rand.range(0.03, 0.07))
+      .color(palette("candy").at(rand))
+      .decay(7),
+    { gravity: 1, bounce: 0.66, drag: 0.03, vel: 0.12, spin: 0.4 }
+  )
+)`,
 
   // ── shader FX (WebGL): each group() runs a post-process chain on its layer ──
 
