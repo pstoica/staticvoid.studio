@@ -210,10 +210,12 @@ Every opt is **patternable** — a number, a mini-notation string, or an `osc`, 
 against **global time** each frame like FX params — so the field can move:
 `{ gravity: "<1 -1>" }` flips gravity each cycle, `{ windx: osc(0.1).range(-1, 1) }` sways.
 
-> The collider is a circle sized to the glyph, whatever shape is drawn — so `tri`/`hex`
-> bodies tumble and pile like discs. The physics engine (`rapier2d`, WASM) is **lazy-loaded
-> on first use**: patches without `physics()` never download it, so the base app stays light
-> on phones. (Bodies appear a moment after a patch first uses `physics()`, while it loads.)
+> The collider matches the drawn shape: a **tight convex polygon** for `tri` `pent` `hex`
+> `star` `plus`, a box for `square`/`box`, a circle for round / outline / 3D shapes — so
+> polygons wedge and pack flat-edge-to-edge instead of rolling like discs. The physics engine
+> (`rapier2d`, WASM) is **lazy-loaded on first use**: patches without `physics()` never
+> download it, so the base app stays light on phones. (Bodies appear a moment after a patch
+> first uses `physics()`, while it loads.)
 | `.rotate(t)` | turns (`1` = 360°) | static Z rotation |
 | `.rotateX(t)` `.rotateY(t)` | turns | 3D tilt (foreshortening) around the horizontal / vertical axis |
 | `.spin(t)` | turns/second | continuous Z rotation |

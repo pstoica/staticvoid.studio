@@ -283,6 +283,13 @@ function spawn(value, onset) {
   particles.push(p);
 }
 
+// hard-clear all live glyphs (clear button / preset switch / new). Must also free any
+// rapier bodies first, or they'd be orphaned in the world and keep colliding invisibly.
+function clearParticles() {
+  for (const p of particles) if (p.body && p.pid) { const wd = physWorlds.get(p.pid); if (wd) wd.remove(p.body); }
+  particles.length = 0;
+}
+
 const NAMED = { red: '#ff5d73', orange: '#ff9d5c', yellow: '#ffd166', green: '#6df0c2',
   cyan: '#56e0ff', blue: '#56b6ff', purple: '#b58cff', pink: '#ff8ad1', white: '#f4f6fb', black: '#06070a' };
 
@@ -651,6 +658,22 @@ function shapeGeom(name, r, open) {
     default: return { paths: [circle()], closed: true };
   }
 }
+
+// physics collider for a glyph shape: a tight convex polygon for the polygons (built from
+// the same vertices we draw), a box for squares, a ball for round / outline / 3D shapes.
+// The hull matches the drawn shape, so triangles/hexes wedge and pack instead of rolling
+// and gapping like discs (a ball circumscribes a triangle very loosely).
+function bodyCollider(name, rPx) {
+  const id = SHAPE_ID[name];
+  if (id === 3) return { kind: 'cuboid', hx: rPx, hy: rPx };               // square / box
+  if (id === 4 || id === 5 || id === 6 || id === 7 || id === 8) {          // tri / pent / hex / star / plus
+    const path = shapeGeom(name, rPx, 0).paths[0];
+    const pts = new Float32Array(path.length * 2);
+    for (let i = 0; i < path.length; i++) { pts[i * 2] = path[i][0]; pts[i * 2 + 1] = path[i][1]; }
+    return { kind: 'hull', pts, r: rPx };                                  // r = ball fallback if degenerate
+  }
+  return { kind: 'ball', r: rPx };                                         // dot/circle/ring/arc/line/cross/3D/mesh
+}
 function drawShape3D(g, name, r, rz, rx, ry, o, vertex) {
   const geom = shapeGeom(name, r, o.open);
   const cz = Math.cos(rz), sz = Math.sin(rz), cx = Math.cos(rx), sx = Math.sin(rx), cy = Math.cos(ry), sy = Math.sin(ry);
@@ -893,7 +916,7 @@ function tick(dt) {
       const a = Math.random() * TAU;
       const av = evalGlobal(opts.spin != null ? opts.spin : 0, cycle, elapsed) * (Math.random() - 0.5) * 2 * TAU;
       const drag = Math.max(0, evalGlobal(opts.drag != null ? opts.drag : 0.05, cycle, elapsed));
-      p.body = wd.addBody(p.x, p.y, p.size, Math.cos(a) * speed, Math.sin(a) * speed, av, drag);
+      p.body = wd.addBody(p.x, p.y, Math.cos(a) * speed, Math.sin(a) * speed, av, drag, bodyCollider(p.shape, p.size));
     }
     for (const wd of physWorlds.values()) wd.step(dt);
     for (const p of live) {                            // sim → glyph transform
@@ -1259,7 +1282,7 @@ function applyPreset(val) {
   const code = kind === 'u' ? loadUser()[name] : PRESETS[name];
   if (code == null) return;
   mutedLayers.clear(); soloLayers.clear();                          // clean slate: drop mute/solo
-  editor.value = code; refreshHL(); particles.length = 0; run();   // preset switch = clean slate
+  editor.value = code; refreshHL(); clearParticles(); run();       // preset switch = clean slate
 }
 
 // ── shareable URLs: ?p=<name> for a built-in preset, ?c=<base64> for any custom
@@ -1373,7 +1396,7 @@ function setPlaying(on) {
 $('#playbtn').addEventListener('click', () => setPlaying(!playing));
 setPlaying(playing);
 $('#clearbtn').addEventListener('click', () => {
-  particles.length = 0; ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H);
+  clearParticles(); ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H);
 });
 const decayLabel = $('#decayval');
 function setDecay(v) { decayScale = Math.max(0.25, Math.min(6, v)); decayLabel.textContent = decayScale % 1 ? decayScale.toFixed(2) : decayScale.toString(); }
@@ -1396,7 +1419,7 @@ renderClock();
 
 function newPatch() {
   mutedLayers.clear(); soloLayers.clear();                                                  // clean slate: drop mute/solo
-  editor.value = DEFAULT_PATCH; refreshHL(); particles.length = 0; run(); setActive('');   // new = clean slate
+  editor.value = DEFAULT_PATCH; refreshHL(); clearParticles(); run(); setActive('');       // new = clean slate
   if (isMobile()) setSide(false);
 }
 $('#newbtn').addEventListener('click', newPatch);

@@ -53,17 +53,26 @@ export class PhysWorld {
     mk(-t, h / 2, t, h / 2 + t);                    // left
     mk(w + t, h / 2, t, h / 2 + t);                 // right
   }
-  // px/py = spawn point (px), rPx = radius (px), vx/vy = initial velocity (px/s),
-  // av = initial angular velocity (rad/s), drag = linear+angular damping.
-  addBody(px, py, rPx, vx, vy, av, drag) {
-    const R = this.R;
+  // px/py = spawn point (px), vx/vy = initial velocity (px/s), av = initial angular
+  // velocity (rad/s), drag = damping. col = collider descriptor in PIXELS:
+  //   { kind:'ball', r } | { kind:'cuboid', hx, hy } | { kind:'hull', pts:Float32Array, r }
+  // hull → a tight convex polygon (tri/pent/hex/…); falls back to a ball if degenerate.
+  addBody(px, py, vx, vy, av, drag, col) {
+    const R = this.R, S = SCALE;
     const bd = R.RigidBodyDesc.dynamic()
-      .setTranslation(px / SCALE, py / SCALE)
-      .setLinvel(vx / SCALE, vy / SCALE)
+      .setTranslation(px / S, py / S)
+      .setLinvel(vx / S, vy / S)
       .setAngvel(av)
       .setLinearDamping(drag).setAngularDamping(drag);
     const body = this.world.createRigidBody(bd);
-    const cd = R.ColliderDesc.ball(Math.max(0.03, rPx / SCALE));
+    let cd = null;
+    if (col.kind === 'cuboid') cd = R.ColliderDesc.cuboid(Math.max(0.03, col.hx / S), Math.max(0.03, col.hy / S));
+    else if (col.kind === 'hull') {
+      const sp = new Float32Array(col.pts.length);
+      for (let i = 0; i < col.pts.length; i++) sp[i] = col.pts[i] / S;
+      cd = R.ColliderDesc.convexHull(sp);        // null if the points are degenerate
+    }
+    if (!cd) cd = R.ColliderDesc.ball(Math.max(0.03, (col.r || 10) / S));
     cd.setRestitution(this.bounce); cd.setFriction(0.4); cd.setDensity(1);
     this.world.createCollider(cd, body);
     return body;
