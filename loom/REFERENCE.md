@@ -428,7 +428,10 @@ Live MIDI input as signals (Web MIDI — Chrome/Edge; Loom hooks every input it 
 | `gate(ch?)` | `1` while any note is held, else `0` | `0` / `1` |
 | `vel(ch?)` | velocity of the last note pressed | `0..1` |
 | `note(ch?)` | pitch of the last note pressed | `0..1` (the note number ÷127) |
+| `pc(ch?)` | **pitch class** — the note within its octave (`note % 12`) | `0..1`, same value per note-name across octaves |
 | `bend(ch?)` | pitch-bend wheel | `-1..1` (centred at `0`) |
+
+`pc` gives octave-independent colour: `palette("rainbow").at(pc(1))` paints every C the same hue, every G another. **Live colour from a note:** an `osc`'s `.range()` bounds may be signals, captured (frozen) at the glyph's onset while the waveform stays live — so `palette("rainbow").at(osc(0.5).range(pc(1), pc(1).add(0.08)))` shimmers live *around* the note's pitch hue. (Putting a signal *directly* in `.color()` freezes it; the osc is what keeps it moving.)
 
 `ch` is the MIDI channel **1–16**; omit it (or pass `0`) for **omni** — any channel. So one
 controller's knobs map straight onto a patch — `shape("dot*8").x(cc(16)).y(cc(17)).color(cc(18))` —

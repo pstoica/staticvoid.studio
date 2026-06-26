@@ -442,6 +442,9 @@ function cc(num, ch = 0) { return signal(() => ((_midi.cc[ch] && _midi.cc[ch][nu
 function gate(ch = 0) { return signal(() => (_held(ch) ? 1 : 0)); }
 function vel(ch = 0) { return signal(() => { const e = _lastHeld(ch); return e ? e[1] / 127 : 0; }); }
 function note(ch = 0) { return signal(() => { const e = _lastHeld(ch); return e ? e[0] / 127 : 0; }); }
+// pitch CLASS, 0..1 — the note within its octave (note % 12), so the same note name maps to the
+// same value across octaves. Pair with palette().at(pc(ch)) for octave-independent colour.
+function pc(ch = 0) { return signal(() => { const e = _lastHeld(ch); return e ? (e[0] % 12) / 12 : 0; }); }
 function bend(ch = 0) { return signal(() => _midi.bend[ch] || 0); }
 // onNote(ch, shape): an EVENT source — emits exactly ONE glyph per MIDI note-on (not a sampled
 // stream like gate). The tick loop calls _midiFrame() once per frame to snapshot that frame's
@@ -966,7 +969,7 @@ export const DSL = {
   $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   mouseX, mouseY, mouseDown, _setPointer,
-  cc, gate, vel, note, bend, onNote, _midiInput, _midiFrame,
+  cc, gate, vel, note, pc, bend, onNote, _midiInput, _midiFrame,
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, flight, gyro, _jug, _jugInput, _jugDecay,
   hasOnset, span, isOsc, isSpring, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,

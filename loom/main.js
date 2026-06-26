@@ -195,12 +195,12 @@ function spawn(value, onset) {
 
   // scalar/colour controls that are oscillators keep running over the lifetime
   const mods = [];
-  for (const f of MOD_FIELDS) if (isOsc(v[f])) mods.push({ field: f, osc: v[f].__osc });
+  for (const f of MOD_FIELDS) if (isOsc(v[f])) mods.push({ field: f, osc: freezeOscParams(v[f].__osc, onset) });
 
   const p = {
     pin, posLive, jx, jy, phase,
     shape: v.shape || 'dot',
-    color: isOsc(v.color) ? oscColor(v.color.__osc, 0, phase) : resolveColor(v.color, phase),
+    color: isOsc(v.color) ? oscColor(freezeOscParams(v.color.__osc, onset), 0, phase) : resolveColor(v.color, phase),
     size: baseNum('size', 0.06) * minDim,
     rotTurns: baseNum('rotate', 0),       // Z, turns
     rotX: baseNum('rotateX', 0) * TAU,     // tilt (radians)
@@ -384,6 +384,21 @@ function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
   return r;
 }
 const numAt = (a, age, gp = 0, st = 0, ageC = null, stC = null) => (isOsc(a) ? evalOsc(a.__osc, age, gp, st, ageC, stC) : a);
+// freeze SIGNAL-valued osc params to their value at the glyph's onset, so a live osc can be based
+// on a per-glyph signal: osc(r).range(note(1), note(1).add(.1)) keeps the waveform LIVE but
+// captures the note's hue ONCE at spawn (numAt only evals numbers/oscs, so a raw signal param
+// would NaN). Nested oscs stay live (recursed); numbers pass through untouched.
+function freezeOscParams(o, onset) {
+  const fp = (x) => {
+    if (isOsc(x)) return { __osc: freezeOscParams(x.__osc, onset) };
+    if (x instanceof DSL.Pattern) { for (const h of x.query(DSL.span(onset, onset))) if (h.value != null) return +h.value; return 0; }
+    return x;
+  };
+  const r = { ...o };
+  for (const k of ['rate', 'lo', 'hi', 'phase', 'spread', 'drift']) if (r[k] != null) r[k] = fp(r[k]);
+  if (r.ops) r.ops = r.ops.map(([op, x]) => [op, fp(x)]);
+  return r;
+}
 // resolve an oscillator-driven colour: through a palette if attached, else as hue
 const oscColor = (d, age, gp, st = 0, ageC = null, stC = null) => (d.pal ? interpPal(d.pal, evalOsc(d, age, gp, st, ageC, stC)) : resolveColor(evalOsc(d, age, gp, st, ageC, stC), gp));
 
