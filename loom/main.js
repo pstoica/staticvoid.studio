@@ -1890,7 +1890,7 @@ const feedCam = $('#feedcam');
 function applyVideo() {
   if (!feedCam) return;
   if (feedVideo) {
-    const src = 'http://' + feedHost + '/camera.mjpg';
+    const src = 'http://' + feedHost + '/camera.mjpg?raw=1';   // raw frame, no host-drawn ball overlays
     if (feedCam.getAttribute('src') !== src) feedCam.src = src;   // the <img> just decodes the stream
     feedCam.hidden = false;
     if (glr) glr.setCameraSource(feedCam, !!DSL._jug.flipX, feedOpacity);   // gl draws it behind the glyphs

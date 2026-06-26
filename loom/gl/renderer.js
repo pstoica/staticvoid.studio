@@ -833,15 +833,18 @@ export class GLRenderer {
     this.mesh.frustumCulled = false;
     this.scene.add(this.mesh);
 
-    // camera background: a full-screen textured quad drawn (opaquely) behind the glyphs, so the
-    // juggling feed composites correctly INSIDE the gl frame — no fragile transparent-canvas tricks.
+    // camera feed, composited INSIDE the gl frame (behind the glyphs) — two quads from one texture:
+    // a dimmed COVER copy fills the whole viewport (no bars), then the sharp CONTAIN copy sits on
+    // top aspect-correct. DoubleSide: the pixel-space ortho camera flips Y, inverting winding.
     this.bgScene = new THREE.Scene();
-    this.camTex = null; this.camActive = false;
-    // DoubleSide: the pixel-space ortho camera flips Y, inverting winding — FrontSide gets culled.
-    this.bgMat = new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false, side: THREE.DoubleSide });
-    this.bgQuad = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.bgMat);
-    this.bgQuad.position.set(0.5, 0.5, 0); this.bgQuad.frustumCulled = false;   // fills the ortho(0,1,0,1) view
-    this.bgScene.add(this.bgQuad);
+    this.camTex = null; this.camActive = false; this.camFlipX = false;
+    const camMat = (opacity) => new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false, side: THREE.DoubleSide, transparent: true, opacity });
+    this.camBgMat = camMat(0.45); this.camFgMat = camMat(1);
+    this.camBg = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.camBgMat);   // cover, dimmed
+    this.camFg = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.camFgMat);   // contain, sharp
+    this.camBg.frustumCulled = this.camFg.frustumCulled = false;
+    this.camBg.renderOrder = 0; this.camFg.renderOrder = 1;
+    this.bgScene.add(this.camBg, this.camFg);
 
     // imported-mesh path (one draw per instance, depth-tested). meshes load async;
     // until a model arrives its glyphs simply don't draw.
@@ -950,9 +953,8 @@ export class GLRenderer {
 
   setBackground(css) { try { this.bg.set(css); } catch { /* keep previous */ } }
 
-  // point the camera-background quad at an <img>/<video> (the juggling feed), or null to turn it
-  // off. flipX mirrors horizontally (selfie). opacity dims it. Called from main.js when the feed's
-  // camera overlay is toggled.
+  // point the camera quads at an <img>/<video> (the juggling feed), or null to turn it off. flipX
+  // mirrors (selfie). opacity dims the sharp foreground. Called when the feed overlay is toggled.
   setCameraSource(src, flipX, opacity) {
     if (!src) { this.camActive = false; return; }
     if (!this.camTex || this.camTex.image !== src) {
@@ -960,27 +962,28 @@ export class GLRenderer {
       this.camTex = new THREE.Texture(src);
       this.camTex.minFilter = THREE.LinearFilter; this.camTex.magFilter = THREE.LinearFilter;
       this.camTex.generateMipmaps = false; this.camTex.colorSpace = THREE.SRGBColorSpace;
-      this.bgMat.map = this.camTex; this.bgMat.needsUpdate = true;
+      this.camBgMat.map = this.camTex; this.camFgMat.map = this.camTex;
+      this.camBgMat.needsUpdate = this.camFgMat.needsUpdate = true;
     }
     this.camTex.center.set(0.5, 0.5);
-    this.camTex.wrapS = this.camTex.wrapT = THREE.ClampToEdgeWrapping;   // edge columns smear out to fill the bars
-    this.camFlipX = !!flipX;                               // aspect-fit repeat is computed per-frame in render()
-    this.bgMat.opacity = opacity != null ? opacity : 1;
-    this.bgMat.transparent = this.bgMat.opacity < 1;
+    this.camTex.repeat.set(flipX ? -1 : 1, -1);            // x: selfie mirror · y: -1 corrects the Y-down ortho
+    const op = opacity != null ? opacity : 1;
+    this.camFgMat.opacity = op; this.camBgMat.opacity = op * 0.5;   // bg is a dimmed fill
     this.camActive = true;
   }
 
-  // contain-fit the camera into the viewport (preserve its aspect — no stretch), letting the edge
-  // pixels clamp-stretch to fill the leftover bar so there are no hard edges. y is flipped to
-  // correct the Y-down ortho; x mirrors for selfie.
+  // size the two camera quads (both centered, same texture): foreground CONTAIN-fit (whole frame,
+  // aspect-correct, leaves bars), background COVER-fit (fills the viewport, dimmed) so the bars
+  // show a zoomed copy of the feed instead of hard edges.
   _fitCamera() {
     const im = this.camTex.image, tw = im.naturalWidth || im.videoWidth, th = im.naturalHeight || im.videoHeight;
     if (!tw || !th) return;
-    const At = tw / th, Av = (this.camera.right || 1) / (this.camera.bottom || 1);
-    let rx = this.camFlipX ? -1 : 1, ry = -1;
-    if (At < Av) rx *= Av / At;   // feed narrower than the screen → inset X, bars on the sides
-    else ry *= At / Av;           // feed wider → inset Y, bars top/bottom
-    this.camTex.repeat.set(rx, ry);
+    const W = this.camera.right || 1, H = this.camera.bottom || 1, At = tw / th, Av = W / H;
+    const wide = At > Av;                                  // feed wider than the viewport?
+    const fgW = wide ? W : H * At, fgH = wide ? W / At : H;          // contain: largest that fits
+    const bgW = wide ? H * At : W, bgH = wide ? H : W / At;          // cover: smallest that fills
+    this.camFg.scale.set(fgW, fgH, 1); this.camFg.position.set(W / 2, H / 2, 0);
+    this.camBg.scale.set(bgW, bgH, 1); this.camBg.position.set(W / 2, H / 2, 0);
   }
 
   // state: { live, minDim, resolve, ... }  — resolve(p, minDim, out) fills `out`
@@ -992,13 +995,9 @@ export class GLRenderer {
     r.setRenderTarget(null);
     r.setClearColor(this.bg, 1);
     r.clear(true, true, true);
-    // juggling camera feed: draw it full-screen behind the glyphs (its pixels update each frame).
-    // the ortho camera is in PIXEL space (0..W, 0..H), so size the unit quad to fill it.
+    // juggling camera feed: a dimmed cover copy + sharp contain copy, behind the glyphs.
     if (this.camActive && this.camTex && this.camTex.image && (this.camTex.image.naturalWidth || this.camTex.image.videoWidth)) {
-      const cw = this.camera.right, ch = this.camera.bottom;
-      this.bgQuad.scale.set(cw, ch, 1);
-      this.bgQuad.position.set(cw / 2, ch / 2, 0);
-      this._fitCamera();                 // aspect-correct contain + edge-fill (no stretch)
+      this._fitCamera();                 // size the contain (fg) + cover (bg) quads to the viewport
       this.camTex.needsUpdate = true;
       r.render(this.bgScene, this.camera);
     }
