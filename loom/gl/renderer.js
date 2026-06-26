@@ -968,7 +968,8 @@ export class GLRenderer {
     this.camTex.center.set(0.5, 0.5);
     this.camTex.repeat.set(flipX ? -1 : 1, -1);            // x: selfie mirror · y: -1 corrects the Y-down ortho
     const op = opacity != null ? opacity : 1;
-    this.camFgMat.opacity = op; this.camBgMat.opacity = op * 0.5;   // bg is a dimmed fill
+    this.camFgMat.opacity = this.camBgMat.opacity = op;   // bg fills opaque (no dimming) — same as fg
+    this.camFgMat.transparent = this.camBgMat.transparent = op < 1;
     this.camActive = true;
   }
 
