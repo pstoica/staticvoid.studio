@@ -325,6 +325,7 @@ Combinators that reshape a pattern. All return a pattern, so they chain.
 | `pick(sel, [a, b, …])` | choose by a `0..1` selector (number / pattern / signal), index = `floor(sel·n)`. The chosen item is flattened in, so it works for patterns *or* values: `.size(pick(mouseX, [0.02, 0.06, 0.1]))` picks a size by the pointer; `pick("<0 1>", [shape("dot"), shape("ring")])` swaps per cycle |
 | `iff(cond, then, else?)` | if `cond > 0.5` use `then`, else `else` (default `silence`): `iff(mouseDown, shape("star*5"), shape("dot*5"))` swaps the source while pressed |
 | `.when(cond, f)` | apply `f` to the events where `cond` is truthy (`>0.5`) at their onset — a signal-driven `sometimes`: `.when("<1 0>", p => p.fast(2))`, `.when(mouseDown, p => p.size(0.12))` |
+| `.gate(cond)` | keep only events where `cond` is truthy (`>0.5`) at onset; drop the rest — the fix for a **stale external input**: gate by its "is it live?" signal so it stops drawing when there's no fresh data. `.gate(ballSeen("a"))` (ball in frame), `.gate(mouseDown)` (while pressed), `.gate(gate())` (a MIDI note held) |
 
 The selector / condition is **sampled at each event's onset** (frozen per glyph), like any
 control. For a clean per-cycle swap use a discrete selector (`"<0 1>"`, `"1 0"`).

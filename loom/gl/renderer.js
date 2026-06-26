@@ -963,10 +963,24 @@ export class GLRenderer {
       this.bgMat.map = this.camTex; this.bgMat.needsUpdate = true;
     }
     this.camTex.center.set(0.5, 0.5);
-    this.camTex.repeat.set(flipX ? -1 : 1, -1);            // x: selfie mirror · y: -1 corrects the Y-down ortho
+    this.camTex.wrapS = this.camTex.wrapT = THREE.ClampToEdgeWrapping;   // edge columns smear out to fill the bars
+    this.camFlipX = !!flipX;                               // aspect-fit repeat is computed per-frame in render()
     this.bgMat.opacity = opacity != null ? opacity : 1;
     this.bgMat.transparent = this.bgMat.opacity < 1;
     this.camActive = true;
+  }
+
+  // contain-fit the camera into the viewport (preserve its aspect — no stretch), letting the edge
+  // pixels clamp-stretch to fill the leftover bar so there are no hard edges. y is flipped to
+  // correct the Y-down ortho; x mirrors for selfie.
+  _fitCamera() {
+    const im = this.camTex.image, tw = im.naturalWidth || im.videoWidth, th = im.naturalHeight || im.videoHeight;
+    if (!tw || !th) return;
+    const At = tw / th, Av = (this.camera.right || 1) / (this.camera.bottom || 1);
+    let rx = this.camFlipX ? -1 : 1, ry = -1;
+    if (At < Av) rx *= Av / At;   // feed narrower than the screen → inset X, bars on the sides
+    else ry *= At / Av;           // feed wider → inset Y, bars top/bottom
+    this.camTex.repeat.set(rx, ry);
   }
 
   // state: { live, minDim, resolve, ... }  — resolve(p, minDim, out) fills `out`
@@ -984,6 +998,7 @@ export class GLRenderer {
       const cw = this.camera.right, ch = this.camera.bottom;
       this.bgQuad.scale.set(cw, ch, 1);
       this.bgQuad.position.set(cw / 2, ch / 2, 0);
+      this._fitCamera();                 // aspect-correct contain + edge-fill (no stretch)
       this.camTex.needsUpdate = true;
       r.render(this.bgScene, this.camera);
     }

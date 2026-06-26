@@ -173,6 +173,16 @@ class Pattern {
     return stack(f(split(true)), split(false));
   }
 
+  // gate(cond): keep only the events whose `cond` is truthy (>0.5) at their onset; drop the rest.
+  // The general fix for a stale external input — gate by its "is it live?" signal so it stops
+  // drawing when there's no fresh data: `.gate(ballSeen("a"))` (in frame), `.gate(mouseDown)`
+  // (while pressed), `.gate(gate())` (a MIDI note held). cond may be a number, pattern, or signal.
+  gate(cond) {
+    const c = reify(cond);
+    const at = (t) => { const hs = c.query(span(t, t + 1e-6)); for (const h of hs) if (h.value != null) return +h.value; return 0; };
+    return new Pattern((s) => this.query(s).filter((h) => at((h.whole || h.part).begin) > 0.5));
+  }
+
   // ── continuous signal helpers ──
   // lo/hi may each be a number, a mini-notation string, or a pattern, sampled
   // (structure from the left) so the range itself can move: `sine.range(0, "1 2")`.
