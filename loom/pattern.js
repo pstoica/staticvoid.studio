@@ -418,7 +418,7 @@ const mouseDown = signal(() => _pointer.down);
 // the juggling balls, each on its own channel with its own CCs) map cleanly to channels. Being
 // signals, they obey the frozen/live rule: frozen at a glyph's onset (spawn a glyph per note),
 // live as an FX/physics param.
-const _midi = { cc: {}, notes: {}, bend: {} };
+const _midi = { cc: {}, notes: {}, bend: {}, pending: [], frame: [] };
 function _midiInput(status, d1, d2) {
   const type = status & 0xf0, ch = (status & 0x0f) + 1;          // 1..16
   if (type === 0xB0) {                                            // control change → ch + omni
@@ -426,6 +426,8 @@ function _midiInput(status, d1, d2) {
     (_midi.cc[0] || (_midi.cc[0] = {}))[d1] = d2;
   } else if (type === 0x90 && d2 > 0) {                           // note on
     (_midi.notes[ch] || (_midi.notes[ch] = new Map())).set(d1, d2);
+    _midi.pending.push({ ch, note: d1, vel: d2 });               // queue the note-on for onNote()
+    if (_midi.pending.length > 256) _midi.pending.shift();       // cap (e.g. clock paused)
   } else if (type === 0x80 || (type === 0x90 && d2 === 0)) {      // note off (or note-on vel 0)
     if (_midi.notes[ch]) _midi.notes[ch].delete(d1);
   } else if (type === 0xE0) {                                     // pitch bend (14-bit → -1..1)
@@ -441,6 +443,17 @@ function gate(ch = 0) { return signal(() => (_held(ch) ? 1 : 0)); }
 function vel(ch = 0) { return signal(() => { const e = _lastHeld(ch); return e ? e[1] / 127 : 0; }); }
 function note(ch = 0) { return signal(() => { const e = _lastHeld(ch); return e ? e[0] / 127 : 0; }); }
 function bend(ch = 0) { return signal(() => _midi.bend[ch] || 0); }
+// onNote(ch, shape): an EVENT source — emits exactly ONE glyph per MIDI note-on (not a sampled
+// stream like gate). The tick loop calls _midiFrame() once per frame to snapshot that frame's
+// note-ons into _midi.frame, so the source is pure within the frame (re-queries / multiple layers
+// see the same events). Each note's pitch/velocity is captured by chaining .y(note(ch)).size(vel(ch))
+// — note(ch)/vel(ch) read the just-arrived note at the glyph's onset. ch 0 = any channel.
+function _midiFrame() { _midi.frame = _midi.pending; _midi.pending = []; }
+function onNote(ch = 0, shape = 'dot') {
+  return new Pattern((s) => _midi.frame
+    .filter((e) => !ch || e.ch === ch)
+    .map(() => hap({ begin: s.begin, end: s.end }, s, { shape: String(shape) })));
+}
 
 // ── juggling feed (WebSocket ball tracking), as signals ───────────────────────────
 // A separate local app tracks juggling balls — webcam position + on-ball IMU — and pushes plain
@@ -953,7 +966,7 @@ export const DSL = {
   $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   mouseX, mouseY, mouseDown, _setPointer,
-  cc, gate, vel, note, bend, _midiInput,
+  cc, gate, vel, note, bend, onNote, _midiInput, _midiFrame,
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, flight, gyro, _jug, _jugInput, _jugDecay,
   hasOnset, span, isOsc, isSpring, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,

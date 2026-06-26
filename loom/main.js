@@ -770,6 +770,7 @@ function frame(now) {
 function tick(dt) {
   elapsed += dt;   // advances even when paused (like glyph age), so FX keep living
   DSL._jugDecay(dt);   // age the juggling throw/catch/tap pulses (decays even when paused)
+  DSL._midiFrame();    // snapshot this frame's MIDI note-ons for onNote() (one glyph per note)
   bgColor = bgEval(bgSource, cycle, elapsed);   // bg() is patternable, resolve per frame
   if (glr) glr.setBackground(bgColor);
   // Clean redraw: wipe the buffer completely every frame, then repaint only the

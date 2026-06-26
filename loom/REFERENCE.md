@@ -442,6 +442,14 @@ where holding a key lets the swarm fall.
 push. Per-channel CC reads stay independent; an omni `cc(num)` mirrors whichever channel last
 moved that controller.
 
+**`onNote(ch, shape)`** is an **event source** — it emits exactly *one* glyph per MIDI note-on,
+where `cc`/`gate`/`note`/`vel` are *signals* sampled at clock slots (a held note read through
+`gate` spawns a whole stream, not one stamp). Style each stamp by chaining the signals, which are
+captured at the glyph's onset (= the moment the note arrived): `onNote(1, "circle").y(note(1)
+.range(0.9, 0.1)).size(vel(1).range(0.02, 0.12)).color(palette("rainbow").at(note(1)))`. `ch` is
+1–16 (0 = any); a chord spawns one glyph per note. This is the accurate way to draw "one mark per
+note" from a live sequence.
+
 ### Juggling feed (`ballX` / `ballY` / `thrown` / `caught` / `tapped` / …)
 
 Live **ball-tracking** input as signals. A separate local app tracks juggling balls (webcam
