@@ -792,12 +792,9 @@ export class GLRenderer {
     this.canvas = canvas;
     // preserveDrawingBuffer: keeps the last frame readable for screenshots/saving
     // (and for tooling that drives frames manually while rAF is paused).
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, premultipliedAlpha: false, preserveDrawingBuffer: true });
     this.renderer.autoClear = false;
     this.bg = new THREE.Color('#06070a');
-    // clearA = 1 → opaque background (normal). Set to 0 to clear transparent so a layer behind
-    // the canvas (the juggling camera feed) shows through. alpha:true makes the channel exist.
-    this.clearA = 1;
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.OrthographicCamera(0, 1, 0, 1, -1000, 1000);
@@ -835,6 +832,16 @@ export class GLRenderer {
     this.mesh = new THREE.Mesh(this.geom, this.materials.normal);
     this.mesh.frustumCulled = false;
     this.scene.add(this.mesh);
+
+    // camera background: a full-screen textured quad drawn (opaquely) behind the glyphs, so the
+    // juggling feed composites correctly INSIDE the gl frame — no fragile transparent-canvas tricks.
+    this.bgScene = new THREE.Scene();
+    this.camTex = null; this.camActive = false;
+    // DoubleSide: the pixel-space ortho camera flips Y, inverting winding — FrontSide gets culled.
+    this.bgMat = new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+    this.bgQuad = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.bgMat);
+    this.bgQuad.position.set(0.5, 0.5, 0); this.bgQuad.frustumCulled = false;   // fills the ortho(0,1,0,1) view
+    this.bgScene.add(this.bgQuad);
 
     // imported-mesh path (one draw per instance, depth-tested). meshes load async;
     // until a model arrives its glyphs simply don't draw.
@@ -943,6 +950,25 @@ export class GLRenderer {
 
   setBackground(css) { try { this.bg.set(css); } catch { /* keep previous */ } }
 
+  // point the camera-background quad at an <img>/<video> (the juggling feed), or null to turn it
+  // off. flipX mirrors horizontally (selfie). opacity dims it. Called from main.js when the feed's
+  // camera overlay is toggled.
+  setCameraSource(src, flipX, opacity) {
+    if (!src) { this.camActive = false; return; }
+    if (!this.camTex || this.camTex.image !== src) {
+      if (this.camTex) this.camTex.dispose();
+      this.camTex = new THREE.Texture(src);
+      this.camTex.minFilter = THREE.LinearFilter; this.camTex.magFilter = THREE.LinearFilter;
+      this.camTex.generateMipmaps = false; this.camTex.colorSpace = THREE.SRGBColorSpace;
+      this.bgMat.map = this.camTex; this.bgMat.needsUpdate = true;
+    }
+    this.camTex.center.set(0.5, 0.5);
+    this.camTex.repeat.set(flipX ? -1 : 1, -1);            // x: selfie mirror · y: -1 corrects the Y-down ortho
+    this.bgMat.opacity = opacity != null ? opacity : 1;
+    this.bgMat.transparent = this.bgMat.opacity < 1;
+    this.camActive = true;
+  }
+
   // state: { live, minDim, resolve, ... }  — resolve(p, minDim, out) fills `out`
   // with the glyph's effective draw values (live oscillators already applied).
   // Ungrouped glyphs composite straight to the screen; each group() renders to its
@@ -950,8 +976,17 @@ export class GLRenderer {
   render(state) {
     const r = this.renderer;
     r.setRenderTarget(null);
-    r.setClearColor(this.bg, this.clearA);
+    r.setClearColor(this.bg, 1);
     r.clear(true, true, true);
+    // juggling camera feed: draw it full-screen behind the glyphs (its pixels update each frame).
+    // the ortho camera is in PIXEL space (0..W, 0..H), so size the unit quad to fill it.
+    if (this.camActive && this.camTex && this.camTex.image && (this.camTex.image.naturalWidth || this.camTex.image.videoWidth)) {
+      const cw = this.camera.right, ch = this.camera.bottom;
+      this.bgQuad.scale.set(cw, ch, 1);
+      this.bgQuad.position.set(cw / 2, ch / 2, 0);
+      this.camTex.needsUpdate = true;
+      r.render(this.bgScene, this.camera);
+    }
     const live = (state && state.live) || [];
     this._minDim = state ? state.minDim : Math.min(this.W, this.H);
     this._resolve = state && state.resolve;

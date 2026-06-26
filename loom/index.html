@@ -30,10 +30,10 @@
 
   /* fullscreen canvas behind everything */
   #stage, #glstage { position:fixed; inset:0; width:100vw; height:100vh; display:block; z-index:0; }
-  /* juggling camera feed — one layer further back, revealed when the canvas clears transparent */
-  #feedcam { position:fixed; inset:0; width:100vw; height:100vh; object-fit:cover; z-index:-1;
-    pointer-events:none; opacity:1; }
-  #feedcam.flip { transform:scaleX(-1); }
+  /* juggling camera feed: a decode-only <img> (the MJPEG stream) used as a GL texture — the
+     renderer draws it behind the glyphs. Kept off-screen + transparent so it never shows itself;
+     it just needs to stay decoded (not display:none, which would pause the stream). */
+  #feedcam { position:fixed; left:0; top:0; width:2px; height:2px; opacity:0; pointer-events:none; }
   #feedcam[hidden] { display:none; }
   /* juggling-feed config — lives in its own sidebar pane (data-pane="feed"), opened by #feedbtn */
   .feedcfg { display:flex; flex-direction:column; gap:11px; font:500 12px/1.3 var(--mono); color:var(--ink); }
@@ -368,9 +368,9 @@
 </style>
 </head>
 <body>
-  <!-- juggling camera feed (MJPEG) — sits behind the canvas; shows through when the GL canvas
-       clears transparent (video overlay on). pointer-events none, never interactive. -->
-  <img id="feedcam" alt="" hidden>
+  <!-- juggling camera feed (MJPEG): decode-only texture source for the GL camera background.
+       crossorigin so it's usable as a WebGL texture (the feed serves CORS-open). -->
+  <img id="feedcam" alt="" crossorigin="anonymous" hidden>
   <canvas id="stage"></canvas>
   <canvas id="glstage" hidden></canvas>
 

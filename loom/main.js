@@ -1888,12 +1888,16 @@ const feedCam = $('#feedcam');
 // camera overlay: stream the host's MJPEG behind the canvas and clear the canvas transparent so
 // it shows through (GL only). flipX mirrors it to match the selfie ballX flip.
 function applyVideo() {
-  if (glr) glr.clearA = feedVideo ? 0 : 1;
   if (!feedCam) return;
-  feedCam.style.opacity = feedOpacity;
-  feedCam.classList.toggle('flip', !!DSL._jug.flipX);
-  if (feedVideo) { const src = 'http://' + feedHost + '/camera.mjpg'; if (feedCam.getAttribute('src') !== src) feedCam.src = src; feedCam.hidden = false; }
-  else { feedCam.hidden = true; feedCam.removeAttribute('src'); }   // drop the stream when off
+  if (feedVideo) {
+    const src = 'http://' + feedHost + '/camera.mjpg';
+    if (feedCam.getAttribute('src') !== src) feedCam.src = src;   // the <img> just decodes the stream
+    feedCam.hidden = false;
+    if (glr) glr.setCameraSource(feedCam, !!DSL._jug.flipX, feedOpacity);   // gl draws it behind the glyphs
+  } else {
+    feedCam.hidden = true; feedCam.removeAttribute('src');        // drop the stream when off
+    if (glr) glr.setCameraSource(null);
+  }
 }
 function setFeedStatus() {
   if (!fp || !fp.dot) return;
