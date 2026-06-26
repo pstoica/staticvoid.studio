@@ -996,11 +996,26 @@ export class GLRenderer {
     r.setRenderTarget(null);
     r.setClearColor(this.bg, 1);
     r.clear(true, true, true);
-    // juggling camera feed: a dimmed cover copy + sharp contain copy, behind the glyphs.
+    // juggling camera feed (behind the glyphs): sharp CONTAIN copy in the centre, zoomed COVER
+    // copy in the bars. The two are drawn to DISJOINT regions (cover is scissored to the bars
+    // only) so they never overlap — otherwise at partial opacity the zoomed copy ghosts through
+    // the sharp one. Disjoint → opacity fades each region exactly once, uniformly.
     if (this.camActive && this.camTex && this.camTex.image && (this.camTex.image.naturalWidth || this.camTex.image.videoWidth)) {
-      this._fitCamera();                 // size the contain (fg) + cover (bg) quads to the viewport
+      this._fitCamera();
       this.camTex.needsUpdate = true;
+      const W = this.camera.right, H = this.camera.bottom, dpr = this.DPR || 1;
+      const barX = (W - this.camFg.scale.x) / 2, barY = (H - this.camFg.scale.y) / 2;   // one is ~0
+      // cover copy, clipped to the bar(s) only (scissor is framebuffer px, bottom-left origin)
+      this.camBg.visible = true; this.camFg.visible = false;
+      r.setScissorTest(true);
+      const bar = (x, y, w, h) => { if (w > 0.5 && h > 0.5) { r.setScissor(x * dpr, y * dpr, w * dpr, h * dpr); r.render(this.bgScene, this.camera); } };
+      if (barX > 0.5) { bar(0, 0, barX, H); bar(W - barX, 0, barX, H); }               // side bars
+      if (barY > 0.5) { bar(0, 0, W, barY); bar(0, H - barY, W, barY); }               // top/bottom bars
+      r.setScissorTest(false);
+      // sharp contain copy in the centre
+      this.camBg.visible = false; this.camFg.visible = true;
       r.render(this.bgScene, this.camera);
+      this.camBg.visible = true;   // restore for next frame
     }
     const live = (state && state.live) || [];
     this._minDim = state ? state.minDim : Math.min(this.W, this.H);
