@@ -1000,6 +1000,8 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   get bodies() { return particles.filter((p) => p.body).length; }, get pointer() { return pointerState; },
   midi: (status, d1, d2) => DSL._midiInput(status, d1, d2),   // inject a MIDI message (for tooling/testing)
   jug: (m) => DSL._jugInput(m),   // inject a juggling-feed message (for tooling/testing)
+  // current value of a signal fn (cc/gate/vel/note/pc/bend/ballX/…) — drives the editor live badges
+  sig: (name, ...args) => { try { const fn = DSL[name]; if (typeof fn !== 'function') return null; const h = fn(...args).query(DSL.span(0, 0)); return h.length ? +h[0].value : 0; } catch { return null; } },
   feed: {   // juggling-feed config (host:port, on/off, selfie flip, camera overlay) — persists
     get host() { return feedHost; },
     set host(h) { feedHost = h; localStorage.setItem(FEED_HOST_KEY, h); applyVideo(); if (feedOn) feedReset(); syncFeedUI(); },

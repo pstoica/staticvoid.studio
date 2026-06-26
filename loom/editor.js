@@ -208,49 +208,66 @@ const sliderPlugin = ViewPlugin.fromClass(class {
   update(u) { if (u.docChanged || u.viewportChanged) this.decorations = buildSliderDecos(u.view); }
 }, { decorations: (v) => v.decorations });
 
-// ── live-signal badges (mouseX / mouseY / mouseDown) ──────────────────────────────────
-// A tiny readout after each pointer-signal token, so it reads as a LIVE value at a glance
-// (handy for debugging / awareness). One shared rAF updates them from window.loom.pointer.
+// ── live-signal badges ────────────────────────────────────────────────────────────────
+// A tiny readout after each live-input token (pointer, MIDI, juggling), so its value reads at a
+// glance while patching. One shared rAF updates them: pointer signals from window.loom.pointer,
+// the call-style ones (cc(7,1), vel(1), ballX("a")…) via window.loom.sig(name, …args).
 const liveBadges = new Set();
 let liveRAF = 0;
+const BOOL_SIGS = new Set(['mouseDown', 'gate', 'ballSeen', 'moving']);   // shown as ●/○, not a number
+function badgeValue(el) {
+  const name = el.dataset.sig;
+  const L = typeof window !== 'undefined' && window.loom;
+  if (name === 'mouseX' || name === 'mouseY' || name === 'mouseDown') {
+    const p = (L && window.loom.pointer) || { x: 0.5, y: 0.5, down: 0 };
+    return name === 'mouseDown' ? p.down : name === 'mouseX' ? p.x : p.y;
+  }
+  const v = L && window.loom.sig ? window.loom.sig(name, ...(el._args || [])) : 0;
+  return v == null ? 0 : v;
+}
 function ensureLiveLoop() {
   if (liveRAF) return;
   const tick = () => {
-    const p = (typeof window !== 'undefined' && window.loom && window.loom.pointer) || { x: 0.5, y: 0.5, down: 0 };
     for (const el of liveBadges) {
       if (!el.isConnected) { liveBadges.delete(el); continue; }
-      const s = el.dataset.sig;
-      const v = s === 'mouseDown' ? p.down : s === 'mouseX' ? p.x : p.y;
-      el.textContent = s === 'mouseDown' ? (p.down ? '●' : '○') : v.toFixed(2);
-      // tint dark → light by value (OKLCH), so the magnitude reads at a glance; flip the
-      // text colour for contrast against the changing background.
-      const t = Math.max(0, Math.min(1, v));
-      const L = 0.26 + t * 0.62;
-      el.style.background = `oklch(${L.toFixed(3)} 0.07 290)`;
-      el.style.borderColor = `oklch(${Math.min(0.96, L + 0.12).toFixed(3)} 0.09 290)`;
-      el.style.color = L > 0.6 ? '#0a0a12' : '#e9e9ea';
+      const v = badgeValue(el);
+      el.textContent = BOOL_SIGS.has(el.dataset.sig) ? (v > 0.5 ? '●' : '○') : (+v).toFixed(2);
+      // tint dark → light by magnitude (OKLCH) so it reads at a glance; abs() so bend (−1..1)
+      // still lights up. Flip the text colour for contrast against the changing background.
+      const t = Math.max(0, Math.min(1, Math.abs(v)));
+      const lum = 0.26 + t * 0.62;
+      el.style.background = `oklch(${lum.toFixed(3)} 0.07 290)`;
+      el.style.borderColor = `oklch(${Math.min(0.96, lum + 0.12).toFixed(3)} 0.09 290)`;
+      el.style.color = lum > 0.6 ? '#0a0a12' : '#e9e9ea';
     }
     liveRAF = liveBadges.size ? requestAnimationFrame(tick) : 0;
   };
   liveRAF = requestAnimationFrame(tick);
 }
 class LiveSigWidget extends WidgetType {
-  constructor(name) { super(); this.name = name; }
-  eq(o) { return o.name === this.name; }
+  constructor(name, args) { super(); this.name = name; this.args = args || null; this.key = name + (args ? '(' + args.join(',') + ')' : ''); }
+  eq(o) { return o.key === this.key; }
   toDOM() {
     const el = document.createElement('span');
-    el.className = 'cm-loom-live'; el.dataset.sig = this.name; el.textContent = '·';
-    el.title = `${this.name} — live`;
+    el.className = 'cm-loom-live'; el.dataset.sig = this.name; el._args = this.args; el.textContent = '·';
+    el.title = `${this.key} — live`;
     liveBadges.add(el); ensureLiveLoop();
     return el;
   }
   destroy(dom) { liveBadges.delete(dom); }
   ignoreEvent() { return true; }
 }
+// call-style live signals (one arg list, no nested parens — so .gate(ballSeen("a")) won't match)
+const CALL_SIGS = 'cc|gate|vel|note|pc|bend|ballX|ballY|ballSeen|moving|thrown|caught|tapped|flight|gyro';
+const callRe = new RegExp('\\b(' + CALL_SIGS + ')\\(([^()]*)\\)', 'g');
+const parseArgs = (s) => s.split(',').map((a) => a.trim()).filter(Boolean)
+  .map((a) => (/^-?[\d.]+$/.test(a) ? +a : a.replace(/^["']|["']$/g, '')));
 function buildLiveDecos(view) {
-  const re = /\b(mouseX|mouseY|mouseDown)\b/g; const text = view.state.doc.toString(); const ranges = []; let m;
-  while ((m = re.exec(text))) ranges.push(Decoration.widget({ widget: new LiveSigWidget(m[1]), side: 1 }).range(m.index + m[0].length));
-  return Decoration.set(ranges, true);
+  const text = view.state.doc.toString(); const ranges = []; let m;
+  const ptrRe = /\b(mouseX|mouseY|mouseDown)\b/g;
+  while ((m = ptrRe.exec(text))) ranges.push(Decoration.widget({ widget: new LiveSigWidget(m[1]), side: 1 }).range(m.index + m[0].length));
+  while ((m = callRe.exec(text))) ranges.push(Decoration.widget({ widget: new LiveSigWidget(m[1], parseArgs(m[2])), side: 1 }).range(m.index + m[0].length));
+  return Decoration.set(ranges, true);   // 2nd arg sorts the ranges
 }
 const liveSigPlugin = ViewPlugin.fromClass(class {
   constructor(view) { this.decorations = buildLiveDecos(view); }
