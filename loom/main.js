@@ -1928,12 +1928,19 @@ if (fp.host) fp.host.addEventListener('change', () => { feedHost = fp.host.value
 if (fp.flip) fp.flip.addEventListener('change', () => { DSL._jug.flipX = fp.flip.checked; localStorage.setItem(FEED_FLIP_KEY, fp.flip.checked ? '1' : '0'); applyVideo(); });
 if (fp.video) fp.video.addEventListener('change', () => { feedVideo = fp.video.checked; localStorage.setItem(FEED_VID_KEY, feedVideo ? '1' : '0'); applyVideo(); });
 if (fp.op) fp.op.addEventListener('input', () => { feedOpacity = parseFloat(fp.op.value); localStorage.setItem(FEED_OP_KEY, String(feedOpacity)); applyVideo(); });
-// live "seeing: a · b" readout while the feed pane is open
+// live per-ball debug while the feed pane is open: position, spin, and a flash on each event —
+// so you can confirm the data is actually arriving (and which id maps to which ball).
 setInterval(() => {
   if (!fp.pane || fp.pane.hidden || !fp.balls) return;
-  const b = DSL._jug.balls, seen = Object.keys(b).filter((k) => b[k].seen).map((k) => k.replace('ball_', '')).sort();
-  fp.balls.textContent = seen.length ? 'seeing: ' + seen.join(' · ') : 'no balls';
-}, 250);
+  const b = DSL._jug.balls, ids = Object.keys(b).sort();
+  if (!ids.length) { fp.balls.textContent = 'no balls — waiting for the feed'; return; }
+  fp.balls.textContent = ids.map((k) => {
+    const o = b[k], id = k.replace('ball_', '');
+    const ev = [o.thr > 0.1 ? 'throw' : '', o.cat > 0.1 ? 'catch' : '', o.tap > 0.1 ? 'tap' : ''].filter(Boolean).join('+');
+    const pos = o.seen ? `${o.x.toFixed(2)} ${o.y.toFixed(2)}` : ' off    ';
+    return `${id}  x/y ${pos}  spin ${o.spin.toFixed(2)}${ev ? '  ‹' + ev + '›' : ''}`;
+  }).join('\n');
+}, 120);
 
 applyVideo();
 feedConnect();

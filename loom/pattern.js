@@ -453,7 +453,9 @@ const _ballId = (id) => {                                          // 0/1/2 · "
   return s.startsWith('ball_') ? s : 'ball_' + s;
 };
 const _ball = (id) => _jug.balls[_ballId(id)];
-const _mkBall = (id) => (_jug.balls[id] || (_jug.balls[id] = { x: 0.5, y: 0.5, seen: 0, thr: 0, cat: 0, tap: 0, flight: 0, mag: 0, spin: 0, tiltx: 0, tilty: 0 }));
+// normalise the INCOMING id too (the feed sends "ball_A"/"ball_B"…) so it matches the lowercased
+// key ballX("b") looks up — otherwise "ball_B" is stored but "ball_b" is read and never found.
+const _mkBall = (id) => { const k = _ballId(id); return _jug.balls[k] || (_jug.balls[k] = { x: 0.5, y: 0.5, seen: 0, thr: 0, cat: 0, tap: 0, flight: 0, mag: 0, spin: 0, tiltx: 0, tilty: 0 }); };
 function _jugInput(m) {                                            // one feed message; switch on type, ignore unknown
   if (!m || typeof m !== 'object') return;
   if (m.type === 'balls' && m.coords) {
