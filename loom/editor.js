@@ -231,10 +231,14 @@ function ensureLiveLoop() {
     for (const el of liveBadges) {
       if (!el.isConnected) { liveBadges.delete(el); continue; }
       const v = badgeValue(el);
-      el.textContent = BOOL_SIGS.has(el.dataset.sig) ? (v > 0.5 ? '●' : '○') : (+v).toFixed(2);
+      // envelope-follow: jump up to peaks instantly, ease down slowly — so a run of notes keeps
+      // the badge lit instead of strobing value→0→value at every note-off (vel/note drop to 0).
+      el._sv = (el._sv == null || v >= el._sv) ? v : el._sv + (v - el._sv) * 0.08;
+      const sv = el._sv;
+      el.textContent = BOOL_SIGS.has(el.dataset.sig) ? (sv > 0.5 ? '●' : '○') : (+sv).toFixed(2);
       // tint dark → light by magnitude (OKLCH) so it reads at a glance; abs() so bend (−1..1)
       // still lights up. Flip the text colour for contrast against the changing background.
-      const t = Math.max(0, Math.min(1, Math.abs(v)));
+      const t = Math.max(0, Math.min(1, Math.abs(sv)));
       const lum = 0.26 + t * 0.62;
       el.style.background = `oklch(${lum.toFixed(3)} 0.07 290)`;
       el.style.borderColor = `oklch(${Math.min(0.96, lum + 0.12).toFixed(3)} 0.09 290)`;
