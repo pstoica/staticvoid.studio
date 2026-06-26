@@ -271,6 +271,7 @@
   #side section[data-cat="fx"]     { --cat:#ff7de0; }
   #side section[data-cat="sig"]    { --cat:#5dd3ff; }
   #side section[data-cat="pal"]    { --cat:#ff9f6b; }
+  #side section[data-cat="jug"]    { --cat:#74d680; }
   #side h3 { font:700 13px/1 var(--mono); color:var(--cat); letter-spacing:.06em;
     text-transform:uppercase; margin:0 0 11px; display:flex; align-items:center; gap:8px; }
   #side h3::before { content:""; width:7px; height:7px; flex:none; background:var(--cat); }
@@ -548,8 +549,6 @@
         <code>rand perlin fbm brown gauss</code><p>noise: white · smooth · fractal · red · bell</p>
         <code>mouseX mouseY mouseDown</code><p>live pointer (mouse/touch). Frozen at onset on a control → <code>.x(mouseX).y(mouseY)</code> trails the pointer; live as an FX/physics param → <code>{ax:mouseX, ay:mouseY}</code> a cursor attractor. <code>mouseX.sample(8)</code> steps/holds it 8×/cycle. <code>mouseDown</code> fires on a canvas press (or ⌥/⌘-click), not editor clicks</p>
         <code>cc(num, ch) gate(ch) vel(ch) note(ch) bend(ch)</code><p>live MIDI (Web MIDI, plug-and-play). <code>cc</code> 0..1 · <code>gate</code> 1 while a key's held · <code>vel</code>/<code>note</code> the last key's velocity/pitch · <code>bend</code> -1..1. <code>ch</code> = channel 1–16, omit for omni — <code>.x(cc(16)).y(cc(17))</code> · <code>.size(vel().range(.02,.12))</code>. Each juggling ball = its own channel: <code>cc(7,1)</code> vs <code>cc(7,2)</code></p>
-        <code>ballX(id) ballY(id) ballSeen(id) moving(id)</code><p>live juggling feed (WebSocket ball tracking, the <em>spatial</em> layer). position 0..1 of the camera frame; <code>id</code> = "a"/"b"/"c". <code>.x(ballX("a")).y(ballY("a"))</code> trails a ball. <code>moving</code> = seen + in motion (host flags settled balls stationary) → <code>.gate(moving("a"))</code>. <strong>off by default</strong> — enable with <code>?feed</code> in the URL or <code>window.loom.feed.enabled=true</code></p>
-        <code>thrown(id) caught(id) tapped(id) flight(id) gyro(id)</code><p>ball events: throw/catch/tap as a decaying 0..1 pulse (a flash); <code>flight</code> = last catch's airtime (held); <code>gyro</code> = IMU spin 0..1. <code>.size(caught("a").range(.03,.2))</code> flares on catch</p>
         <code>choose("a","b") irand(8)</code><p>random pick / integer per onset</p>
         <code>osc(rate, "sine").range(lo, hi)</code><p>live LFO, keeps moving over a glyph's life (vs signals, frozen at spawn). shapes: sine saw tri square rand perlin fbm</p>
         <code>osc(…).spread(n)</code><p>per-glyph phase offset = n × onset phase, spreads the wave <em>around a ring/grid</em> instead of every glyph in lockstep</p>
@@ -562,6 +561,14 @@
         <code>osc(…).spring(stiffness, damping)</code><p>chase the osc's (usually <code>.quantize</code>d) output with a damped spring — per-glyph momentum / overshoot / settle. <code>.x(osc(0.2,"saw").quantize(8).spring(150,11))</code> settles between steps</p>
         <code>.add(x) .sub(x) .mul(x) .div(x)</code><p>x may be a number <em>or a pattern</em></p>
         <code>.x( saw.add(sine.range(0, 0.1)) )</code><p>← wobble a ramp by a sine</p>
+      </section>
+      <section data-cat="jug">
+        <h3>juggling <span>(WebSocket ball feed)</span></h3>
+        <code>ballX(id) ballY(id)</code><p>a ball's position, 0..1 of the camera frame. <code>id</code> = "a"/"b"/"c". <code>.x(ballX("a")).y(ballY("a"))</code> trails it — frozen at a glyph's onset / live as an FX param, like any signal</p>
+        <code>ballSeen(id) moving(id)</code><p><code>ballSeen</code> = detected this frame · <code>moving</code> = seen <em>and</em> in motion (the host flags a settled ball stationary). Gate at-rest / stale noise: <code>.gate(moving("a"))</code></p>
+        <code>thrown(id) caught(id) tapped(id)</code><p>throw / catch / tap as a decaying 0..1 pulse (a flash) — <code>.size(caught("a").range(.03,.2))</code> flares on a catch. <code>tapped</code> peaks with impact</p>
+        <code>flight(id) gyro(id)</code><p><code>flight</code> = last catch's airtime (held) · <code>gyro</code> = on-ball IMU spin 0..1</p>
+        <p>each ball is its own input — <code>id</code> joins position + events. The <strong>spatial</strong> layer (where the ball is); the <strong>musical</strong> layer (mapped notes/CC) arrives over MIDI. <strong>off by default</strong> — enable with <code>?feed</code> in the URL, or the antenna button in the toolbar (its pane: host, selfie flip, camera overlay).</p>
       </section>
       <section data-cat="pal">
         <h3>palettes <span>(named ramps)</span></h3>
