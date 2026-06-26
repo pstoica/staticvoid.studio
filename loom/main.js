@@ -1940,7 +1940,7 @@ setInterval(() => {
   if (!ids.length) { fp.balls.textContent = 'no balls — waiting for the feed'; return; }
   fp.balls.textContent = ids.map((k) => {
     const o = b[k], id = k.replace('ball_', '');
-    const ev = [o.thr > 0.1 ? 'throw' : '', o.cat > 0.1 ? 'catch' : '', o.tap > 0.1 ? 'tap' : ''].filter(Boolean).join('+');
+    const ev = [o.seen && o.still ? 'still' : '', o.thr > 0.1 ? 'throw' : '', o.cat > 0.1 ? 'catch' : '', o.tap > 0.1 ? 'tap' : ''].filter(Boolean).join('+');
     const pos = (o.seen ? `${o.x.toFixed(2)} ${o.y.toFixed(2)}` : 'off').padEnd(9);   // fixed width → columns line up
     return `${id}  x/y ${pos}  spin ${o.spin.toFixed(2)}${ev ? '  ‹' + ev + '›' : ''}`;
   }).join('\n');

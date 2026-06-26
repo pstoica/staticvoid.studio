@@ -465,12 +465,13 @@ const _ballId = (id) => {                                          // 0/1/2 · "
 const _ball = (id) => _jug.balls[_ballId(id)];
 // normalise the INCOMING id too (the feed sends "ball_A"/"ball_B"…) so it matches the lowercased
 // key ballX("b") looks up — otherwise "ball_B" is stored but "ball_b" is read and never found.
-const _mkBall = (id) => { const k = _ballId(id); return _jug.balls[k] || (_jug.balls[k] = { x: 0.5, y: 0.5, seen: 0, thr: 0, cat: 0, tap: 0, flight: 0, mag: 0, spin: 0, tiltx: 0, tilty: 0 }); };
+const _mkBall = (id) => { const k = _ballId(id); return _jug.balls[k] || (_jug.balls[k] = { x: 0.5, y: 0.5, seen: 0, still: 0, thr: 0, cat: 0, tap: 0, flight: 0, mag: 0, spin: 0, tiltx: 0, tilty: 0 }); };
 function _jugInput(m) {                                            // one feed message; switch on type, ignore unknown
   if (!m || typeof m !== 'object') return;
   if (m.type === 'balls' && m.coords) {
     for (const id in _jug.balls) _jug.balls[id].seen = 0;          // clear; only ids present this frame re-flag
-    for (const id in m.coords) { const c = m.coords[id], b = _mkBall(id); b.x = +c[0]; b.y = +c[1]; b.seen = 1; }
+    const st = m.stationary || {};
+    for (const id in m.coords) { const c = m.coords[id], b = _mkBall(id); b.x = +c[0]; b.y = +c[1]; b.seen = 1; b.still = st[id] ? 1 : 0; }
   } else if (m.type === 'throw') { _mkBall(m.name).thr = 1; }
   else if (m.type === 'catch') { const b = _mkBall(m.name); b.cat = 1; b.flight = +m.flight || 0; }
   else if (m.type === 'tap')   { const b = _mkBall(m.name); b.mag = +m.magnitude || 0; b.tap = Math.min(1, b.mag / 30); }
@@ -485,6 +486,8 @@ const _jval = (id, f, def) => { const b = _ball(id); return b ? b[f] : def; };
 function ballX(id)    { return signal(() => { const x = _jval(id, 'x', 0.5); return _jug.flipX ? 1 - x : x; }); }
 function ballY(id)    { return signal(() => _jval(id, 'y', 0.5)); }
 function ballSeen(id) { return signal(() => _jval(id, 'seen', 0)); }
+// 1 while the ball is detected AND in motion (the host's vision flags a settled ball as stationary)
+function moving(id)   { return signal(() => { const b = _ball(id); return b && b.seen && !b.still ? 1 : 0; }); }
 function thrown(id)   { return signal(() => _jval(id, 'thr', 0)); }
 function caught(id)   { return signal(() => _jval(id, 'cat', 0)); }
 function tapped(id)   { return signal(() => _jval(id, 'tap', 0)); }
@@ -951,7 +954,7 @@ export const DSL = {
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   mouseX, mouseY, mouseDown, _setPointer,
   cc, gate, vel, note, bend, _midiInput,
-  ballX, ballY, ballSeen, thrown, caught, tapped, flight, gyro, _jug, _jugInput, _jugDecay,
+  ballX, ballY, ballSeen, moving, thrown, caught, tapped, flight, gyro, _jug, _jugInput, _jugDecay,
   hasOnset, span, isOsc, isSpring, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,
 };

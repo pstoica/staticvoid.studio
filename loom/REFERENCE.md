@@ -454,6 +454,7 @@ glyph's onset (a trail), live as an FX/physics param.
 | --- | --- | --- |
 | `ballX(id)` `ballY(id)` | a ball's position in the camera frame | `0..1` (origin top-left, like `mouseX`) |
 | `ballSeen(id)` | `1` while the ball is detected this frame | `0` / `1` |
+| `moving(id)` | `1` while the ball is detected **and** in motion (the host flags a settled ball as stationary) — gate static-feed noise: `.gate(moving("a"))` | `0` / `1` |
 | `thrown(id)` `caught(id)` `tapped(id)` | a throw / catch / tap, as a **decaying pulse** (flashes to 1, falls to 0 over ~0.4 s) | `0..1` |
 | `flight(id)` | last catch's airtime, **held** until the next catch | seconds |
 | `gyro(id)` | on-ball spin (IMU), if streaming | `0..1` |
