@@ -27,6 +27,8 @@ if (USE_GL) { canvas.hidden = true; glCanvas.hidden = false; }
 const activeCanvas = USE_GL ? glCanvas : canvas;   // the visible canvas drives sizing
 const errBar = $('#err');
 const cpsLabel = $('#cpsval');
+const cpsRange = $('#cpsrange');       // speed/decay are inline range sliders; setCps/setDecay keep the thumb in sync
+const decayRange = $('#decayrange');
 
 // ── the code editor (CodeMirror 6; see editor.js) ────────────────────────────────────
 // Drives like the old textarea via a small API: editor.getCode() / setCode() / insert() /
@@ -1443,45 +1445,7 @@ function syncURL() {
 }
 
 // ── wiring ──────────────────────────────────────────────────────────────────────────
-function setCps(v) { cps = Math.max(0.1, Math.min(2, v)); cpsLabel.textContent = cps.toFixed(2); }
-// a number field: drag horizontally, scroll-wheel, or click to type a value.
-function attachScrub(el, { min, max, step, get, set }) {
-  const sens = (max - min) / 180;   // px → value
-  const snap = (v) => { const s = Math.round(Math.max(min, Math.min(max, v)) / step) * step; return Math.round(s * 1000) / 1000; };
-  const valEl = el.querySelector('b');
-  let dragging = false, sx = 0, sv = 0, moved = false;
-  el.addEventListener('pointerdown', (e) => {
-    if (valEl.isContentEditable) return;                 // mid-edit, let the caret work
-    dragging = true; moved = false; sx = e.clientX; sv = get(); el.setPointerCapture?.(e.pointerId);
-    el.classList.add('drag'); document.body.style.userSelect = 'none'; e.preventDefault();
-  });
-  el.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    if (Math.abs(e.clientX - sx) > 2) moved = true;
-    set(snap(sv + (e.clientX - sx) * sens));
-  });
-  const reset = () => { dragging = false; el.classList.remove('drag'); document.body.style.userSelect = ''; };
-  el.addEventListener('pointerup', () => { const wasDragging = dragging, didMove = moved; reset(); if (wasDragging && !didMove) editValue(); });
-  el.addEventListener('pointercancel', reset);
-  el.addEventListener('wheel', (e) => { if (valEl.isContentEditable) return; e.preventDefault(); set(snap(get() + (e.deltaY < 0 ? step : -step))); }, { passive: false });
-
-  function editValue() {
-    valEl.contentEditable = 'true'; valEl.classList.add('editing'); valEl.focus();
-    const r = document.createRange(); r.selectNodeContents(valEl);
-    const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
-    const commit = () => {
-      valEl.removeEventListener('blur', commit); valEl.removeEventListener('keydown', onKey);
-      valEl.contentEditable = 'false'; valEl.classList.remove('editing');
-      const n = parseFloat(valEl.textContent);
-      set(isNaN(n) ? get() : snap(n));                   // set() re-renders the label
-    };
-    const onKey = (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); valEl.blur(); }
-      else if (e.key === 'Escape') { e.preventDefault(); valEl.textContent = ''; valEl.blur(); }
-    };
-    valEl.addEventListener('blur', commit); valEl.addEventListener('keydown', onKey);
-  }
-}
+function setCps(v) { cps = Math.max(0.1, Math.min(2, v)); cpsLabel.textContent = cps.toFixed(2); if (cpsRange) cpsRange.value = cps; }
 
 // ⌘↵ to run, Tab → spaces, undo/redo, highlighting + scroll are all handled inside the
 // CodeMirror editor (see editor.js); no textarea event wiring needed here.
@@ -1547,15 +1511,20 @@ setPlaying(playing);
 function clearCanvas() { clearParticles(); ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H); }
 $('#clearbtn').addEventListener('click', clearCanvas);
 const decayLabel = $('#decayval');
-function setDecay(v) { decayScale = Math.max(0.25, Math.min(6, v)); decayLabel.textContent = decayScale % 1 ? decayScale.toFixed(2) : decayScale.toString(); }
-attachScrub($('#cpsnum'), { min: 0.1, max: 2, step: 0.05, get: () => cps, set: setCps });
-attachScrub($('#persistnum'), { min: 0.25, max: 6, step: 0.05, get: () => decayScale, set: setDecay });
-// double-click a number field to reset it to its default
-$('#cpsnum').addEventListener('dblclick', () => setCps(0.6));
-$('#persistnum').addEventListener('dblclick', () => setDecay(1.5));
+function setDecay(v) { decayScale = Math.max(0.25, Math.min(6, v)); decayLabel.textContent = decayScale % 1 ? decayScale.toFixed(2) : decayScale.toString(); if (decayRange) decayRange.value = decayScale; }
+// speed + decay are inline range sliders (same widget language as the editor's slider()).
+cpsRange.value = cps; decayRange.value = decayScale;
+cpsRange.addEventListener('input', () => setCps(+cpsRange.value));
+decayRange.addEventListener('input', () => setDecay(+decayRange.value));
+$('#cpssl').addEventListener('dblclick', () => setCps(0.6));      // double-click the row → default
+$('#decaysl').addEventListener('dblclick', () => setDecay(1.5));
 
 const clockBtn = $('#clockbtn');
-function renderClock() { clockBtn.classList.toggle('on', showClock); clockBtn.classList.toggle('off', !showClock); }
+const cycEl = document.querySelector('.cyc');   // the cycle readout rides with the playhead toggle
+function renderClock() {
+  clockBtn.classList.toggle('on', showClock); clockBtn.classList.toggle('off', !showClock);
+  if (cycEl) cycEl.style.display = showClock ? '' : 'none';   // hide the counter when the playhead is off
+}
 clockBtn.addEventListener('click', () => {
   showClock = !showClock;
   localStorage.setItem('loom.clock', showClock ? '1' : '0');
