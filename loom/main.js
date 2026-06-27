@@ -1599,10 +1599,8 @@ $('#presaveas').addEventListener('click', () => savePreset(true));   // always a
 // ── right sidebar (swappable presets / guide) ──
 const side = $('#side');
 const panes = [...side.querySelectorAll('.tabpane')];
-const sideTitle = $('#sidetitle');
 function showTab(name) {
   panes.forEach((p) => { p.hidden = p.dataset.pane !== name; });
-  if (sideTitle) sideTitle.textContent = name;   // the toolbar grid/?/antenna switch panes; this just names the open one
   if (name === 'feed') syncFeedUI();             // reflect current feed state into the controls
   localStorage.setItem('loom.sidetab', name);
 }
@@ -1748,9 +1746,22 @@ function setSide(open, tab) {
 const onTab = (name) => !side.classList.contains('hidden') && side.querySelector(`[data-pane="${name}"]:not([hidden])`);
 $('#panelbtn').addEventListener('click', () => setSide(!onTab('presets'), 'presets'));
 $('#helpbtn').addEventListener('click', () => setSide(!onTab('guide'), 'guide'));
-// fully hide all chrome (⌘/Ctrl+Shift+H or ⌘/Ctrl+.) so the drawing has the whole
-// screen; any of Escape / the same combo brings it back.
-function setChromeHidden(on) { document.body.classList.toggle('chrome-hidden', on); }
+// a transient toast (e.g. the "Esc to bring it back" hint when chrome hides)
+const toastEl = $('#toast');
+let toastT;
+function showToast(msg, dur = 2800) {
+  if (!toastEl) return;
+  toastEl.textContent = msg; toastEl.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), dur);
+}
+// fully hide all chrome (the hide button, ⌘/Ctrl+Shift+H or ⌘/Ctrl+.) so the drawing has the whole
+// screen; any of Escape / the same combo brings it back. A toast says how to get out.
+function setChromeHidden(on) {
+  document.body.classList.toggle('chrome-hidden', on);
+  if (on) showToast('Esc to bring back the controls');
+  else if (toastEl) { toastEl.classList.remove('show'); clearTimeout(toastT); }
+}
+$('#hidebtn').addEventListener('click', () => setChromeHidden(true));
 // Perform mode (⌘/Ctrl+Shift+E or the eye button): dim the editor + make it click-through, so
 // you can trigger mouseDown / drive the canvas without selecting code. Controls stay live.
 function setPerform(on) {

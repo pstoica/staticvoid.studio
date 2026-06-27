@@ -95,7 +95,7 @@ const loomTheme = EditorView.theme({
   // visible around the code instead of a full-panel wash. A faint shadow softens the edge.
   '.cm-line': {
     padding: '0 8px', margin: '0 8px', width: 'fit-content', maxWidth: 'calc(100% - 16px)', borderRadius: '3px',
-    backgroundColor: 'rgba(7,8,11,.42)', textShadow: '0 1px 3px rgba(2,3,5,.9), 0 0 2px rgba(2,3,5,.75)',
+    backgroundColor: 'rgba(7,8,11,.42)',   // the per-line box carries legibility; no text-shadow (it muddied the glyphs)
   },
   '.cm-activeLine': { backgroundColor: 'rgba(40,48,68,.42)' },          // current line: a touch lighter, same low weight (not an opaque block)
   // Selection is the NATIVE browser selection (no drawSelection layer) — it highlights the text

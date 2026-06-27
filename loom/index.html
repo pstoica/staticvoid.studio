@@ -71,6 +71,12 @@
   /* `#rail > *` / `#toolbar > *` re-enable pointer-events on children, so hidden chrome stayed
      interactable (the editor still caught the pointer). Disable everything when hidden. */
   body.chrome-hidden #rail > *, body.chrome-hidden #toolbar > * { pointer-events:none; }
+  /* transient toast (hint shown when chrome hides) — not part of the chrome, so it stays visible */
+  #toast { position:fixed; left:50%; bottom:38px; transform:translateX(-50%) translateY(6px); z-index:20;
+    background:rgba(10,10,12,.92); color:var(--ink); border:1px solid var(--line);
+    font:500 12px/1 var(--mono); letter-spacing:.03em; padding:11px 15px; white-space:nowrap;
+    opacity:0; pointer-events:none; transition:opacity .3s var(--ease), transform .3s var(--ease); }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
   /* Perform mode (⌘/Ctrl+Shift+E, or the perform button): ghost the CODE so the canvas reads,
      but keep the slider + badge widgets bright + LIVE — they're your performance controls.
      (Container opacity would cap the widgets, so we dim the text colour instead.) The editor is
@@ -246,12 +252,9 @@
     display:flex; flex-direction:column; background:rgba(13,13,14,.96); backdrop-filter:blur(10px);
     border-left:1px solid var(--line); box-shadow:-22px 0 60px rgba(0,0,0,.5); }
   #side.hidden { transform:translateX(100%); opacity:0; pointer-events:none; }
-  /* header band is sized to hold the floating toolbar that lands on top of it, so the toolbar
+  /* empty spacer band: sized to hold the floating toolbar that lands on top of it, so the toolbar
      never covers the pane content below. */
-  #side header { display:flex; align-items:center; min-height:54px; padding:0 16px; border-bottom:1px solid var(--line); }
-  /* pane title — names the open view (switched from the toolbar grid/?). Kept quiet so the
-     toolbar icons sitting beside it read as the controls. */
-  .sidetitle { font:600 11px/1 var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  #side header { min-height:54px; }
   .tabpane { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; padding:16px 18px 40px; }
   .tabpane[hidden] { display:none; }
   /* drag the left edge to resize the sidebar */
@@ -347,8 +350,6 @@
     /* sidebar = full-screen sheet on mobile: no awkward sliver, sticky header,
        a big obvious close, and no resize grabber (pointless on touch) */
     #side { width:100vw !important; max-width:100vw; border-left:0; }   /* override any saved drag-width */
-    #side header { position:sticky; top:0; background:rgba(6,7,10,.96); padding:0 16px; z-index:1; }
-    .sidetitle { font-size:12px; }
     .presrow .load { height:42px; font-size:13px; }
     #sidegrab { display:none; }   /* no edge-resize on touch */
   }
@@ -401,6 +402,8 @@
           <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg><span class="btxt">clock</span></button>
         <button class="btn" id="performbtn" title="perform — dim the editor so it's click-through; sliders stay live (⌘⇧E)">
           <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg><span class="btxt">perform</span></button>
+        <button class="btn" id="hidebtn" title="hide all chrome — give the drawing the whole screen (Esc to bring it back · ⌘.)">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3"/></svg><span class="btxt">hide</span></button>
         <span class="pair">
           <div class="num" id="cpsnum" title="drag ↔ or scroll · double-click to reset">speed <b id="cpsval">0.60</b></div>
           <div class="num" id="persistnum" title="drag ↔ or scroll · double-click to reset">decay <b id="decayval">1.5</b></div>
@@ -440,9 +443,8 @@
 
   <aside id="side">
     <div id="sidegrab" title="drag to resize"></div>
-    <header>
-      <span class="sidetitle" id="sidetitle">presets</span>
-    </header>
+    <!-- empty spacer: reserves clearance so the floating #toolbar never covers the pane below -->
+    <header></header>
 
     <div class="tabpane" data-pane="presets">
       <div id="presbar">
@@ -607,6 +609,9 @@
       </div>
     </div>
   </aside>
+
+  <!-- transient hint (e.g. on hide-chrome) — sits OUTSIDE the chrome so it shows as everything fades -->
+  <div id="toast"></div>
 
   <script type="module" src="./main.js"></script>
 </body>
