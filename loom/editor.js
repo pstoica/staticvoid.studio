@@ -112,6 +112,8 @@ const loomTheme = EditorView.theme({
     border: '1px solid rgba(181,140,255,.3)', borderRadius: '999px', minWidth: '1.6em', textAlign: 'center',
     textShadow: 'none',                                  // the badge has its own bg — the line's shadow just muddies it
   },
+  '.cm-loom-live-t': { transition: 'color .18s ease' },  // fade the contrast flip, like the smoothed bg
+  '.cm-loom-live-bool': { position: 'relative', top: '-1px', display: 'inline-block' },  // ●/○ ink sits ~1px low
 }, { dark: true });
 
 // ── inline slider widgets ───────────────────────────────────────────────────────────
@@ -235,14 +237,15 @@ function ensureLiveLoop() {
       // the badge lit instead of strobing value→0→value at every note-off (vel/note drop to 0).
       el._sv = (el._sv == null || v >= el._sv) ? v : el._sv + (v - el._sv) * 0.08;
       const sv = el._sv;
-      el.textContent = BOOL_SIGS.has(el.dataset.sig) ? (sv > 0.5 ? '●' : '○') : (+sv).toFixed(2);
+      el._t.textContent = BOOL_SIGS.has(el.dataset.sig) ? (sv > 0.5 ? '●' : '○') : (+sv).toFixed(2);
       // tint dark → light by magnitude (OKLCH) so it reads at a glance; abs() so bend (−1..1)
-      // still lights up. Flip the text colour for contrast against the changing background.
+      // still lights up. The contrast text colour is on the inner span, which CSS-transitions so
+      // it fades across the threshold to match the smoothed background instead of snapping.
       const t = Math.max(0, Math.min(1, Math.abs(sv)));
       const lum = 0.26 + t * 0.62;
       el.style.background = `oklch(${lum.toFixed(3)} 0.07 290)`;
       el.style.borderColor = `oklch(${Math.min(0.96, lum + 0.12).toFixed(3)} 0.09 290)`;
-      el.style.color = lum > 0.6 ? '#0a0a12' : '#e9e9ea';
+      el._t.style.color = lum > 0.6 ? '#0a0a12' : '#e9e9ea';
     }
     liveRAF = liveBadges.size ? requestAnimationFrame(tick) : 0;
   };
@@ -253,7 +256,10 @@ class LiveSigWidget extends WidgetType {
   eq(o) { return o.key === this.key; }
   toDOM() {
     const el = document.createElement('span');
-    el.className = 'cm-loom-live'; el.dataset.sig = this.name; el._args = this.args; el.textContent = '·';
+    el.className = 'cm-loom-live'; el.dataset.sig = this.name; el._args = this.args;
+    const t = document.createElement('span');                 // text on its own span: nudgeable + colour transitions
+    t.className = 'cm-loom-live-t' + (BOOL_SIGS.has(this.name) ? ' cm-loom-live-bool' : '');
+    t.textContent = '·'; el.appendChild(t); el._t = t;
     el.title = `${this.key} — live`;
     liveBadges.add(el); ensureLiveLoop();
     return el;
