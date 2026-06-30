@@ -29,6 +29,13 @@ const MESH_URLS = {
 const MESH_ID = { bong: 15, knot: 16, amongus: 17, balloons: 18, chain: 19 };  // shape ids >= 15
 const MESH_PRELOAD = ['bong'];   // fetched up front (the built-in preset uses it); rest load on first use
 const MAX_MESH = 1024;
+// A mesh only joins the cheap opaque batch (drawn BEHIND the translucent solos) once it
+// has been opaque for this many consecutive frames — i.e. genuinely SUSTAINED, not just
+// passing through alpha≈1 at an envelope peak. Without this, a glyph whose attack/decay
+// envelope touches 1.0 for a single frame flips into the batch for that one frame and
+// pops behind the whole translucent stack — a hard strobe when many overlap (the bong
+// preset: dozens of coincident meshes each blinking to the back at their brightness peak).
+const MESH_SOLID_FRAMES = 4;
 
 // flat instanced-mesh shaders: orthographic pixel→NDC projection (matching the
 // glyph billboard), per-instance tint (rgb + alpha), premultiplied output.
@@ -1179,7 +1186,8 @@ export class GLRenderer {
     let drew = 0;
 
     for (let i = 0; i < parts.length && drew < MAX_MESH; i++) {
-      resolve(parts[i], minDim, out);
+      const part = parts[i];
+      resolve(part, minDim, out);
       const entry = this.meshObjs[out.shape];
       if (!entry) { if (out.shape >= 15) this._ensureMesh(out.shape); continue; }  // lazy-load on first use
       this._euler.set(out.rotX, out.rotY, out.rot, 'XYZ');
@@ -1190,8 +1198,12 @@ export class GLRenderer {
       // mesh genuinely translucent while it fades, and the batch's depth pre-pass ignores
       // alpha — so a near-transparent instance batched as "opaque" would claim the depth
       // as frontmost yet paint nothing, punching a dark hole over the meshes behind it.
-      // Only fully-opaque instances (sustained, no envelope) go in the batch.
-      if (out.alpha >= 0.996) {                // opaque → instanced batch
+      // Only fully-opaque instances go in the batch — AND only once they've held opaque
+      // for a few frames (MESH_SOLID_FRAMES), so a one-frame envelope peak doesn't flip a
+      // glyph into the batch (behind the solos) for a single strobing frame. See the
+      // constant's note. Counter rides on the particle; reset the instant alpha drops.
+      part._meshSolid = out.alpha >= 0.996 ? (part._meshSolid || 0) + 1 : 0;
+      if (part._meshSolid >= MESH_SOLID_FRAMES) {  // sustained-opaque → instanced batch
         const b = entry.batch, n = b.count;
         if (n >= MAX_MESH) continue;
         b.setMatrixAt(n, this._m4);
