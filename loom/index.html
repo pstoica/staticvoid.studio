@@ -176,16 +176,18 @@
      (toolbar z-index sits above the panel). No docking shift. */
   #toolbar { position:fixed; top:10px; right:16px; z-index:7;
     display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px;
-    max-width:calc(100vw - 200px); pointer-events:none;
-    transition:opacity .55s var(--ease); }
+    max-width:calc(100vw - 200px); pointer-events:none; padding:5px;
+    background:rgba(12,13,16,.5); border:1px solid var(--line);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:opacity .55s var(--ease), background .3s var(--ease), border-color .3s var(--ease); }
   #toolbar > * { pointer-events:auto; }
+  /* panel open: the icons sit on the panel's own header band, so drop the tray (no double bg) */
+  body.side-open #toolbar { background:transparent; border-color:transparent; backdrop-filter:none; -webkit-backdrop-filter:none; }
   #toolbar.idle { opacity:.05; }
   #toolbar.idle:hover { opacity:1; }
-  /* light floating icons (Hydra-style): no box, a soft shadow keeps them legible
-     over any art. active/live states get a dark chip PLUS a light inset ring, so one
-     of the two always contrasts whether the art behind is dark or bright. */
-  #toolbar .btn { color:var(--ink); background:transparent; border-color:transparent; padding:9px;
-    filter:drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+  /* flat icons that read against the translucent tray (sidebar closed) or the panel header
+     (open) — no per-icon shadow. active/live states get a dark chip + light inset ring. */
+  #toolbar .btn { color:var(--ink); background:transparent; border-color:transparent; padding:9px; }
   #toolbar .btn:hover { background:rgba(255,255,255,.12); border-color:transparent; }
   #toolbar .btn.on, #playbtn.live { color:var(--ink); background:rgba(0,0,0,.5); filter:none;
     box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.65); }

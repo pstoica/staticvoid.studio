@@ -95,7 +95,9 @@ const loomTheme = EditorView.theme({
   // visible around the code instead of a full-panel wash. Square corners (no radius) — the
   // rounded ones scalloped the aligned left edge and clashed with the app's sharp chrome.
   '.cm-line': {
-    padding: '0 8px', margin: '0 8px', width: 'fit-content', maxWidth: 'calc(100% - 16px)',
+    // no LEFT margin: the box's left edge lands on the rail's 22px content column (brand /
+    // transport / footer all sit there) instead of 8px inside it. right margin stays for breathing.
+    padding: '0 8px', margin: '0 8px 0 0', width: 'fit-content', maxWidth: 'calc(100% - 8px)',
     backgroundColor: 'rgba(7,8,11,.42)',   // the per-line box carries legibility; no text-shadow (it muddied the glyphs)
   },
   '.cm-activeLine': { backgroundColor: 'rgba(40,48,68,.42)' },          // current line: a touch lighter, same low weight (not an opaque block)
