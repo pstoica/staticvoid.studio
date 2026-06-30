@@ -95,6 +95,11 @@
   body.perform #editwrap .cm-loom-slider { pointer-events:auto; opacity:.3; transition:opacity .15s var(--ease); }
   body.perform #editwrap .cm-loom-slider:hover { opacity:1; }
   body.perform #editwrap .cm-loom-live { opacity:.4; }
+  /* hovering an inline slider lights up its WHOLE line so you can read the param it drives —
+     a bg highlight in normal edit, and in perform mode it un-ghosts the line's text + box. */
+  #editwrap .cm-line:has(.cm-loom-slider:hover) { background:rgba(40,48,68,.42); }
+  body.perform #editwrap .cm-line:has(.cm-loom-slider:hover) { background:rgba(7,8,11,.5); }
+  body.perform #editwrap .cm-line:has(.cm-loom-slider:hover) span:not(.cm-loom-slider):not(.cm-loom-live) { color:var(--ink) !important; }
 
   #brand { display:flex; align-items:baseline; gap:10px; padding:18px 22px 12px; }
   #brand h1 { font-family:"Unbounded",var(--font); font-weight:700; font-size:19px; margin:0;
@@ -475,7 +480,7 @@
         <span class="tgroup modes">
           <button class="btn mode" id="clockbtn" title="toggle the cycle playhead">
             <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg><span class="btxt">clock</span></button>
-          <button class="btn mode" id="performbtn" title="perform — dim the editor so it's click-through; sliders stay live (⌘⇧E)">
+          <button class="btn mode" id="performbtn" title="perform — ghost the editor (click-through), sliders stay live · ⌘⇧E">
             <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg><span class="btxt">perform</span></button>
           <button class="btn mode" id="hidebtn" title="hide all chrome — give the drawing the whole screen (Esc to bring it back · ⌘.)">
             <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3"/></svg><span class="btxt">hide</span></button>

@@ -1755,6 +1755,18 @@ function setPerform(on) {
   $('#editwrap').style.pointerEvents = on ? 'none' : '';
 }
 const togglePerform = () => setPerform(!document.body.classList.contains('perform'));
+// perform mode makes the editor click-through (pointer-events:none), which also kills wheel
+// scrolling. Re-add scrolling WITHOUT re-enabling clicks: catch wheel events over the editor
+// region and drive the CM scroller manually (clicks still pass through to the canvas).
+window.addEventListener('wheel', (e) => {
+  if (!document.body.classList.contains('perform')) return;          // normal mode scrolls natively
+  const wrap = $('#editwrap'), r = wrap.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+  const scroller = wrap.querySelector('.cm-scroller');
+  if (!scroller || scroller.scrollHeight <= scroller.clientHeight) return;
+  scroller.scrollTop += e.deltaY; scroller.scrollLeft += e.deltaX;
+  e.preventDefault();
+}, { passive: false });
 document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && (e.key === '.' || ((e.shiftKey) && (e.key === 'H' || e.key === 'h')))) {
     e.preventDefault(); setChromeHidden(!document.body.classList.contains('chrome-hidden')); return;
