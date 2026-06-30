@@ -95,8 +95,11 @@
   body.perform #editwrap .cm-loom-slider { pointer-events:auto; opacity:.3; transition:opacity .15s var(--ease); }
   body.perform #editwrap .cm-loom-slider:hover { opacity:1; }
   body.perform #editwrap .cm-loom-live { opacity:.4; }
+  /* in perform mode a slider line keeps its LABEL readable (not ghosted) — so you can see which
+     control is which at a glance, not just the bare slider widget. (the rest of the code stays ghosted.) */
+  body.perform #editwrap .cm-line:has(.cm-loom-slider) span:not(.cm-loom-slider):not(.cm-loom-live) { color:rgba(233,233,234,.62) !important; }
   /* hovering an inline slider lights up its WHOLE line so you can read the param it drives —
-     a bg highlight in normal edit, and in perform mode it un-ghosts the line's text + box. */
+     a bg highlight in normal edit, and in perform mode it fully un-ghosts the line's text + box. */
   #editwrap .cm-line:has(.cm-loom-slider:hover) { background:rgba(40,48,68,.42); }
   body.perform #editwrap .cm-line:has(.cm-loom-slider:hover) { background:rgba(7,8,11,.5); }
   body.perform #editwrap .cm-line:has(.cm-loom-slider:hover) span:not(.cm-loom-slider):not(.cm-loom-live) { color:var(--ink) !important; }
@@ -147,30 +150,30 @@
      renders the coloured code, floating directly on the visuals (no box). */
   /* the editor (CodeMirror 6) floats over the canvas; token colours + look live in
      editor.js (theme + highlight), reusing the --t-* vars above. */
-  /* left margin pulled in ~12px (vs the 22px rail column) so the LEFT scrollbar gutter lives in
-     that 10–22 band and the code itself still lands on the 22px column (aligned with the brand). */
-  #editwrap { flex:1; min-height:0; margin:2px 22px 0 10px; font-weight:500; transition:opacity .3s var(--ease); }
+  #editwrap { flex:1; min-height:0; margin:2px 22px 0; font-weight:500; transition:opacity .3s var(--ease); }
   #editwrap .cm-editor { height:100%; background:transparent; }
   #editwrap .cm-scroller { font-weight:500; }
-  /* designed scrollbar for the code editor, on the LEFT (the screen-edge side of the left-docked
-     editor). rtl flips the bar left; the CM content is forced back to ltr so code lays out normally.
-     (no scrollbar-width here — when the standard prop is set, modern Chrome ignores ::-webkit-
-     scrollbar and falls back to a thin auto-hiding overlay.) */
-  #editwrap .cm-scroller { direction:rtl; }
-  #editwrap .cm-content { direction:ltr; }
   #editwrap .cm-scroller::-webkit-scrollbar { width:12px; }
   #editwrap .cm-scroller::-webkit-scrollbar-button { display:none; }   /* no arrow caps (the "mismatched" top/bottom bits) */
-  /* fade out when unused: transparent track + thumb by default, revealed only while scrolling
-     (.scrolling toggled by JS, ~0.9s idle timeout). The dark rail keeps the thumb legible over
-     art, but only while it's up. (transition is best-effort — Chrome may snap scrollbar pseudos.) */
-  #editwrap .cm-scroller::-webkit-scrollbar-track { background:transparent; transition:background .35s var(--ease); }
-  #editwrap .cm-scroller::-webkit-scrollbar-thumb { background:transparent; border:3px solid transparent;
+  /* faint ALWAYS (never fully vanish — accessibility), brighter while scrolling (.scrolling via JS).
+     a dark rail keeps the thumb legible over art. (transition is best-effort on scrollbar pseudos.) */
+  #editwrap .cm-scroller::-webkit-scrollbar-track { background:rgba(8,9,12,.18); transition:background .35s var(--ease); }
+  #editwrap .cm-scroller::-webkit-scrollbar-thumb { background:rgba(255,255,255,.14); border:3px solid transparent;
     background-clip:padding-box; transition:background .35s var(--ease); }
-  #editwrap .cm-scroller.scrolling::-webkit-scrollbar-track { background:rgba(8,9,12,.36); }
-  #editwrap .cm-scroller.scrolling::-webkit-scrollbar-thumb { background:rgba(255,255,255,.34); }
-  #editwrap .cm-scroller.scrolling::-webkit-scrollbar-thumb:active { background:rgba(255,255,255,.55); }
-  /* native text selection — a translucent highlight on the glyphs, so text stays readable */
-  #editwrap .cm-content ::selection, #editwrap .cm-line::selection, #editwrap ::selection { background:rgba(120,150,255,.45); }
+  #editwrap .cm-scroller.scrolling::-webkit-scrollbar-track { background:rgba(8,9,12,.4); }
+  #editwrap .cm-scroller.scrolling::-webkit-scrollbar-thumb { background:rgba(255,255,255,.4); }
+  #editwrap .cm-scroller.scrolling::-webkit-scrollbar-thumb:active { background:rgba(255,255,255,.6); }
+  /* the LEFT-scrollbar treatment is DESKTOP-only: rtl flips the bar to the screen-edge side, but it
+     breaks touch scrolling. Gate on desktop WIDTH (≥761, past the mobile-sheet breakpoint) AND a
+     fine pointer, so phones/tablets keep a normal touch-scrolling editor. */
+  @media (min-width: 761px) and (pointer: fine) {
+    #editwrap { margin-left:10px; }            /* pull in ~12px so the gutter sits in the 10–22 band, code stays on 22 */
+    #editwrap .cm-scroller { direction:rtl; }
+    #editwrap .cm-content { direction:ltr; }   /* keep code ltr under the rtl scroller */
+  }
+  /* native text selection — a DARK highlight so selected text always has a contrast fallback,
+     even over a white bg() patch (the old translucent blue washed out). */
+  #editwrap .cm-content ::selection, #editwrap .cm-line::selection, #editwrap ::selection { background:rgba(18,22,33,.92); }
   /* inline slider() widget: native range, accent-color set per value (tints by magnitude;
      fills the lower track in Chrome so position reads too). The accent is overridden inline. */
   .cm-loom-slider input[type=range] { width:82px; height:13px; cursor:ew-resize; vertical-align:middle; accent-color:var(--t-ctrl); }
@@ -329,15 +332,17 @@
      so the scrollbar lives ONLY beside the body and never runs through the sticky header. */
   .tabpane { flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
   .tabpane[hidden] { display:none; }
-  /* the scrolling body — content padding lives here, and the custom (right-aligned, fading) bar */
-  .panescroll { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; padding:16px 18px 40px; }
+  /* the scrolling body — content padding lives here (NO top padding: the sticky section heads
+     stick flush at the body top, so content can't peek through a transparent gap above them). */
+  .panescroll { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; padding:0 18px 40px; }
   .panescroll::-webkit-scrollbar { width:12px; }
   .panescroll::-webkit-scrollbar-button { display:none; }
-  .panescroll::-webkit-scrollbar-track { background:transparent; transition:background .35s var(--ease); }
-  .panescroll::-webkit-scrollbar-thumb { background:transparent; border:3px solid transparent;
+  .panescroll::-webkit-scrollbar-track { background:transparent; }
+  /* faint ALWAYS (never fully vanish — accessibility), brighter while scrolling */
+  .panescroll::-webkit-scrollbar-thumb { background:rgba(255,255,255,.12); border:3px solid transparent;
     background-clip:padding-box; transition:background .35s var(--ease); }
-  .panescroll.scrolling::-webkit-scrollbar-thumb { background:rgba(255,255,255,.28); }
-  .panescroll.scrolling::-webkit-scrollbar-thumb:active { background:rgba(255,255,255,.5); }
+  .panescroll.scrolling::-webkit-scrollbar-thumb { background:rgba(255,255,255,.34); }
+  .panescroll.scrolling::-webkit-scrollbar-thumb:active { background:rgba(255,255,255,.55); }
   /* drag the left edge to resize the sidebar */
   #sidegrab { position:absolute; left:-1px; top:0; bottom:0; width:12px; z-index:7;
     cursor:ew-resize; display:flex; align-items:center; justify-content:center; touch-action:none; }
@@ -545,9 +550,8 @@
 
     <div class="tabpane" data-pane="presets">
       <div id="presbar">
-        <button class="btn mini" id="prenew" title="start a fresh default patch">+ new</button>
-        <button class="btn mini" id="presave" title="save — overwrite the preset you're editing, or name a new one">save</button>
-        <button class="btn mini" id="presaveas" title="save as — always a new preset copy">save as</button>
+        <!-- new + save live in the floating toolbar (top-right); only "save as" (force a new copy) is unique here -->
+        <button class="btn mini" id="presaveas" title="save the current patch as a NEW preset copy">save as</button>
       </div>
       <div id="preslist" class="panescroll"></div>
     </div>

@@ -100,7 +100,7 @@ const loomTheme = EditorView.theme({
     padding: '0 8px', margin: '0 8px 0 0', width: 'fit-content', maxWidth: 'calc(100% - 8px)',
     backgroundColor: 'rgba(7,8,11,.42)',   // the per-line box carries legibility; no text-shadow (it muddied the glyphs)
   },
-  '.cm-activeLine': { backgroundColor: 'rgba(40,48,68,.42)' },          // current line: a touch lighter, same low weight (not an opaque block)
+  '.cm-activeLine': { backgroundColor: 'rgba(14,17,26,.72)' },          // current line: a DARK backing so its text reads even over a white bg() patch (was a washed-out translucent blue)
   // Selection is the NATIVE browser selection (no drawSelection layer) — it highlights the text
   // glyphs inline, so the text stays visible and it layers correctly over the per-line box
   // (a drawSelection layer either hid behind the box = "opaque", or above the text = hid it).

@@ -1562,7 +1562,6 @@ function newPatch() {
   if (isMobile()) setSide(false);
 }
 $('#newbtn').addEventListener('click', newPatch);
-$('#prenew').addEventListener('click', newPatch);   // the in-panel "+ new" button
 
 // save story: "save" commits to the preset you're editing (silent overwrite) — or, if you're on a
 // built-in / fresh patch, prompts for a name. "save as" always prompts for a new copy.
@@ -1575,14 +1574,13 @@ function savePreset(forceNew) {
   rebuildPresetList(); setActive('u:' + name); syncURL(); flashSaved();
 }
 function flashSaved() {
-  const b = $('#presave'); if (!b) return;
+  const b = $('#presaveas'); if (!b) return;   // brief "saved ✓" on the in-panel save-as button
   const t = b.dataset.label || (b.dataset.label = b.textContent);
   b.textContent = 'saved ✓'; clearTimeout(b._t);
   b._t = setTimeout(() => { b.textContent = t; }, 900);
 }
-$('#savebtn').addEventListener('click', () => savePreset(false));
-$('#presave').addEventListener('click', () => savePreset(false));    // in-panel save (overwrite current)
-$('#presaveas').addEventListener('click', () => savePreset(true));   // always a new copy
+$('#savebtn').addEventListener('click', () => savePreset(false));   // floating save (overwrite / prompt)
+$('#presaveas').addEventListener('click', () => savePreset(true));  // in-panel: always a new copy
 // the presets toolbar is sticky; section heads stick just below it (offset = its height)
 { const pb = $('#presbar');
   if (pb) new ResizeObserver(() => document.documentElement.style.setProperty('--presbar-h', pb.offsetHeight + 'px')).observe(pb); }
