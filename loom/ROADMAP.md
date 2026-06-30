@@ -71,6 +71,7 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
      texture" plumbing as sourcing — just consumed as a mask channel in the composite rather
      than a blend input — so build the bus-as-source primitive first and masking falls out of it.
      Smallest viable cut: `src(layer)` / `.mask(layer)` reading another `$`-layer's render target.
+     **Design draft + resolved decisions in [`MASKING.md`](MASKING.md).**
 
 6. **Scene mixer (VJ).** On top of buses: hold N patches as scenes (each → a bus) and
    **crossfade/blend** between them (A/B crossfader, or a 4-up grid), with per-layer mute/solo
