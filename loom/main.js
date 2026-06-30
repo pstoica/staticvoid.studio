@@ -1532,9 +1532,12 @@ $('#decaysl').addEventListener('dblclick', () => setDecay(1.5));
 
 const clockBtn = $('#clockbtn');
 const cycEl = document.querySelector('.cyc');   // the cycle readout rides with the playhead toggle
+const cycSep = cycEl && cycEl.previousElementSibling;   // the divider that leads it — hide it together
 function renderClock() {
   clockBtn.classList.toggle('on', showClock); clockBtn.classList.toggle('off', !showClock);
-  if (cycEl) cycEl.style.display = showClock ? '' : 'none';   // hide the counter when the playhead is off
+  const d = showClock ? '' : 'none';   // hide the counter (and its leading divider) when the playhead is off
+  if (cycEl) cycEl.style.display = d;
+  if (cycSep && cycSep.classList.contains('tbsep')) cycSep.style.display = d;
 }
 clockBtn.addEventListener('click', () => {
   showClock = !showClock;

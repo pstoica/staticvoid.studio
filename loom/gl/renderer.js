@@ -866,12 +866,12 @@ export class GLRenderer {
     this._meshLoading = new Set();
     for (const name of MESH_PRELOAD) this._ensureMesh(MESH_ID[name]);
 
-    // overlay scene (playhead + trace), drawn behind the glyphs with the ortho
-    // camera (which maps pixel-space world coords → NDC). Both are thin lines.
+    // overlay scene (playhead + trace), drawn ON TOP of the glyphs (see render()) with the
+    // ortho camera (which maps pixel-space world coords → NDC). Both are thin lines.
     this.overlay = new THREE.Scene();
     const playGeom = new THREE.BufferGeometry();
     playGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-    this.playhead = new THREE.Line(playGeom, new THREE.LineBasicMaterial({ color: 0x9db4ff, transparent: true, opacity: 0.18, depthTest: false, depthWrite: false }));
+    this.playhead = new THREE.Line(playGeom, new THREE.LineBasicMaterial({ color: 0x9db4ff, transparent: true, opacity: 0.3, depthTest: false, depthWrite: false }));
     this.playhead.frustumCulled = false; this.playhead.visible = false;
     this.overlay.add(this.playhead);
 
@@ -1031,10 +1031,11 @@ export class GLRenderer {
     this._cycle = state ? state.cycle || 0 : 0;
     this._elapsed = state ? state.elapsed || 0 : 0;
 
-    // overlays first (behind the glyphs): playhead sweep + trace polyline
+    // playhead + trace: update geometry now, but render LAST so the clock sweep reads as a
+    // translucent layer ON TOP of the art instead of buried behind the glyphs.
     this._updateOverlays(state, live);
-    if (this.playhead.visible || this.trace.visible) r.render(this.overlay, this.camera);
-    if (!live.length) { this._pruneGroups(null); return; }
+    const drawOverlay = () => { if (this.playhead.visible || this.trace.visible) r.render(this.overlay, this.camera); };
+    if (!live.length) { this._pruneGroups(null); drawOverlay(); return; }
 
     const ungrouped = [];
     const groups = new Map();   // gid → { parts, fx }, in first-seen (age) order
@@ -1052,6 +1053,7 @@ export class GLRenderer {
       this._composite(tex, g.fx);
     }
     this._pruneGroups(groups);
+    drawOverlay();   // clock sweep / trace on top of all the art
   }
 
   // draw a glyph list (blend-bucketed, age order preserved) into `target`
