@@ -92,9 +92,10 @@ const loomTheme = EditorView.theme({
   '.cm-scroller': { fontFamily: 'var(--mono)', fontSize: '15px', lineHeight: '1.65', overflow: 'auto' },
   '.cm-content': { padding: '4px 0', letterSpacing: '.01em', caretColor: '#ffd166', caretWidth: '2px' },
   // per-line dark box that hugs the text (fit-content → ragged right), so the canvas stays
-  // visible around the code instead of a full-panel wash. A faint shadow softens the edge.
+  // visible around the code instead of a full-panel wash. Square corners (no radius) — the
+  // rounded ones scalloped the aligned left edge and clashed with the app's sharp chrome.
   '.cm-line': {
-    padding: '0 8px', margin: '0 8px', width: 'fit-content', maxWidth: 'calc(100% - 16px)', borderRadius: '3px',
+    padding: '0 8px', margin: '0 8px', width: 'fit-content', maxWidth: 'calc(100% - 16px)',
     backgroundColor: 'rgba(7,8,11,.42)',   // the per-line box carries legibility; no text-shadow (it muddied the glyphs)
   },
   '.cm-activeLine': { backgroundColor: 'rgba(40,48,68,.42)' },          // current line: a touch lighter, same low weight (not an opaque block)
