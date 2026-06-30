@@ -1852,7 +1852,9 @@ function feedPointer(e) {
 // whole screen becomes a clean trigger surface (presses then land on the canvas, not #rail).
 const onChrome = (e) => !!(e.target && e.target.closest && e.target.closest('#rail, #toolbar, #side'));
 window.addEventListener('pointermove', feedPointer, { passive: true });
-window.addEventListener('pointerdown', (e) => { feedPointer(e); if (!onChrome(e)) { pointerState.down = 1; syncPointer(); } }, { passive: true });
+// mouseDown fires on a bare canvas press — OR a ⌘/⌥(super/option)-press anywhere, so you can
+// trigger it while your cursor is parked over the editor (a plain editor click just edits).
+window.addEventListener('pointerdown', (e) => { feedPointer(e); if (!onChrome(e) || e.metaKey || e.altKey) { pointerState.down = 1; syncPointer(); } }, { passive: true });
 window.addEventListener('pointerup', () => { pointerState.down = 0; syncPointer(); }, { passive: true });
 window.addEventListener('pointercancel', () => { pointerState.down = 0; syncPointer(); }, { passive: true });
 

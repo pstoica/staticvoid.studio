@@ -142,9 +142,25 @@
      renders the coloured code, floating directly on the visuals (no box). */
   /* the editor (CodeMirror 6) floats over the canvas; token colours + look live in
      editor.js (theme + highlight), reusing the --t-* vars above. */
-  #editwrap { flex:1; min-height:0; margin:2px 22px 0; font-weight:500; transition:opacity .3s var(--ease); }
+  /* left margin pulled in ~12px (vs the 22px rail column) so the LEFT scrollbar gutter lives in
+     that 10–22 band and the code itself still lands on the 22px column (aligned with the brand). */
+  #editwrap { flex:1; min-height:0; margin:2px 22px 0 10px; font-weight:500; transition:opacity .3s var(--ease); }
   #editwrap .cm-editor { height:100%; background:transparent; }
   #editwrap .cm-scroller { font-weight:500; }
+  /* designed scrollbar for the code editor, on the LEFT (the screen-edge side of the left-docked
+     editor). rtl flips the bar left; the CM content is forced back to ltr so code lays out normally.
+     (no scrollbar-width here — when the standard prop is set, modern Chrome ignores ::-webkit-
+     scrollbar and falls back to a thin auto-hiding overlay.) */
+  #editwrap .cm-scroller { direction:rtl; }
+  #editwrap .cm-content { direction:ltr; }
+  #editwrap .cm-scroller::-webkit-scrollbar { width:12px; }
+  /* a slim dark rail so the thumb keeps contrast over ANY art (the editor bg is transparent —
+     a white thumb on a clear track vanished over bright patches). */
+  #editwrap .cm-scroller::-webkit-scrollbar-track { background:rgba(8,9,12,.36); }
+  #editwrap .cm-scroller::-webkit-scrollbar-thumb { background:rgba(255,255,255,.3); border:3px solid transparent;
+    background-clip:padding-box; transition:background .15s var(--ease); }
+  #editwrap .cm-scroller:hover::-webkit-scrollbar-thumb { background:rgba(255,255,255,.46); background-clip:padding-box; }
+  #editwrap .cm-scroller::-webkit-scrollbar-thumb:active { background:rgba(255,255,255,.6); background-clip:padding-box; }
   /* native text selection — a translucent highlight on the glyphs, so text stays readable */
   #editwrap .cm-content ::selection, #editwrap .cm-line::selection, #editwrap ::selection { background:rgba(120,150,255,.45); }
   /* inline slider() widget: native range, accent-color set per value (tints by magnitude;
@@ -302,21 +318,6 @@
      never covers the pane content below. */
   #side header { min-height:54px; }
   .tabpane { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; padding:16px 18px 40px; }
-  /* designed scrollbar, rendered on the LEFT (the canvas-facing edge of the right-docked panel)
-     so it frames the panel against the art instead of reading as default chrome. direction:rtl
-     flips the bar to the left; children reset to ltr so content lays out normally.
-     IMPORTANT: do NOT set scrollbar-width/-color here — when the standard props are present,
-     modern Chrome ignores ::-webkit-scrollbar and falls back to a thin auto-hiding overlay
-     (reads as "no scrollbar" + can't grab it). The webkit pseudo-elements force an always-on,
-     styled, grabbable bar. */
-  .tabpane { direction:rtl; }
-  .tabpane > * { direction:ltr; }
-  .tabpane::-webkit-scrollbar { width:13px; }
-  .tabpane::-webkit-scrollbar-track { background:rgba(255,255,255,.03); }
-  .tabpane::-webkit-scrollbar-thumb { background:rgba(255,255,255,.22); border:3px solid transparent;
-    background-clip:padding-box; transition:background .15s var(--ease); }
-  .tabpane:hover::-webkit-scrollbar-thumb { background:rgba(255,255,255,.36); background-clip:padding-box; }
-  .tabpane::-webkit-scrollbar-thumb:active { background:rgba(255,255,255,.5); background-clip:padding-box; }
   .tabpane[hidden] { display:none; }
   /* drag the left edge to resize the sidebar */
   #sidegrab { position:absolute; left:-1px; top:0; bottom:0; width:12px; z-index:7;
