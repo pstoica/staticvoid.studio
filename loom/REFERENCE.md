@@ -271,6 +271,20 @@ straight line. The envelope drives per-glyph **alpha** (`0..1`), so overshooting
 feel of the fade, not its brightness. *(A future option may route the overshoot into a
 size pop for a true bounce-in.)*
 
+**`env(attack, decay, easeIn?, easeOut?)`** is that same attack/decay shape as a *signal* you
+can route into **any** param (not just the lifetime alpha). It ramps `0→1` over `attack`
+seconds, then `1→0` over `decay` seconds — in real time, keyed to the glyph's age — each
+segment optionally eased. It's osc-family, so it animates over the glyph's life (a plain
+signal would freeze at onset) and composes with `.range()`, `.add()`, `.spring()`, etc.
+
+```js
+shape("bong").size(env(0.2, 1, "outBack").range(0.05, 0.25))   // size pops in, then settles
+shape("ring").weight(env(0.3, 0.8).range(0.002, 0.02))         // a line that swells then thins
+```
+
+For **opacity**, prefer `.decay(s, curve)` above — it shapes the lifetime fade directly. Alpha
+is *also* multiplied by the lifetime envelope, so `.alpha(env(...))` compounds the two curves.
+
 The **decay** slider in the transport is a master multiplier baked into each
 glyph *at spawn*, moving it only affects glyphs drawn afterward, never ones
 already on screen. The **clock** button toggles the sweeping cycle playhead, and

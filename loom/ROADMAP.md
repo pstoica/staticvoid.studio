@@ -115,12 +115,13 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
 
 ## Backlog / jot-down (not now)
 
-- **Per-param envelopes — `env()`.** An attack/decay envelope as an *age-driven signal*
-  (osc-family, so it animates over the glyph's life and survives live cps changes), routable
-  into any param and composing with `.range()`/`.ease()`: `env(attack, decay, easeIn?, easeOut?)`.
-  Generalises the lifetime envelope's easing (which `.attack/.decay`'s 2nd arg already gives for
-  alpha) to *any* param. Contained add (a new osc-family source in `pattern.js`). Chosen over
-  callbacks (a callback breaks the everything-is-a-signal model + doesn't compose). Design ✅, build TODO.
+- **Per-param envelopes — `env()`.** ✅ **Done.** `env(attack, decay, easeIn?, easeOut?)` — an
+  attack/decay envelope as an *age-driven signal* (osc-family, so it animates over the glyph's
+  life), routable into any param and composing with `.range()`/`.add()`/`.spring()`. Implemented
+  as an `env` slot on the osc descriptor (`pattern.js`); `evalOsc` (`main.js`) reads the glyph's
+  real-time age before the periodic-shape branch; `freezeOscParams` freezes signal-valued
+  attack/decay at onset. Chosen over callbacks (which break the everything-is-a-signal model).
+  For alpha, `.decay(s, curve)` is still the tool — alpha is also × the lifetime envelope.
 - **Copying / clone.** A first-class way to fork a source through *parallel* FX. Possible today
   via `stack(group(src).fxA, group(src).fxB)` (each `group()` = its own FX bus); wants a tidier
   clone verb. Note: meshes are all at `z=0` (no DSL depth), so copies separate only in x/y.

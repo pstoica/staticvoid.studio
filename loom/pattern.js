@@ -581,6 +581,19 @@ function makeOsc(o) {
 }
 const isOsc = (a) => a != null && typeof a === 'object' && a.__osc !== undefined;
 
+// ── env: a per-glyph attack/decay ENVELOPE, as an osc-family signal ───────────────
+// env(attack, decay, easeIn?, easeOut?) ramps 0→1 over `attack` seconds, then 1→0 over
+// `decay` seconds (REAL time, like a free osc), each segment optionally shaped by a Penner
+// curve. Because it's osc-family it ANIMATES over the glyph's life (a plain signal would
+// freeze at onset) and routes into ANY param + composes with .range()/.add()/.spring()/etc.
+//   .size(env(0.2, 1, "outBack").range(0.05, 0.25))   // size pops in (overshoot) then settles
+//   .weight(env(0.3, 0.8).range(0.002, 0.02))         // a line that swells then thins
+// For OPACITY prefer `.decay(t, curve)` — that shapes the lifetime fade directly; alpha is
+// additionally multiplied by the lifetime envelope, so `.alpha(env(...))` compounds the two.
+function env(attack = 0.1, decay = 1, easeIn, easeOut) {
+  return makeOsc({ env: { a: attack, d: decay, ei: easeIn, eo: easeOut }, lo: 0, hi: 1 });
+}
+
 // ── spring: a STATEFUL value modifier ────────────────────────────────────────────
 // Unlike a signal/osc (pure functions of time, frozen or live) a spring has state —
 // velocity + current value — that the renderer integrates toward a TARGET every frame,
@@ -965,7 +978,7 @@ function rev(p) { return reify(p).rev(); }
 export const DSL = {
   Pattern, pure, silence, stack, slowcat, fastcat, cat, seq, sequence, timecat,
   fast, slow, rev, run, range, mini, euclid,
-  shape, s, n, choose, irand, pick, iff, osc, palette, bg, group, echo, spring, physics, slider, _setBgSink,
+  shape, s, n, choose, irand, pick, iff, osc, env, palette, bg, group, echo, spring, physics, slider, _setBgSink,
   $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   mouseX, mouseY, mouseDown, _setPointer,

@@ -594,6 +594,7 @@
         <code>osc(…).drift(r)</code><p>starting phase advances over time = r × spawn seconds, so the pattern keeps <em>evolving</em> instead of repeating</p>
         <code>osc(2).rate(osc(0.1).range(1,4))</code><p>any osc param (rate · phase · range) can itself be an osc → cross-modulation (FM · PM · AM)</p>
         <code>.x(osc(0.2, "perlin").range(0, 1))</code><p>← a wandering dot</p>
+        <code>env(attack, decay, easeIn?, easeOut?)</code><p>per-glyph attack/decay <em>envelope</em> as a signal (osc-family, so it animates over the glyph's life): <code>0→1</code> over <em>attack</em>s, then <code>1→0</code> over <em>decay</em>s, each segment optionally eased. route into <em>any</em> param: <code>.size(env(0.2, 1, "outBack").range(0.05, 0.25))</code> pops in then settles. (for opacity use <code>.decay(s, curve)</code> — alpha is also × the lifetime envelope)</p>
         <code>.range(lo, hi)</code><p>remap a 0..1 signal, lo/hi may be numbers, patterns, or oscs</p>
         <code>.quantize(n) .segment(n)</code><p>snap the <em>value</em> to n steps · snap the <em>time</em> to n steps/cycle (alias <code>.seg</code>)</p>
         <code>.ease("outExpo")</code><p>shape a 0..1 signal/osc through a Penner curve <em>before</em> <code>.range()</code> — in/out/inOut × quad·cubic·quart·expo·sine·back·elastic·bounce. <code>saw.ease("outExpo").range(0,1)</code></p>

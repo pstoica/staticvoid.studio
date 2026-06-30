@@ -360,21 +360,31 @@ function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
   // cycle — passed by live callers so a tempo change doesn't retroactively warp anything;
   // they fall back to age*cps for frozen/initial evaluation. .free() switches back to real
   // seconds (rate in Hz). phase/spread are already cycle-relative, so they're unscaled.
-  const trun = d.free ? age : (ageC != null ? ageC : age * cps);
-  const tdrift = d.free ? st : (stC != null ? stC : st * cps);
-  const rate = numAt(d.rate, age, gp, st, ageC, stC);
-  const t = trun * rate + numAt(d.phase || 0, age, gp, st, ageC, stC) + numAt(d.spread || 0, age, gp, st, ageC, stC) * gp + numAt(d.drift || 0, age, gp, st, ageC, stC) * tdrift;
-  const f = t - Math.floor(t);
   let v;
-  switch (d.shape) {
-    case 'saw': v = f; break;
-    case 'isaw': v = 1 - f; break;
-    case 'tri': v = f < 0.5 ? f * 2 : 2 - f * 2; break;
-    case 'square': v = f < 0.5 ? 0 : 1; break;
-    case 'rand': v = _h1(Math.floor(t)); break;          // stepped, per cycle
-    case 'perlin': case 'noise': v = _snoise(t); break;  // smooth, lively
-    case 'fbm': v = _fbm(t); break;                       // organic, multi-octave
-    default: v = (Math.sin(TAU * t) + 1) / 2;             // sine
+  if (d.env) {
+    // attack/decay envelope keyed to the glyph's REAL-time age (seconds): 0→1 over `a`,
+    // then 1→0 over `de`, each segment optionally Penner-eased. Animates over the glyph's
+    // life like an osc; routes into any param. (alpha is also × the lifetime envelope.)
+    const a = numAt(d.env.a, age, gp, st, ageC, stC), de = numAt(d.env.d, age, gp, st, ageC, stC);
+    if (age < a) { const tt = a > 0 ? age / a : 1; v = d.env.ei ? applyEase(d.env.ei, tt) : tt; }
+    else { const tt = de > 0 ? (age - a) / de : 1; const rem = tt < 1 ? 1 - tt : 0; v = d.env.eo ? applyEase(d.env.eo, rem) : rem; }
+    v = v < 0 ? 0 : v > 1 ? 1 : v;
+  } else {
+    const trun = d.free ? age : (ageC != null ? ageC : age * cps);
+    const tdrift = d.free ? st : (stC != null ? stC : st * cps);
+    const rate = numAt(d.rate, age, gp, st, ageC, stC);
+    const t = trun * rate + numAt(d.phase || 0, age, gp, st, ageC, stC) + numAt(d.spread || 0, age, gp, st, ageC, stC) * gp + numAt(d.drift || 0, age, gp, st, ageC, stC) * tdrift;
+    const f = t - Math.floor(t);
+    switch (d.shape) {
+      case 'saw': v = f; break;
+      case 'isaw': v = 1 - f; break;
+      case 'tri': v = f < 0.5 ? f * 2 : 2 - f * 2; break;
+      case 'square': v = f < 0.5 ? 0 : 1; break;
+      case 'rand': v = _h1(Math.floor(t)); break;          // stepped, per cycle
+      case 'perlin': case 'noise': v = _snoise(t); break;  // smooth, lively
+      case 'fbm': v = _fbm(t); break;                       // organic, multi-octave
+      default: v = (Math.sin(TAU * t) + 1) / 2;             // sine
+    }
   }
   if (d.ease) v = applyEase(d.ease, v);                   // shape the 0..1 waveform BEFORE range
   const lo = numAt(d.lo, age, gp, st, ageC, stC), hi = numAt(d.hi, age, gp, st, ageC, stC);
@@ -399,6 +409,7 @@ function freezeOscParams(o, onset) {
   const r = { ...o };
   for (const k of ['rate', 'lo', 'hi', 'phase', 'spread', 'drift']) if (r[k] != null) r[k] = fp(r[k]);
   if (r.ops) r.ops = r.ops.map(([op, x]) => [op, fp(x)]);
+  if (r.env) r.env = { ...r.env, a: fp(r.env.a), d: fp(r.env.d) };   // env(attack, decay) bounds may be per-glyph signals
   return r;
 }
 // resolve an oscillator-driven colour: through a palette if attached, else as hue
