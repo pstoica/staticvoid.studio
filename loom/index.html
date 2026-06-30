@@ -95,9 +95,11 @@
   body.perform #editwrap .cm-loom-slider { pointer-events:auto; opacity:.3; transition:opacity .15s var(--ease); }
   body.perform #editwrap .cm-loom-slider:hover { opacity:1; }
   body.perform #editwrap .cm-loom-live { opacity:.4; }
-  /* in perform mode a slider line keeps its LABEL readable (not ghosted) — so you can see which
-     control is which at a glance, not just the bare slider widget. (the rest of the code stays ghosted.) */
-  body.perform #editwrap .cm-line:has(.cm-loom-slider) span:not(.cm-loom-slider):not(.cm-loom-live) { color:rgba(233,233,234,.62) !important; }
+  /* in perform mode a line with a live control — an inline slider OR a live signal badge — keeps
+     its WHOLE label readable (not ghosted), so you can see what each control drives at a glance.
+     (lines with no live token stay ghosted.) */
+  body.perform #editwrap .cm-line:has(.cm-loom-slider) span:not(.cm-loom-slider):not(.cm-loom-live),
+  body.perform #editwrap .cm-line:has(.cm-loom-live) span:not(.cm-loom-slider):not(.cm-loom-live) { color:rgba(233,233,234,.62) !important; }
   /* hovering an inline slider lights up its WHOLE line so you can read the param it drives —
      a bg highlight in normal edit, and in perform mode it fully un-ghosts the line's text + box. */
   #editwrap .cm-line:has(.cm-loom-slider:hover) { background:rgba(40,48,68,.42); }
@@ -114,19 +116,14 @@
   /* panel/guide live in the transport row now; styled as .btn (see #transport) */
 
   /* preset list (lives in the sidebar's presets tab) */
-  /* presets pane: sticky toolbar (new / save) + collapsible, sticky-headed sections */
-  .tabpane[data-pane="presets"] { padding-top:0; }
-  #presbar { flex:none; display:flex; gap:8px; align-items:center;
-    padding:14px 18px; background:#0f0f11; border-bottom:1px solid var(--line); }   /* fixed header, rendered separately from the scrolling list (top padding matches .guidehead) */
-  #presbar .mini { height:32px; padding:0 12px; font-size:11px; color:var(--muted);
-    background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:0;
-    display:inline-flex; align-items:center; transition:.14s var(--ease); }
-  #presbar .mini:hover { color:var(--ink); border-color:rgba(255,255,255,.24); }
+  /* presets pane: collapsible, sticky-headed sections (no in-panel toolbar — new/save/save-as
+     live in the floating toolbar). */
   #preslist { display:flex; flex-direction:column; gap:3px; }
   .pressection { display:flex; flex-direction:column; gap:3px; }
   .preshead { position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:7px;
     margin:6px -18px 2px; padding:6px 18px; background:#0f0f11; border:0; cursor:pointer; text-align:left;
     font:600 9px/1 var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+  .pressection:first-child .preshead { margin-top:0; }   /* no empty gap above the first head */
   .preshead:hover { color:var(--ink); }
   .preshead .caret { font-size:8px; transition:transform .15s var(--ease); }
   .pressection.collapsed .caret { transform:rotate(-90deg); }
@@ -150,19 +147,17 @@
      renders the coloured code, floating directly on the visuals (no box). */
   /* the editor (CodeMirror 6) floats over the canvas; token colours + look live in
      editor.js (theme + highlight), reusing the --t-* vars above. */
-  #editwrap { flex:1; min-height:0; margin:2px 22px 0; font-weight:500; transition:opacity .3s var(--ease); }
+  #editwrap { flex:1; min-height:0; margin:0 22px; font-weight:500; transition:opacity .3s var(--ease); }   /* no top/bottom margin → code is flush (was a stray 2px on top) */
   #editwrap .cm-editor { height:100%; background:transparent; }
   #editwrap .cm-scroller { font-weight:500; }
   #editwrap .cm-scroller::-webkit-scrollbar { width:12px; }
   #editwrap .cm-scroller::-webkit-scrollbar-button { display:none; }   /* no arrow caps (the "mismatched" top/bottom bits) */
-  /* faint ALWAYS (never fully vanish — accessibility), brighter while scrolling (.scrolling via JS).
-     a dark rail keeps the thumb legible over art. (transition is best-effort on scrollbar pseudos.) */
-  #editwrap .cm-scroller::-webkit-scrollbar-track { background:rgba(8,9,12,.18); transition:background .35s var(--ease); }
-  #editwrap .cm-scroller::-webkit-scrollbar-thumb { background:rgba(255,255,255,.14); border:3px solid transparent;
-    background-clip:padding-box; transition:background .35s var(--ease); }
-  #editwrap .cm-scroller.scrolling::-webkit-scrollbar-track { background:rgba(8,9,12,.4); }
-  #editwrap .cm-scroller.scrolling::-webkit-scrollbar-thumb { background:rgba(255,255,255,.4); }
-  #editwrap .cm-scroller.scrolling::-webkit-scrollbar-thumb:active { background:rgba(255,255,255,.6); }
+  /* a STEADY faint rail + a clearly-visible thumb in both states (only the brightness changes while
+     scrolling — the thumb width is constant, so it never looks like it shrinks when idle). */
+  #editwrap .cm-scroller::-webkit-scrollbar-track { background:rgba(8,9,12,.28); }
+  #editwrap .cm-scroller::-webkit-scrollbar-thumb { background:rgba(255,255,255,.26); border:3px solid transparent; background-clip:padding-box; }
+  #editwrap .cm-scroller.scrolling::-webkit-scrollbar-thumb { background:rgba(255,255,255,.5); }
+  #editwrap .cm-scroller.scrolling::-webkit-scrollbar-thumb:active { background:rgba(255,255,255,.66); }
   /* the LEFT-scrollbar treatment is DESKTOP-only: rtl flips the bar to the screen-edge side, but it
      breaks touch scrolling. Gate on desktop WIDTH (≥761, past the mobile-sheet breakpoint) AND a
      fine pointer, so phones/tablets keep a normal touch-scrolling editor. */
@@ -241,6 +236,7 @@
   #toolbar .btn.on:hover, #playbtn.live:hover { background:rgba(0,0,0,.68);
     box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.85); }
   #runbtn.lit { background:rgba(255,255,255,.24); filter:none; }   /* brief flash on run */
+  #savebtn.saved { color:#6df0c2; }   /* brief green flash confirming a save */
   .tbsep { width:1px; height:18px; background:rgba(255,255,255,.14); flex:none; margin:0 1px; }
   #runbtn kbd { font:inherit; opacity:.5; }
   /* instant styled tooltip under each icon button (replaces the slow native title) */
@@ -338,11 +334,11 @@
   .panescroll::-webkit-scrollbar { width:12px; }
   .panescroll::-webkit-scrollbar-button { display:none; }
   .panescroll::-webkit-scrollbar-track { background:transparent; }
-  /* faint ALWAYS (never fully vanish — accessibility), brighter while scrolling */
-  .panescroll::-webkit-scrollbar-thumb { background:rgba(255,255,255,.12); border:3px solid transparent;
-    background-clip:padding-box; transition:background .35s var(--ease); }
-  .panescroll.scrolling::-webkit-scrollbar-thumb { background:rgba(255,255,255,.34); }
-  .panescroll.scrolling::-webkit-scrollbar-thumb:active { background:rgba(255,255,255,.55); }
+  /* clearly visible in both states (constant width — only brightness changes while scrolling) */
+  .panescroll::-webkit-scrollbar-thumb { background:rgba(255,255,255,.2); border:3px solid transparent;
+    background-clip:padding-box; }
+  .panescroll.scrolling::-webkit-scrollbar-thumb { background:rgba(255,255,255,.4); }
+  .panescroll.scrolling::-webkit-scrollbar-thumb:active { background:rgba(255,255,255,.58); }
   /* drag the left edge to resize the sidebar */
   #sidegrab { position:absolute; left:-1px; top:0; bottom:0; width:12px; z-index:7;
     cursor:ew-resize; display:flex; align-items:center; justify-content:center; touch-action:none; }
@@ -532,8 +528,10 @@
   <nav id="toolbar" aria-label="controls">
     <button class="btn icon" id="newbtn" aria-label="new" data-tip="new · fresh default patch">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v5M9.5 14.5h5"/></svg></button>
-    <button class="btn icon" id="savebtn" aria-label="save" data-tip="save as preset">
+    <button class="btn icon" id="savebtn" aria-label="save" data-tip="save · overwrite / name">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg></button>
+    <button class="btn icon" id="saveasbtn" aria-label="save as" data-tip="save as · new preset copy">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 13V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6l5 5"/><path d="M9 17v-5h5"/><path d="M19 3v6M22 6h-6"/></svg></button>
     <span class="tbsep"></span>
     <button class="btn icon" id="panelbtn" aria-label="presets" data-tip="presets">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></button>
@@ -549,10 +547,7 @@
     <header></header>
 
     <div class="tabpane" data-pane="presets">
-      <div id="presbar">
-        <!-- new + save live in the floating toolbar (top-right); only "save as" (force a new copy) is unique here -->
-        <button class="btn mini" id="presaveas" title="save the current patch as a NEW preset copy">save as</button>
-      </div>
+      <!-- no in-panel toolbar: new / save / save-as all live in the floating toolbar (top-right) -->
       <div id="preslist" class="panescroll"></div>
     </div>
 

@@ -1574,16 +1574,12 @@ function savePreset(forceNew) {
   rebuildPresetList(); setActive('u:' + name); syncURL(); flashSaved();
 }
 function flashSaved() {
-  const b = $('#presaveas'); if (!b) return;   // brief "saved ✓" on the in-panel save-as button
-  const t = b.dataset.label || (b.dataset.label = b.textContent);
-  b.textContent = 'saved ✓'; clearTimeout(b._t);
-  b._t = setTimeout(() => { b.textContent = t; }, 900);
+  const b = $('#savebtn'); if (!b) return;   // brief green flash on the floating save icon
+  b.classList.add('saved'); clearTimeout(b._t);
+  b._t = setTimeout(() => b.classList.remove('saved'), 900);
 }
-$('#savebtn').addEventListener('click', () => savePreset(false));   // floating save (overwrite / prompt)
-$('#presaveas').addEventListener('click', () => savePreset(true));  // in-panel: always a new copy
-// the presets toolbar is sticky; section heads stick just below it (offset = its height)
-{ const pb = $('#presbar');
-  if (pb) new ResizeObserver(() => document.documentElement.style.setProperty('--presbar-h', pb.offsetHeight + 'px')).observe(pb); }
+$('#savebtn').addEventListener('click', () => savePreset(false));    // floating save (overwrite / prompt)
+$('#saveasbtn').addEventListener('click', () => savePreset(true));   // floating save-as (always a new copy)
 
 // ── right sidebar (swappable presets / guide) ──
 const side = $('#side');
