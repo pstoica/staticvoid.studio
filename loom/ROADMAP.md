@@ -60,11 +60,17 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
 
 ## Tier 3 — output buses & performance
 
-5. **Named output buses** (Strudel `orbit` / Hydra `.out(o0)`). Route layers to N named render
-   buffers (`o0..oN`) instead of one screen; a buffer can be **referenced as a source** in
-   another chain — feedback/compositing *between* buses — and a final `render()`/blend picks
-   what's shown. The Hydra multi-output model. *Substrate for everything below;* builds directly
-   on the existing per-group render targets.
+5. **Named output buses + sourcing/masking** (Strudel `orbit` / Hydra `.out(o0)` + `src()`).
+   Route layers to N named render buffers (`o0..oN`) instead of one screen; a buffer can be
+   **referenced as a source** in another chain — feedback/compositing *between* buses — and a
+   final `render()`/blend picks what's shown. The Hydra multi-output model. *Substrate for
+   everything below;* builds directly on the existing per-group render targets.
+   - **← THE NEXT THEME.** Tiers 1–2 are all shipped; this is the top of the stack now.
+   - **Masking** (Patrick's near-term want) is the concrete first slice: use one source/bus's
+     output as the **alpha/luma mask** of another. It needs the same "a bus is a sampleable
+     texture" plumbing as sourcing — just consumed as a mask channel in the composite rather
+     than a blend input — so build the bus-as-source primitive first and masking falls out of it.
+     Smallest viable cut: `src(layer)` / `.mask(layer)` reading another `$`-layer's render target.
 
 6. **Scene mixer (VJ).** On top of buses: hold N patches as scenes (each → a bus) and
    **crossfade/blend** between them (A/B crossfader, or a 4-up grid), with per-layer mute/solo
@@ -90,11 +96,36 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
   frame as FX/physics params (cursor-driven attractor). `.sample(n)` sample-and-holds a live
   signal n/cycle (stepped pointer; `segment` is a no-op on it, `quantize` snaps the value).
   `mouseDown` fires on a canvas press or ⌥/⌘-click (editor clicks just edit). Presets:
-  `cursor`, `press`. *Next interaction ideas:* MIDI/OSC in as more signals, audio-reactive
-  (mic FFT → signals).
+  `cursor`, `press`.
+- **MIDI input** ✅ `cc/gate/vel/note/pc/bend(ch)` signals over Web MIDI (same frozen-at-onset
+  vs live duality as the pointer); `onNote(ch, shape)` = one glyph per note-on (event source,
+  not a sampled stream); `pc(ch)` = octave-folded pitch class for stable note→colour; osc
+  `.range()` bounds may now be signals (frozen at spawn) so a hue can track a live note. The
+  *musical* half of the juggling rig. *Deferred:* monophonic/voice mode (a persistent, re-
+  targetable object — needs a design pass; Loom has no addressable-updatable-object concept yet).
+- **Juggling WS feed** ✅ The *spatial* half — a separate local app (webcam + on-ball IMU,
+  `~/Code/juggling-system`) broadcasts plain JSON over WebSocket; Loom signals `ballX/ballY/
+  ballSeen/thrown/caught/tapped/flight/gyro(id)` + `moving(id)` (IMU-gated, drops static
+  scenery). Off by default (`?feed`). **Camera overlay** = MJPEG drawn as a GL background quad
+  (aspect-fit + cover-fill), pixel-aligned with ball coords. `.gate(cond)` keeps only events
+  where a condition holds at onset.
+- **Chrome/transport polish** ✅ Run/play/clear moved to the editor transport row; mode toggles
+  + flat quiet sliders for speed/decay; demoted cycle readout; ⌘. hide-all-chrome with a toast;
+  editor live value-badges for the pointer/MIDI/juggling signals (envelope-smoothed).
 
 ## Backlog / jot-down (not now)
 
+- **Per-param envelopes — `env()`.** An attack/decay envelope as an *age-driven signal*
+  (osc-family, so it animates over the glyph's life and survives live cps changes), routable
+  into any param and composing with `.range()`/`.ease()`: `env(attack, decay, easeIn?, easeOut?)`.
+  Generalises the lifetime envelope's easing (which `.attack/.decay`'s 2nd arg already gives for
+  alpha) to *any* param. Contained add (a new osc-family source in `pattern.js`). Chosen over
+  callbacks (a callback breaks the everything-is-a-signal model + doesn't compose). Design ✅, build TODO.
+- **Copying / clone.** A first-class way to fork a source through *parallel* FX. Possible today
+  via `stack(group(src).fxA, group(src).fxB)` (each `group()` = its own FX bus); wants a tidier
+  clone verb. Note: meshes are all at `z=0` (no DSL depth), so copies separate only in x/y.
+- **Audio-reactivity** + **juggling polygon** (read N ball coords → one multi-vertex glyph) —
+  both flagged feasible, not started.
 - **Timeline choreography.** An anime.js-style global *score* animating Loom's knobs (cps,
   master decay, bg, fx params, preset crossfades) over wall-clock time — the one place
   anime.js's timeline model fits (Loom has no timeline; it's an event-spawner). Deferred per
