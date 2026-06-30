@@ -90,7 +90,7 @@ const loomTheme = EditorView.theme({
   '&': { color: 'var(--ink)', backgroundColor: 'transparent', height: '100%' },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': { fontFamily: 'var(--mono)', fontSize: '15px', lineHeight: '1.65', overflow: 'auto' },
-  '.cm-content': { padding: '4px 0', letterSpacing: '.01em', caretColor: '#ffd166', caretWidth: '2px' },
+  '.cm-content': { padding: '0', letterSpacing: '.01em', caretColor: '#ffd166', caretWidth: '2px' },
   // per-line dark box that hugs the text (fit-content → ragged right), so the canvas stays
   // visible around the code instead of a full-panel wash. Square corners (no radius) — the
   // rounded ones scalloped the aligned left edge and clashed with the app's sharp chrome.
