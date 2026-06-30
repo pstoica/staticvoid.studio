@@ -38,6 +38,15 @@ const editor = createEditor($('#editwrap'), {
   onFocus: (focused) => { document.body.classList.toggle('editing', focused); activity(); },
   rerun: () => run(),   // inline slider drags re-run live (no flash)
 });
+// custom scrollbars reveal only while scrolling, then fade — add `.scrolling` on scroll, clear
+// after a brief idle. (Used by the editor + the side-panel scroll areas.)
+function autoHideScrollbar(el) {
+  if (!el) return; let t;
+  el.addEventListener('scroll', () => { el.classList.add('scrolling'); clearTimeout(t); t = setTimeout(() => el.classList.remove('scrolling'), 900); }, { passive: true });
+}
+autoHideScrollbar($('#editwrap')?.querySelector('.cm-scroller'));
+autoHideScrollbar($('#preslist'));
+autoHideScrollbar(document.querySelector('#side .tabpane[data-pane="guide"] .helpbody'));
 
 // ── canvas sizing (DPR-aware) ───────────────────────────────────────────────────
 let W = 0, H = 0, DPR = 1;
@@ -1615,7 +1624,7 @@ function setupGuide() {
     // jump to the section — scroll the pane explicitly (offset by the sticky head) rather than
     // scrollIntoView, which lands the title under the head and reads as "nothing moved".
     chip.addEventListener('click', () => {
-      const headH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--guidehead-h')) || 96;
+      const headH = 0;   // the filter head is outside the scroll body now → section sticks at the body top
       const top = gpane.scrollTop + (sec.getBoundingClientRect().top - gpane.getBoundingClientRect().top) - headH;
       gpane.scrollTop = Math.max(0, top);   // jump straight there — no smooth scroll
     });
@@ -1632,7 +1641,7 @@ function setupGuide() {
   const head = document.querySelector('.guidehead');
   if (head) new ResizeObserver(() => document.documentElement.style.setProperty('--guidehead-h', head.offsetHeight + 'px')).observe(head);
   // scrollspy: light up the nav chip of the section currently under the head
-  const gpane = document.querySelector('#side .tabpane[data-pane="guide"]');
+  const gpane = document.querySelector('#side .tabpane[data-pane="guide"] .helpbody');   // the scrolling body (the head is a fixed sibling above it now)
   // keep the active chip within the single-row nav's horizontal view. scrollIntoView reads no
   // geometry itself (immune to the unsettled-layout 0-width reads); we only gate it on a rect
   // check so we don't re-scroll a chip that's already visible. Ungated by a "changed" flag so a
@@ -1645,7 +1654,7 @@ function setupGuide() {
   };
   function syncActiveNav() {
     if (!gpane || !navChips.size) return;
-    const headH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--guidehead-h')) || 100;
+    const headH = 0;   // sections sticky at the scroll-body top (head is a fixed sibling above)
     // measure each section against the scroll viewport (getBoundingClientRect), not offsetTop —
     // offsetTop is relative to the positioned #side, so it carries a constant skew vs scrollTop.
     const paneTop = gpane.getBoundingClientRect().top;
