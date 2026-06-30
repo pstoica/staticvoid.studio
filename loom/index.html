@@ -215,11 +215,25 @@
   .btn.mode:hover { color:var(--ink); background:rgba(255,255,255,.06); border-color:transparent; }
   .btn.mode.on { color:var(--bg); background:var(--ink); border-color:var(--ink); }
 
-  /* continuous params as sliders — same visual language as the editor's inline slider() */
+  /* continuous params as sliders. Quiet + FLAT so they sit IN the control row instead of
+     popping out of it: a hairline track + a small thumb in the chrome's muted palette
+     (no loud native accent fill, no focus box), brightening on hover/focus like the rest.
+     (webkit + moz pseudo-elements must stay in SEPARATE rules — a rule with a pseudo it
+     doesn't know gets dropped wholesale.) */
   .params { display:inline-flex; align-items:center; gap:16px; }
   .sl { display:inline-flex; align-items:center; gap:8px; user-select:none; -webkit-user-select:none; touch-action:none; }
   .sl-n { font:500 12px/1 var(--mono); color:var(--muted); letter-spacing:.04em; }
-  .sl input[type=range] { width:74px; height:13px; cursor:ew-resize; accent-color:var(--t-ctrl); margin:0; }
+  .sl input[type=range] { -webkit-appearance:none; appearance:none; width:76px; height:14px;
+    background:transparent; cursor:ew-resize; margin:0; outline:none; vertical-align:middle; }
+  .sl input[type=range]::-webkit-slider-runnable-track { height:2px; border-radius:1px; background:var(--line); }
+  .sl input[type=range]::-moz-range-track { height:2px; border-radius:1px; background:var(--line); }
+  .sl input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none;
+    width:9px; height:9px; margin-top:-3.5px; border:0; border-radius:50%;
+    background:var(--muted); transition:background .14s var(--ease); }
+  .sl input[type=range]::-moz-range-thumb { width:9px; height:9px; border:0; border-radius:50%;
+    background:var(--muted); transition:background .14s var(--ease); }
+  .sl:hover input[type=range]::-webkit-slider-thumb, .sl input[type=range]:focus-visible::-webkit-slider-thumb { background:var(--ink); }
+  .sl:hover input[type=range]::-moz-range-thumb, .sl input[type=range]:focus-visible::-moz-range-thumb { background:var(--ink); }
   .sl b { font:500 13px/1 var(--mono); color:var(--ink); font-weight:500; min-width:32px; }
 
   /* live cycle counter: demoted telemetry — pushed to the far right behind a hairline lead */
