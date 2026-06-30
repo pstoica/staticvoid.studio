@@ -1496,6 +1496,17 @@ function flash() {
   const el = $('#runbtn'); el.classList.add('lit'); clearTimeout(flashT);
   flashT = setTimeout(() => el.classList.remove('lit'), 220);
   slotLogo();                   // spin the wordmark like a slot machine
+  retireRunTip();               // the "edit the pattern" intro has done its job — for good
+}
+// first-run intro tip anchored to the run button: shows for first-timers, retires once you've run
+// a patch (or already have a saved preset). Persisted across sessions via `loom.ranOnce`.
+const RAN_KEY = 'loom.ranOnce';
+const runtipEl = $('#runtip');
+function retireRunTip() { if (runtipEl) runtipEl.classList.remove('show'); localStorage.setItem(RAN_KEY, '1'); }
+function initRunTip() {
+  if (!runtipEl) return;
+  if (localStorage.getItem(RAN_KEY) === '1' || Object.keys(loadUser()).length) return;
+  setTimeout(() => runtipEl.classList.add('show'), 500);   // a beat after load so it reads as an intro
 }
 
 $('#runbtn').addEventListener('click', () => { run(); flash(); });
@@ -1953,6 +1964,7 @@ resize();
 setCps(cps);
 setDecay(decayScale);
 rebuildPresetList();
+initRunTip();
 showTab(localStorage.getItem('loom.sidetab') || 'presets');
 setSide(localStorage.getItem('loom.side') !== '0');
 // boot source priority: ?c=<custom> → ?p=<built-in> → last-worked-on → threads

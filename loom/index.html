@@ -159,11 +159,20 @@
      actions+modes on top, params below — so it reads as a contained unit over the art, not a
      long bare strip. align-self:flex-start + fit-content width keeps it off the full rail width;
      the left edge sits on the 22px rail column. */
-  #transport { display:flex; flex-direction:column; align-self:flex-start; align-items:flex-start; gap:9px;
+  #transport { position:relative; display:flex; flex-direction:column; align-self:flex-start; align-items:flex-start; gap:9px;
     margin:12px 22px 14px; padding:10px 12px;
     background:rgba(12,13,16,.5); border:1px solid var(--line);
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); }
   .trow { display:flex; gap:10px; align-items:center; flex-wrap:wrap; width:100%; }   /* fill the tray so .cyc's margin-left:auto can push it to the right edge */
+  /* first-run intro callout, floated just above the run button; retires once you've run a patch */
+  #runtip { position:absolute; bottom:calc(100% + 9px); left:0; z-index:9;
+    background:rgba(10,11,14,.96); color:var(--ink); border:1px solid var(--line);
+    font:500 11px/1 var(--mono); letter-spacing:.03em; padding:8px 11px; white-space:nowrap;
+    pointer-events:none; opacity:0; transform:translateY(5px);
+    transition:opacity .35s var(--ease), transform .35s var(--ease); }
+  #runtip.show { opacity:1; transform:translateY(0); }
+  #runtip kbd { font:inherit; opacity:.6; }
+  #runtip::after { content:""; position:absolute; top:100%; left:15px; border:5px solid transparent; border-top-color:rgba(10,11,14,.96); }
   /* tight screens: drop the mode labels, leaving just their glyphs */
   @media (max-width: 560px) {
     .btn.mode .btxt { display:none; }
@@ -219,8 +228,11 @@
 
   /* transport groups: actions (glyph buttons) sit apart from modes (quiet toggles) */
   .tgroup { display:inline-flex; align-items:center; gap:7px; }
-  /* run is the primary action — faintly accent-tinted so it reads first */
-  #runbtn { color:var(--accent); }
+  /* run is the primary action — its lightning glyph cycles through the brand rainbow (the SVG
+     fills with currentColor), echoing the wordmark's per-run colour shift, so the eye lands on it. */
+  @keyframes runRainbow { 0%{color:#ff5d73} 20%{color:#ffd166} 40%{color:#6df0c2} 60%{color:#56b6ff} 80%{color:#b58cff} 100%{color:#ff5d73} }
+  #runbtn { color:var(--accent); animation:runRainbow 5s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { #runbtn { animation:none; } }
   /* play's live state + active modes share the filled "on" look in the rail (no floating chip/ring) */
   #transport #playbtn.live { color:var(--bg); background:var(--ink); border-color:var(--ink); box-shadow:none; filter:none; }
   /* modes: ghosted toggles — no box until hover/active, so they read lighter than the action glyphs */
@@ -291,15 +303,20 @@
   #side header { min-height:54px; }
   .tabpane { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; padding:16px 18px 40px; }
   /* designed scrollbar, rendered on the LEFT (the canvas-facing edge of the right-docked panel)
-     so it frames the panel against the art instead of reading as default chrome. The direction:rtl
-     trick flips the scrollbar to the left; children reset to ltr so content lays out normally. */
-  .tabpane { direction:rtl; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.18) transparent; }
+     so it frames the panel against the art instead of reading as default chrome. direction:rtl
+     flips the bar to the left; children reset to ltr so content lays out normally.
+     IMPORTANT: do NOT set scrollbar-width/-color here — when the standard props are present,
+     modern Chrome ignores ::-webkit-scrollbar and falls back to a thin auto-hiding overlay
+     (reads as "no scrollbar" + can't grab it). The webkit pseudo-elements force an always-on,
+     styled, grabbable bar. */
+  .tabpane { direction:rtl; }
   .tabpane > * { direction:ltr; }
-  .tabpane::-webkit-scrollbar { width:10px; }
-  .tabpane::-webkit-scrollbar-track { background:transparent; }
-  .tabpane::-webkit-scrollbar-thumb { background:rgba(255,255,255,.16); border:3px solid transparent;
+  .tabpane::-webkit-scrollbar { width:13px; }
+  .tabpane::-webkit-scrollbar-track { background:rgba(255,255,255,.03); }
+  .tabpane::-webkit-scrollbar-thumb { background:rgba(255,255,255,.22); border:3px solid transparent;
     background-clip:padding-box; transition:background .15s var(--ease); }
-  .tabpane:hover::-webkit-scrollbar-thumb { background:rgba(255,255,255,.3); background-clip:padding-box; }
+  .tabpane:hover::-webkit-scrollbar-thumb { background:rgba(255,255,255,.36); background-clip:padding-box; }
+  .tabpane::-webkit-scrollbar-thumb:active { background:rgba(255,255,255,.5); background-clip:padding-box; }
   .tabpane[hidden] { display:none; }
   /* drag the left edge to resize the sidebar */
   #sidegrab { position:absolute; left:-1px; top:0; bottom:0; width:12px; z-index:7;
@@ -440,6 +457,7 @@
     <div id="err"></div>
 
     <div id="transport">
+      <div id="runtip">edit the pattern, then <kbd>⌘⏎</kbd> to run</div>
       <div class="trow">
         <!-- actions: the punchy glyph buttons you hit while coding -->
         <span class="tgroup acts">
