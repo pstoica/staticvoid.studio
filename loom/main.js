@@ -1496,15 +1496,6 @@ function flash() {
   const el = $('#runbtn'); el.classList.add('lit'); clearTimeout(flashT);
   flashT = setTimeout(() => el.classList.remove('lit'), 220);
   slotLogo();                   // spin the wordmark like a slot machine
-  retireHint();                 // "edit the pattern" hint has served its purpose — for good
-}
-// the first-run hint is for first-timers only: once you've run a patch (or already have a saved
-// preset) you know the drill, so hide it and remember across sessions.
-const HINT_KEY = 'loom.ranOnce';
-function retireHint() { const h = $('#hint'); if (h) h.hidden = true; localStorage.setItem(HINT_KEY, '1'); }
-function initHint() {
-  const h = $('#hint'); if (!h) return;
-  if (localStorage.getItem(HINT_KEY) === '1' || Object.keys(loadUser()).length) h.hidden = true;
 }
 
 $('#runbtn').addEventListener('click', () => { run(); flash(); });
@@ -1532,12 +1523,9 @@ $('#decaysl').addEventListener('dblclick', () => setDecay(1.5));
 
 const clockBtn = $('#clockbtn');
 const cycEl = document.querySelector('.cyc');   // the cycle readout rides with the playhead toggle
-const cycSep = cycEl && cycEl.previousElementSibling;   // the divider that leads it — hide it together
 function renderClock() {
   clockBtn.classList.toggle('on', showClock); clockBtn.classList.toggle('off', !showClock);
-  const d = showClock ? '' : 'none';   // hide the counter (and its leading divider) when the playhead is off
-  if (cycEl) cycEl.style.display = d;
-  if (cycSep && cycSep.classList.contains('tbsep')) cycSep.style.display = d;
+  if (cycEl) cycEl.style.display = showClock ? '' : 'none';   // hide the counter when the playhead is off
 }
 clockBtn.addEventListener('click', () => {
   showClock = !showClock;
@@ -1805,10 +1793,9 @@ sideGrab.addEventListener('pointerup', () => {
 
 // ── fade the control overlay when idle, so the drawing has the screen ──
 const rail = $('#rail');
-const hintEl = $('#hint');
 const toolbar = $('#toolbar');
 let idleTimer;
-function setIdle(on) { rail.classList.toggle('idle', on); hintEl.classList.toggle('idle', on); toolbar.classList.toggle('idle', on); }
+function setIdle(on) { rail.classList.toggle('idle', on); toolbar.classList.toggle('idle', on); }
 function activity() {
   setIdle(false);
   clearTimeout(idleTimer);
@@ -1965,7 +1952,6 @@ resize();
 setCps(cps);
 setDecay(decayScale);
 rebuildPresetList();
-initHint();
 showTab(localStorage.getItem('loom.sidetab') || 'presets');
 setSide(localStorage.getItem('loom.side') !== '0');
 // boot source priority: ?c=<custom> → ?p=<built-in> → last-worked-on → threads

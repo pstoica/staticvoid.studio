@@ -28,6 +28,12 @@
   html,body { margin:0; height:100%; background:var(--bg); color:var(--ink);
     font-family:var(--font); -webkit-font-smoothing:antialiased; overflow:hidden; }
 
+  /* focus rings: replace the browser's blue default with the app's own light, square ring —
+     keyboard-only (mouse clicks don't show it). Elements that draw their own focus (sliders)
+     opt out with their own outline:none rule, which is more specific. */
+  :focus { outline:none; }
+  :focus-visible { outline:1.5px solid var(--ink); outline-offset:2px; }
+
   /* fullscreen canvas behind everything */
   #stage, #glstage { position:fixed; inset:0; width:100vw; height:100vh; display:block; z-index:0; }
   /* juggling camera feed: a decode-only <img> (the MJPEG stream) used as a GL texture — the
@@ -66,8 +72,7 @@
   #rail.idle { opacity:.05; }            /* mousemove / typing brings it back */
   #rail.idle:hover { opacity:1; }
   /* ⌘/Ctrl+Shift+H (or ⌘/Ctrl+.) hides every bit of chrome — just the drawing */
-  body.chrome-hidden #rail, body.chrome-hidden #toolbar, body.chrome-hidden #side,
-  body.chrome-hidden #hint { opacity:0; pointer-events:none; transition:opacity .35s var(--ease); }
+  body.chrome-hidden #rail, body.chrome-hidden #toolbar, body.chrome-hidden #side { opacity:0; pointer-events:none; transition:opacity .35s var(--ease); }
   /* `#rail > *` / `#toolbar > *` re-enable pointer-events on children, so hidden chrome stayed
      interactable (the editor still caught the pointer). Disable everything when hidden. */
   body.chrome-hidden #rail > *, body.chrome-hidden #toolbar > * { pointer-events:none; }
@@ -244,9 +249,10 @@
   .sl:hover input[type=range]::-moz-range-thumb, .sl input[type=range]:focus-visible::-moz-range-thumb { background:var(--ink); }
   .sl b { font:500 13px/1 var(--mono); color:var(--ink); font-weight:500; min-width:32px; }
 
-  /* live cycle counter: demoted telemetry, sits at the end of the params row (a tbsep leads it) */
-  .cyc { font:500 11px/1 var(--mono); color:var(--muted); letter-spacing:.08em;
-    padding:2px; white-space:nowrap; }
+  /* live cycle counter: demoted telemetry, pushed to the right of the params row (no divider).
+     no vertical padding so it never makes the row taller than the slider line. */
+  .cyc { margin-left:auto; font:500 11px/1 var(--mono); color:var(--muted); letter-spacing:.08em;
+    padding:0 2px; white-space:nowrap; }
   .cyc b { color:rgba(238,241,246,.78); font-weight:500; }
 
   #meta { padding:0 22px 16px; font:400 11px/1.5 var(--mono); color:var(--muted);
@@ -271,11 +277,6 @@
   .laychip.off .layname { text-decoration:line-through; }
 
   /* onboarding tip: sits just below the editor and above the controls; gone after first run */
-  #hint { align-self:flex-start; margin:6px 22px 2px; padding:6px 10px;
-    font:400 11px/1 var(--mono); color:var(--muted); pointer-events:none; white-space:nowrap;
-    background:rgba(0,0,0,.3); border:1px solid var(--line);
-    letter-spacing:.05em; transition:opacity .55s var(--ease); }
-  #hint.idle { opacity:0; }
 
   /* right sidebar, swappable presets / guide */
   #side { position:fixed; top:0; right:0; bottom:0; width:380px; max-width:92vw; z-index:6;
@@ -286,6 +287,16 @@
      never covers the pane content below. */
   #side header { min-height:54px; }
   .tabpane { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; padding:16px 18px 40px; }
+  /* designed scrollbar, rendered on the LEFT (the canvas-facing edge of the right-docked panel)
+     so it frames the panel against the art instead of reading as default chrome. The direction:rtl
+     trick flips the scrollbar to the left; children reset to ltr so content lays out normally. */
+  .tabpane { direction:rtl; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.18) transparent; }
+  .tabpane > * { direction:ltr; }
+  .tabpane::-webkit-scrollbar { width:10px; }
+  .tabpane::-webkit-scrollbar-track { background:transparent; }
+  .tabpane::-webkit-scrollbar-thumb { background:rgba(255,255,255,.16); border:3px solid transparent;
+    background-clip:padding-box; transition:background .15s var(--ease); }
+  .tabpane:hover::-webkit-scrollbar-thumb { background:rgba(255,255,255,.3); background-clip:padding-box; }
   .tabpane[hidden] { display:none; }
   /* drag the left edge to resize the sidebar */
   #sidegrab { position:absolute; left:-1px; top:0; bottom:0; width:12px; z-index:7;
@@ -424,13 +435,12 @@
 
     <div id="editwrap"></div>
     <div id="err"></div>
-    <div id="hint">edit the pattern · ⌘⏎ to run</div>
 
     <div id="transport">
       <div class="trow">
         <!-- actions: the punchy glyph buttons you hit while coding -->
         <span class="tgroup acts">
-          <button class="btn icon" id="runbtn" title="run · ⌘⏎" aria-label="run">
+          <button class="btn icon" id="runbtn" title="edit the pattern, then run · ⌘⏎" aria-label="run">
             <svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></button>
           <button class="btn icon live" id="playbtn" title="pause the animation" aria-label="pause">
             <svg class="ico ico-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
@@ -461,7 +471,6 @@
             <input type="range" id="decayrange" min="0.25" max="6" step="0.05" aria-label="decay">
             <b id="decayval">1.5</b></label>
         </span>
-        <span class="tbsep"></span>
         <span class="cyc">cycle <b id="cycle">0</b></span>
       </div>
     </div>

@@ -870,8 +870,9 @@ export class GLRenderer {
     // ortho camera (which maps pixel-space world coords → NDC). Both are thin lines.
     this.overlay = new THREE.Scene();
     const playGeom = new THREE.BufferGeometry();
-    playGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-    this.playhead = new THREE.Line(playGeom, new THREE.LineBasicMaterial({ color: 0x9db4ff, transparent: true, opacity: 0.3, depthTest: false, depthWrite: false }));
+    playGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(4 * 3), 3));   // a thin quad (2 tris) so the hand can be >1px (WebGL lines are 1px)
+    playGeom.setIndex([0, 1, 2, 0, 2, 3]);
+    this.playhead = new THREE.Mesh(playGeom, new THREE.MeshBasicMaterial({ color: 0x9db4ff, transparent: true, opacity: 0.3, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
     this.playhead.frustumCulled = false; this.playhead.visible = false;
     this.overlay.add(this.playhead);
 
@@ -1444,11 +1445,15 @@ export class GLRenderer {
     if (showClock) {
       const phase = state.cycle - Math.floor(state.cycle);
       const ang = phase * Math.PI * 2 - Math.PI / 2;
+      const cx = W / 2, cy = H / 2;
+      const tx = cx + Math.cos(ang) * minDim * 0.4, ty = cy + Math.sin(ang) * minDim * 0.4;
+      const hx = -Math.sin(ang) * 1.75, hy = Math.cos(ang) * 1.75;   // perpendicular half-thickness → ~3.5px hand
       const pos = this.playhead.geometry.getAttribute('position');
-      pos.array[0] = W / 2; pos.array[1] = H / 2; pos.array[2] = 0;
-      pos.array[3] = W / 2 + Math.cos(ang) * minDim * 0.4;
-      pos.array[4] = H / 2 + Math.sin(ang) * minDim * 0.4;
-      pos.array[5] = 0;
+      // quad corners along the hand: C+perp, T+perp, T-perp, C-perp  (indices 0,1,2,3)
+      pos.array[0] = cx + hx; pos.array[1] = cy + hy; pos.array[2] = 0;
+      pos.array[3] = tx + hx; pos.array[4] = ty + hy; pos.array[5] = 0;
+      pos.array[6] = tx - hx; pos.array[7] = ty - hy; pos.array[8] = 0;
+      pos.array[9] = cx - hx; pos.array[10] = cy - hy; pos.array[11] = 0;
       pos.needsUpdate = true;
     }
 
