@@ -1011,7 +1011,7 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   mute: (n) => toggleMute(n), solo: (n) => toggleSolo(n),
   ensurePhysics: () => ensureRapier(), physReady: () => !!rapierReady(),
   get bodies() { return particles.filter((p) => p.body).length; }, get pointer() { return pointerState; },
-  midi: (status, d1, d2) => DSL._midiInput(status, d1, d2),   // inject a MIDI message (for tooling/testing)
+  midi: (status, d1, d2, dev) => DSL._midiInput(status, d1, d2, dev),   // inject a MIDI message (for tooling/testing; `dev` = optional device name for dev() scope)
   jug: (m) => DSL._jugInput(m),   // inject a juggling-feed message (for tooling/testing)
   // current value of a signal fn (cc/gate/vel/note/pc/bend/ballX/…) — drives the editor live badges
   sig: (name, ...args) => { try { const fn = DSL[name]; if (typeof fn !== 'function') return null; const h = fn(...args).query(DSL.span(0, 0)); return h.length ? +h[0].value : 0; } catch { return null; } },
@@ -1852,7 +1852,8 @@ window.addEventListener('pointercancel', () => { pointerState.down = 0; syncPoin
 function initMidi() {
   if (!navigator.requestMIDIAccess) return;
   navigator.requestMIDIAccess().then((access) => {
-    const hook = (port) => { if (port && port.type === 'input') port.onmidimessage = (e) => DSL._midiInput(e.data[0], e.data[1], e.data[2]); };
+    // pass the port name through so dev("name") can scope to a specific device
+    const hook = (port) => { if (port && port.type === 'input') port.onmidimessage = (e) => DSL._midiInput(e.data[0], e.data[1], e.data[2], port.name); };
     access.inputs.forEach(hook);
     access.onstatechange = (e) => hook(e.port);   // hot-plugged devices
   }).catch(() => { /* no MIDI / denied — signals just stay 0 */ });

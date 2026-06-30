@@ -163,7 +163,7 @@
     margin:12px 22px 14px; padding:10px 12px;
     background:rgba(12,13,16,.5); border:1px solid var(--line);
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); }
-  .trow { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .trow { display:flex; gap:10px; align-items:center; flex-wrap:wrap; width:100%; }   /* fill the tray so .cyc's margin-left:auto can push it to the right edge */
   /* tight screens: drop the mode labels, leaving just their glyphs */
   @media (max-width: 560px) {
     .btn.mode .btxt { display:none; }
@@ -249,10 +249,13 @@
   .sl:hover input[type=range]::-moz-range-thumb, .sl input[type=range]:focus-visible::-moz-range-thumb { background:var(--ink); }
   .sl b { font:500 13px/1 var(--mono); color:var(--ink); font-weight:500; min-width:32px; }
 
-  /* live cycle counter: demoted telemetry, pushed to the right of the params row (no divider).
-     no vertical padding so it never makes the row taller than the slider line. */
-  .cyc { margin-left:auto; font:500 11px/1 var(--mono); color:var(--muted); letter-spacing:.08em;
-    padding:0 2px; white-space:nowrap; }
+  /* live cycle counter: a small clock glyph + the count, pushed to the far right of the params
+     row (margin-left:auto, with the row filling the tray → real flex space before it). compact
+     so the params row stays narrower than the buttons row above. no vertical padding → never
+     taller than the slider line. */
+  .cyc { margin-left:auto; display:inline-flex; align-items:center; gap:5px;
+    font:500 11px/1 var(--mono); color:var(--muted); letter-spacing:.06em; padding:0 2px; white-space:nowrap; }
+  .cyc .cycico { width:11px; height:11px; flex:none; opacity:.7; }
   .cyc b { color:rgba(238,241,246,.78); font-weight:500; }
 
   #meta { padding:0 22px 16px; font:400 11px/1.5 var(--mono); color:var(--muted);
@@ -471,7 +474,9 @@
             <input type="range" id="decayrange" min="0.25" max="6" step="0.05" aria-label="decay">
             <b id="decayval">1.5</b></label>
         </span>
-        <span class="cyc">cycle <b id="cycle">0</b></span>
+        <span class="cyc" title="cycles elapsed">
+          <svg class="cycico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg>
+          <b id="cycle">0</b></span>
       </div>
     </div>
 
@@ -608,6 +613,7 @@
         <code>cc(num, ch) gate(ch) vel(ch) note(ch) bend(ch)</code><p>live MIDI (Web MIDI, plug-and-play). <code>cc</code> 0..1 · <code>gate</code> 1 while a key's held · <code>vel</code>/<code>note</code> the last key's velocity/pitch · <code>bend</code> -1..1. <code>ch</code> = channel 1–16, omit for omni — <code>.x(cc(16)).y(cc(17))</code> · <code>.size(vel().range(.02,.12))</code>. Each juggling ball = its own channel: <code>cc(7,1)</code> vs <code>cc(7,2)</code></p>
         <code>onNote(ch, "circle")</code><p>EVENT source — emits exactly <em>one</em> glyph per note-on (vs <code>gate</code>, which samples a held note as a stream). Style each with the signals at its onset: <code>onNote(1,"circle").y(note(1).range(.9,.1)).size(vel(1).range(.01,.1))</code>. ch 0 = any. A chord = one glyph per note</p>
         <code>pc(ch)</code><p>pitch <em>class</em> (note within the octave) → same colour per note-name across octaves: <code>.color(palette("rainbow").at(pc(1)))</code>. For <em>live</em> colour from a note, put the signal in an osc's range (frozen at onset, waveform stays live): <code>.color(palette("rainbow").at(osc(.5).range(pc(1), pc(1).add(.08))))</code></p>
+        <code>dev("name").note(1)</code><p>scope the MIDI signals to one <em>device</em> (case-insensitive substring of its port name) — opt-in; bare signals stay omni across all devices. So two controllers on the same channel stay apart: <code>dev("launchkey").note(1)</code> vs <code>dev("push").cc(74)</code>. Resolves at query time, so plugging in later still works</p>
         <code>choose("a","b") irand(8)</code><p>random pick / integer per onset</p>
         <code>osc(rate, "sine").range(lo, hi)</code><p>live LFO, keeps moving over a glyph's life (vs signals, frozen at spawn). shapes: sine saw tri square rand perlin fbm</p>
         <code>osc(…).spread(n)</code><p>per-glyph phase offset = n × onset phase, spreads the wave <em>around a ring/grid</em> instead of every glyph in lockstep</p>

@@ -418,44 +418,79 @@ const mouseDown = signal(() => _pointer.down);
 // the juggling balls, each on its own channel with its own CCs) map cleanly to channels. Being
 // signals, they obey the frozen/live rule: frozen at a glyph's onset (spawn a glyph per note),
 // live as an FX/physics param.
-const _midi = { cc: {}, notes: {}, bend: {}, pending: [], frame: [] };
-function _midiInput(status, d1, d2) {
+const _mkMidiState = () => ({ cc: {}, notes: {}, bend: {}, pending: [], frame: [] });
+const _midi = _mkMidiState();   // OMNI: merged across every input device
+_midi.dev = {};                 // per-device states, keyed by the input port's name (for dev())
+function _midiInput(status, d1, d2, dev) {
   const type = status & 0xf0, ch = (status & 0x0f) + 1;          // 1..16
-  if (type === 0xB0) {                                            // control change → ch + omni
-    (_midi.cc[ch] || (_midi.cc[ch] = {}))[d1] = d2;
-    (_midi.cc[0] || (_midi.cc[0] = {}))[d1] = d2;
-  } else if (type === 0x90 && d2 > 0) {                           // note on
-    (_midi.notes[ch] || (_midi.notes[ch] = new Map())).set(d1, d2);
-    _midi.pending.push({ ch, note: d1, vel: d2 });               // queue the note-on for onNote()
-    if (_midi.pending.length > 256) _midi.pending.shift();       // cap (e.g. clock paused)
-  } else if (type === 0x80 || (type === 0x90 && d2 === 0)) {      // note off (or note-on vel 0)
-    if (_midi.notes[ch]) _midi.notes[ch].delete(d1);
-  } else if (type === 0xE0) {                                     // pitch bend (14-bit → -1..1)
-    const v = (((d2 << 7) | d1) - 8192) / 8192;
-    _midi.bend[ch] = v; _midi.bend[0] = v;
+  // fan the message into the OMNI state and (when the port is named) that device's own state
+  const states = dev ? [_midi, _midi.dev[dev] || (_midi.dev[dev] = _mkMidiState())] : [_midi];
+  for (const st of states) {
+    if (type === 0xB0) {                                          // control change → ch + omni-ch
+      (st.cc[ch] || (st.cc[ch] = {}))[d1] = d2;
+      (st.cc[0] || (st.cc[0] = {}))[d1] = d2;
+    } else if (type === 0x90 && d2 > 0) {                         // note on
+      (st.notes[ch] || (st.notes[ch] = new Map())).set(d1, d2);
+      st.pending.push({ ch, note: d1, vel: d2 });                // queue the note-on for onNote()
+      if (st.pending.length > 256) st.pending.shift();           // cap (e.g. clock paused)
+    } else if (type === 0x80 || (type === 0x90 && d2 === 0)) {    // note off (or note-on vel 0)
+      if (st.notes[ch]) st.notes[ch].delete(d1);
+    } else if (type === 0xE0) {                                   // pitch bend (14-bit → -1..1)
+      const v = (((d2 << 7) | d1) - 8192) / 8192;
+      st.bend[ch] = v; st.bend[0] = v;
+    }
   }
 }
-// the Map of notes held on channel `ch` (or any channel for omni 0), or null if none held
-const _held = (ch) => { if (ch) return (_midi.notes[ch] && _midi.notes[ch].size) ? _midi.notes[ch] : null; for (const c in _midi.notes) if (_midi.notes[c].size) return _midi.notes[c]; return null; };
-const _lastHeld = (ch) => { const m = _held(ch); let e = null; if (m) for (const x of m) e = x; return e; };   // [note, vel] most-recent held
-function cc(num, ch = 0) { return signal(() => ((_midi.cc[ch] && _midi.cc[ch][num]) || 0) / 127); }
-function gate(ch = 0) { return signal(() => (_held(ch) ? 1 : 0)); }
-function vel(ch = 0) { return signal(() => { const e = _lastHeld(ch); return e ? e[1] / 127 : 0; }); }
-function note(ch = 0) { return signal(() => { const e = _lastHeld(ch); return e ? e[0] / 127 : 0; }); }
+// the Map of notes held on channel `ch` (or any channel for omni 0) within state `st`, or null
+const _held = (st, ch) => { if (ch) return (st.notes[ch] && st.notes[ch].size) ? st.notes[ch] : null; for (const c in st.notes) if (st.notes[c].size) return st.notes[c]; return null; };
+const _lastHeld = (st, ch) => { const m = _held(st, ch); let e = null; if (m) for (const x of m) e = x; return e; };   // [note, vel] most-recent held
+// resolve a device-scope NAME to its state AT QUERY TIME (first input whose port name contains it,
+// case-insensitive) — so a device that connects after the patch is written still hooks up. Empty
+// sentinel when nothing matches yet → the signals just read 0.
+const _EMPTY_MIDI = _mkMidiState();
+const _devState = (name) => { const n = String(name).toLowerCase(); for (const k in _midi.dev) if (k.toLowerCase().includes(n)) return _midi.dev[k]; return _EMPTY_MIDI; };
+// signal/source builders bound to a state-resolver `get` (() => state). The bare signals resolve
+// to the OMNI state; dev(name) rebinds them to a single device's state.
+const _ccSig = (get, num, ch) => signal(() => { const st = get(); return ((st.cc[ch] && st.cc[ch][num]) || 0) / 127; });
+const _gateSig = (get, ch) => signal(() => (_held(get(), ch) ? 1 : 0));
+const _velSig = (get, ch) => signal(() => { const e = _lastHeld(get(), ch); return e ? e[1] / 127 : 0; });
+const _noteSig = (get, ch) => signal(() => { const e = _lastHeld(get(), ch); return e ? e[0] / 127 : 0; });
+const _pcSig = (get, ch) => signal(() => { const e = _lastHeld(get(), ch); return e ? (e[0] % 12) / 12 : 0; });
+const _bendSig = (get, ch) => signal(() => get().bend[ch] || 0);
+const _onNoteSrc = (get, ch, shape) => new Pattern((s) => get().frame.filter((e) => !ch || e.ch === ch).map(() => hap({ begin: s.begin, end: s.end }, s, { shape: String(shape) })));
+const _OMNI = () => _midi;
+function cc(num, ch = 0) { return _ccSig(_OMNI, num, ch); }
+function gate(ch = 0) { return _gateSig(_OMNI, ch); }
+function vel(ch = 0) { return _velSig(_OMNI, ch); }
+function note(ch = 0) { return _noteSig(_OMNI, ch); }
 // pitch CLASS, 0..1 — the note within its octave (note % 12), so the same note name maps to the
 // same value across octaves. Pair with palette().at(pc(ch)) for octave-independent colour.
-function pc(ch = 0) { return signal(() => { const e = _lastHeld(ch); return e ? (e[0] % 12) / 12 : 0; }); }
-function bend(ch = 0) { return signal(() => _midi.bend[ch] || 0); }
+function pc(ch = 0) { return _pcSig(_OMNI, ch); }
+function bend(ch = 0) { return _bendSig(_OMNI, ch); }
 // onNote(ch, shape): an EVENT source — emits exactly ONE glyph per MIDI note-on (not a sampled
 // stream like gate). The tick loop calls _midiFrame() once per frame to snapshot that frame's
-// note-ons into _midi.frame, so the source is pure within the frame (re-queries / multiple layers
-// see the same events). Each note's pitch/velocity is captured by chaining .y(note(ch)).size(vel(ch))
-// — note(ch)/vel(ch) read the just-arrived note at the glyph's onset. ch 0 = any channel.
-function _midiFrame() { _midi.frame = _midi.pending; _midi.pending = []; }
-function onNote(ch = 0, shape = 'dot') {
-  return new Pattern((s) => _midi.frame
-    .filter((e) => !ch || e.ch === ch)
-    .map(() => hap({ begin: s.begin, end: s.end }, s, { shape: String(shape) })));
+// note-ons into the frame buffer, so the source is pure within the frame (re-queries / multiple
+// layers see the same events). Capture pitch/velocity by chaining .y(note(ch)).size(vel(ch)).
+function onNote(ch = 0, shape = 'dot') { return _onNoteSrc(_OMNI, ch, shape); }
+// dev(name): OPT-IN scoping of the MIDI signals to one input device — `name` is a case-insensitive
+// substring of the port name. The bare signals stay OMNI (all devices), so this never changes
+// existing patches; it just lets two controllers on the SAME channel stay separable:
+//   dev("launchkey").note(1)   vs   dev("push").cc(74)
+function dev(name) {
+  const get = () => _devState(name);
+  return {
+    cc: (num, ch = 0) => _ccSig(get, num, ch),
+    gate: (ch = 0) => _gateSig(get, ch),
+    vel: (ch = 0) => _velSig(get, ch),
+    note: (ch = 0) => _noteSig(get, ch),
+    pc: (ch = 0) => _pcSig(get, ch),
+    bend: (ch = 0) => _bendSig(get, ch),
+    onNote: (ch = 0, shape = 'dot') => _onNoteSrc(get, ch, shape),
+  };
+}
+function _midiFrame() {
+  _midi.frame = _midi.pending; _midi.pending = [];
+  for (const k in _midi.dev) { const st = _midi.dev[k]; st.frame = st.pending; st.pending = []; }
 }
 
 // ── juggling feed (WebSocket ball tracking), as signals ───────────────────────────
@@ -982,7 +1017,7 @@ export const DSL = {
   $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   mouseX, mouseY, mouseDown, _setPointer,
-  cc, gate, vel, note, pc, bend, onNote, _midiInput, _midiFrame,
+  cc, gate, vel, note, pc, bend, onNote, dev, _midiInput, _midiFrame,
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, flight, gyro, _jug, _jugInput, _jugDecay,
   hasOnset, span, isOsc, isSpring, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,

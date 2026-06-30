@@ -452,6 +452,13 @@ controller's knobs map straight onto a patch — `shape("dot*8").x(cc(16)).y(cc(
 and a keyboard drives note-shaped visuals: `physics(shape("star*3").size(vel().range(0.02, 0.12)), { gravity: gate().range(0, 2) })`,
 where holding a key lets the swarm fall.
 
+**Scope to a device** with **`dev(name)`** — `name` is a case-insensitive *substring* of the input
+port's name. It returns the same signals (`cc/gate/vel/note/pc/bend/onNote`) scoped to that one
+device, so two controllers on the **same channel** stay separable: `dev("launchkey").note(1)` vs
+`dev("push").cc(74)`. Opt-in — the bare signals stay omni across every device, so existing patches
+are unchanged. The lookup resolves at query time, so a device plugged in *after* you write the
+patch still hooks up.
+
 > The **juggling-balls** plan: each ball is its **own channel** sending CCs for its x/y, so
 > `cc(7, 1)` / `cc(7, 2)` / … read ball 1, 2, … independently.
 
