@@ -1067,6 +1067,22 @@ function renderLayerChips() {
 
 // ── presets ───────────────────────────────────────────────────────────────────────
 const PRESETS = {
+  // a physics swarm lured to the cursor (attract + swirl + turbulence) beneath trailing rings
+  'magnet': `stack(
+  bg("#06060f"),
+  physics(
+    shape("dot*3").fast(2).x(rand).y(rand)
+      .size(rand.range(0.012, 0.03))
+      .color(palette("neon").at(rand)).decay(7),
+    { gravity: 0, drag: 1.2, attract: 0.7,
+      ax: mouseX, ay: mouseY,
+      swirl: 0.35, turbulence: 0.25, turbScale: 4 }
+  ),
+  shape("ring*8").x(mouseX).y(mouseY)
+    .size(sine.range(0.02, 0.05).fast(3))
+    .color(palette("ice").at(saw.range(0, 1)))
+    .weight(0.004).decay(1.6)
+)`,
   // gestural line field, perspective tumble, breathing weight, streaks
   'threads': `shape("line")
   .fast("256 128 256 128")
@@ -1438,7 +1454,7 @@ function rebuildPresetList() {
   };
   // your saved patches first — they're what you reach for; built-ins are the reference set below
   section('saved', 'saved', Object.keys(user).map((n) => [n, 'u:' + n, true]));
-  const featured = ['threads', 'vortex', 'halo'].filter((n) => n in PRESETS);   // a few favourites, then the rest
+  const featured = ['magnet', 'threads', 'vortex', 'halo'].filter((n) => n in PRESETS);   // a few favourites, then the rest
   const ordered = [...featured, ...Object.keys(PRESETS).filter((n) => !featured.includes(n))];
   section('builtin', 'built-in', ordered.map((n) => [n, 'b:' + n, false]));
   setActive(activeVal);
@@ -1567,9 +1583,11 @@ $('#newbtn').addEventListener('click', newPatch);
 // built-in / fresh patch, prompts for a name. "save as" always prompts for a new copy.
 function savePreset(forceNew) {
   const onUser = activeVal.startsWith('u:');
-  let name;
-  if (onUser && !forceNew) name = activeVal.slice(2);                 // overwrite the active preset, no prompt
-  else { name = (prompt('Save preset as:', onUser ? activeVal.slice(2) : '') || '').trim(); if (!name) return; }
+  const current = onUser ? activeVal.slice(2) : '';
+  // always confirm the name (prevents blind overwrites). "save" prefills the current name — hit
+  // enter to overwrite it, or edit it to fork; "save as" starts blank so you always get a new copy.
+  const name = (prompt('Save preset as:', forceNew ? '' : current) || '').trim();
+  if (!name) return;
   const user = loadUser(); user[name] = editor.getCode(); saveUser(user);
   rebuildPresetList(); setActive('u:' + name); syncURL(); flashSaved();
 }

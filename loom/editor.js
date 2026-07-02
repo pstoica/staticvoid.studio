@@ -114,6 +114,7 @@ const loomTheme = EditorView.theme({
     font: '500 11px/1.5 var(--mono)', color: 'var(--t-sig)', background: 'rgba(181,140,255,.14)',
     border: '1px solid rgba(181,140,255,.3)', borderRadius: '999px', minWidth: '1.6em', textAlign: 'center',
     textShadow: 'none',                                  // the badge has its own bg — the line's shadow just muddies it
+    userSelect: 'none', WebkitUserSelect: 'none',        // the live value is a readout, not text you should select/copy
   },
   '.cm-loom-live-t': { transition: 'color .18s ease' },  // fade the contrast flip, like the smoothed bg
   '.cm-loom-live-bool': { position: 'relative', top: '-1px', display: 'inline-block' },  // ●/○ ink sits ~1px low
