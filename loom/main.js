@@ -38,15 +38,53 @@ const editor = createEditor($('#editwrap'), {
   onFocus: (focused) => { document.body.classList.toggle('editing', focused); activity(); },
   rerun: () => run(),   // inline slider drags re-run live (no flash)
 });
-// custom scrollbars reveal only while scrolling, then fade — add `.scrolling` on scroll, clear
-// after a brief idle. (Used by the editor + the side-panel scroll areas.)
-function autoHideScrollbar(el) {
-  if (!el) return; let t;
-  el.addEventListener('scroll', () => { el.classList.add('scrolling'); clearTimeout(t); t = setTimeout(() => el.classList.remove('scrolling'), 900); }, { passive: true });
+// ── custom overlay scrollbar ──────────────────────────────────────────────────────────────────
+// native ::-webkit-scrollbar can't animate an opacity fade (it snaps). This draws a thin thumb DIV
+// that fades in on scroll/hover (real transition), never fully vanishes (faint always, a11y), stays
+// grabbable, and keeps a constant width. `host` (position:relative) holds the absolute overlay
+// spanning `scrollEl`'s box; `side` = 'left' | 'right'. Returns a relayout() fn.
+const _ovLayouts = [];
+function overlayScrollbar(scrollEl, host, side = 'right') {
+  if (!scrollEl || !host) return;
+  scrollEl.classList.add('ovscroll');
+  const bar = document.createElement('div'); bar.className = 'ovbar';
+  const thumb = document.createElement('div'); thumb.className = 'ovthumb';
+  bar.appendChild(thumb); host.appendChild(bar);
+  let hideT;
+  const layout = () => {
+    const ch = scrollEl.clientHeight, sh = scrollEl.scrollHeight;
+    const r = scrollEl.getBoundingClientRect(), hr = host.getBoundingClientRect();
+    bar.style.top = (r.top - hr.top) + 'px'; bar.style.height = r.height + 'px';
+    bar.style[side] = '0px'; bar.style[side === 'left' ? 'right' : 'left'] = 'auto';
+    if (sh <= ch + 1 || ch === 0) { thumb.style.display = 'none'; return; }
+    thumb.style.display = '';
+    const th = Math.max(28, Math.round(ch * ch / sh));
+    thumb.style.height = th + 'px';
+    thumb.style.transform = 'translateY(' + Math.round((ch - th) * (scrollEl.scrollTop / (sh - ch))) + 'px)';
+  };
+  const wake = () => { bar.classList.add('ovbar-awake'); clearTimeout(hideT); hideT = setTimeout(() => bar.classList.remove('ovbar-awake'), 1100); };
+  scrollEl.addEventListener('scroll', () => { layout(); wake(); }, { passive: true });
+  const ro = new ResizeObserver(layout); ro.observe(scrollEl);
+  if (scrollEl.firstElementChild) ro.observe(scrollEl.firstElementChild);
+  window.addEventListener('resize', layout);
+  thumb.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    bar.classList.add('ovbar-drag', 'ovbar-awake'); clearTimeout(hideT);
+    thumb.setPointerCapture(e.pointerId);
+    const y0 = e.clientY, s0 = scrollEl.scrollTop, ch = scrollEl.clientHeight, sh = scrollEl.scrollHeight, th = thumb.offsetHeight;
+    const k = (ch - th) > 0 ? (sh - ch) / (ch - th) : 0;
+    const mv = (ev) => { scrollEl.scrollTop = s0 + (ev.clientY - y0) * k; };
+    const up = () => { bar.classList.remove('ovbar-drag'); wake(); thumb.removeEventListener('pointermove', mv); thumb.removeEventListener('pointerup', up); };
+    thumb.addEventListener('pointermove', mv); thumb.addEventListener('pointerup', up);
+  });
+  layout();
+  _ovLayouts.push(layout);
+  return layout;
 }
-autoHideScrollbar($('#editwrap')?.querySelector('.cm-scroller'));
-autoHideScrollbar($('#preslist'));
-autoHideScrollbar(document.querySelector('#side .tabpane[data-pane="guide"] .helpbody'));
+const relayoutScrollbars = () => { for (const f of _ovLayouts) f(); };
+overlayScrollbar($('#editwrap')?.querySelector('.cm-scroller'), $('#editwrap'), 'left');
+overlayScrollbar($('#preslist'), $('#preslist')?.parentElement, 'right');
+overlayScrollbar(document.querySelector('#side .tabpane[data-pane="guide"] .helpbody'), document.querySelector('#side .tabpane[data-pane="guide"]'), 'right');
 
 // ── canvas sizing (DPR-aware) ───────────────────────────────────────────────────
 let W = 0, H = 0, DPR = 1;
@@ -1606,6 +1644,7 @@ function showTab(name) {
   panes.forEach((p) => { p.hidden = p.dataset.pane !== name; });
   if (name === 'feed') syncFeedUI();             // reflect current feed state into the controls
   localStorage.setItem('loom.sidetab', name);
+  requestAnimationFrame(relayoutScrollbars);     // the newly-shown pane's overlay bar needs a fresh measure
 }
 
 // ── guide: filterable rows, LLM-copy, palette swatches ──────────────────────────────
@@ -1738,6 +1777,7 @@ function setSide(open, tab) {
   side.classList.toggle('hidden', !open);
   document.body.classList.toggle('side-open', open);
   syncSideW();
+  if (open) requestAnimationFrame(relayoutScrollbars);
   // light the toolbar button whose pane is actually showing (presets / guide / feed), or none
   const active = open ? side.querySelector('.tabpane:not([hidden])')?.dataset.pane : null;
   $('#panelbtn').classList.toggle('on', active === 'presets');
