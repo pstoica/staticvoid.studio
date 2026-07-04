@@ -112,6 +112,20 @@ let cps = 0.6;          // cycles per second
 let cycle = 0;          // current position in cycles (fractional)
 let elapsed = 0;        // wall-clock seconds since start, for global-time FX params
 let playing = true;
+// external clock — Ableton Link TEMPO (not Link Audio). A tiny Node bridge forwards Link's tempo
+// over WS as { type:"link", bpm, beat, quantum } (beat = running beat count; quantum = beats per
+// Loom cycle/bar). While active, the tick derives cps + cycle from it (Loom's whole point: its
+// clock is drivable by external ones), correcting to each message and extrapolating between them;
+// it falls back to the speed slider if the feed goes silent > 1s or sends { stop:true }.
+let _link = { active: false, bpm: 120, beat: 0, quantum: 4, t: 0 };
+function _linkInput(m) {
+  if (!m || m.type !== 'link') return;
+  if (m.stop) { _link.active = false; return; }
+  _link.active = true; _link.t = elapsed;
+  if (m.bpm != null) _link.bpm = +m.bpm || 120;
+  if (m.quantum != null) _link.quantum = Math.max(1, +m.quantum || 4);
+  if (m.beat != null) _link.beat = +m.beat;   // snap to the true beat (corrects extrapolation drift)
+}
 let decayScale = 1.5;   // master multiplier on a new glyph's decay (how long it lingers)
 const DEFAULT_BG = '#0a0a0a';
 let bgColor = DEFAULT_BG; // resolved canvas background for the current frame
@@ -859,9 +873,17 @@ function tick(dt) {
     ctx.fillRect(0, 0, W, H);
   }
 
+  if (_link.active && elapsed - _link.t > 1) _link.active = false;   // feed went silent → back to the slider
   if (playing) {
     const prev = cycle;
-    cycle += dt * cps;
+    if (_link.active) {
+      _link.beat += dt * _link.bpm / 60;        // extrapolate between messages
+      cps = _link.bpm / 60 / _link.quantum;     // keep cps in sync (drives oscs)
+      cycle = _link.beat / _link.quantum;       // Loom cycle = Link's bar position → patterns lock to Live
+      const cl = cps.toFixed(2); if (cpsLabel && cpsLabel.textContent !== cl) cpsLabel.textContent = cl;   // show the synced tempo
+    } else {
+      cycle += dt * cps;
+    }
     // query the pattern for the slice of time that just elapsed; spawn onsets.
     try {
       const haps = pattern.query(DSL.span(prev, cycle));
@@ -1062,6 +1084,8 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   midi: (status, d1, d2, dev) => DSL._midiInput(status, d1, d2, dev),   // inject a MIDI message (for tooling/testing; `dev` = optional device name for dev() scope)
   jug: (m) => DSL._jugInput(m),   // inject a juggling-feed message (for tooling/testing)
   audio: (m) => DSL._audioInput(m),   // inject a Link-Audio-feed message (for tooling/testing)
+  link: (m) => _linkInput(m),   // inject an Ableton-Link tempo message (for tooling/testing)
+  get linked() { return _link.active; },
   // current value of a signal fn (cc/gate/vel/note/pc/bend/ballX/…) — drives the editor live badges
   sig: (name, ...args) => { try { const fn = DSL[name]; if (typeof fn !== 'function') return null; const h = fn(...args).query(DSL.span(0, 0)); return h.length ? +h[0].value : 0; } catch { return null; } },
   feed: {   // juggling-feed config (host:port, on/off, selfie flip, camera overlay) — persists
