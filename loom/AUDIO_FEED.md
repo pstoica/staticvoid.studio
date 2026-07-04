@@ -57,7 +57,14 @@ shape("ring").size(hit("drums").range(0.05, 0.3)).decay(0.4) // ring flashes on 
 .color(palette("neon").at(high(0)))                         // hi-hats/air pick the hue
 ```
 
-## Bridge (the TODO half)
+## Bridge — scaffolded at `~/Code/link-audio-bridge`
+
+A headless **openFrameworks** bridge scaffold now exists (separate repo, like `juggling-system`):
+subscribes to N named Link Audio channels (`ofxAbletonLinkAudio`), per-track RMS + FFT + onset,
+broadcasts this exact JSON over `ws://localhost:8090`. **Not yet compiled/tested** — needs the oF
+toolchain + Void addon + Live 12.4; risk spots (esp. the per-stream `setInput` for multitrack) are
+in its README. Verified there's **no Node/Python binding** for Link Audio, so oF is the cleanest
+cli-forward host. Background below.
 
 Link Audio has **no browser/Web Audio implementation** — it needs a native host. The open-source
 **VoidLinkAudio** brings Link Audio to **Max/MSP, Pd, VCV Rack, TouchDesigner, openFrameworks, and
