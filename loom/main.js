@@ -845,6 +845,7 @@ function frame(now) {
 function tick(dt) {
   elapsed += dt;   // advances even when paused (like glyph age), so FX keep living
   DSL._jugDecay(dt);   // age the juggling throw/catch/tap pulses (decays even when paused)
+  DSL._audioDecay(dt); // age the Link-Audio transient pulses (hit) the same way
   DSL._midiFrame();    // snapshot this frame's MIDI note-ons for onNote() (one glyph per note)
   bgColor = bgEval(bgSource, cycle, elapsed);   // bg() is patternable, resolve per frame
   if (glr) glr.setBackground(bgColor);
@@ -1060,6 +1061,7 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   get bodies() { return particles.filter((p) => p.body).length; }, get pointer() { return pointerState; },
   midi: (status, d1, d2, dev) => DSL._midiInput(status, d1, d2, dev),   // inject a MIDI message (for tooling/testing; `dev` = optional device name for dev() scope)
   jug: (m) => DSL._jugInput(m),   // inject a juggling-feed message (for tooling/testing)
+  audio: (m) => DSL._audioInput(m),   // inject a Link-Audio-feed message (for tooling/testing)
   // current value of a signal fn (cc/gate/vel/note/pc/bend/ballX/…) — drives the editor live badges
   sig: (name, ...args) => { try { const fn = DSL[name]; if (typeof fn !== 'function') return null; const h = fn(...args).query(DSL.span(0, 0)); return h.length ? +h[0].value : 0; } catch { return null; } },
   feed: {   // juggling-feed config (host:port, on/off, selfie flip, camera overlay) — persists

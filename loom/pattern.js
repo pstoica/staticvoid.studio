@@ -545,6 +545,44 @@ function tapped(id)   { return signal(() => _jval(id, 'tap', 0)); }
 function flight(id)   { return signal(() => _jval(id, 'flight', 0)); }
 function gyro(id)     { return signal(() => _jval(id, 'spin', 0)); }
 
+// ── Link Audio feed (WebSocket per-track DSP), as signals ──────────────────────────
+// A separate local bridge receives Ableton's Link Audio multitrack streams (Live 12.4+), runs
+// per-track DSP (level + FFT bands + transients), and pushes plain JSON over a WebSocket — the
+// SAME external-sink pattern as the juggling feed (see AUDIO_FEED.md for the message contract).
+// main.js owns the socket (read-only) and pumps every message into _audioInput; the signals below
+// read the latest state. A third native channel: WS = what each TRACK sounds like (alongside
+// MIDI = what the music does, and the juggling WS = where the ball is).
+//   level(id)         track loudness (RMS), 0..1
+//   band(id, n)       the n-th FFT band of a track, 0..1 (0 = lowest)
+//   low/mid/high(id)  coarse thirds of the bands (bass / body / air), 0..1
+//   hit(id)           a transient/onset as a decaying 0..1 pulse (a flash on each beat)
+// id = track index ("0"/"1"/…) or name ("bass") — the join key from the bridge. Signals obey the
+// frozen/live rule: frozen at a glyph's onset (spawn on the beat), live as an FX/physics param.
+const _audio = { tracks: {} };
+const _trackId = (id) => (id == null ? '0' : String(id).toLowerCase());
+const _track = (id) => _audio.tracks[_trackId(id)];
+const _mkTrack = (id) => { const k = _trackId(id); return _audio.tracks[k] || (_audio.tracks[k] = { level: 0, bands: [], hit: 0 }); };
+function _audioInput(m) {                                          // one feed message; switch on type, ignore unknown
+  if (!m || typeof m !== 'object') return;
+  if (m.type === 'tracks' && m.tracks) {                          // per-frame: { level, bands:[…] } per track id
+    for (const id in m.tracks) { const t = m.tracks[id], tr = _mkTrack(id);
+      if (t.level != null) tr.level = +t.level || 0;
+      if (Array.isArray(t.bands)) tr.bands = t.bands.map(Number); }
+  } else if (m.type === 'onset' || m.type === 'hit') { _mkTrack(m.track).hit = Math.min(1, +m.strength || 1); }
+  // status + unknown types: ignored (additive / forward-compatible)
+}
+// decay the transient pulses each frame (from the tick loop) — a flash to 1 that falls to ~0 over
+// ~0.4s, so a beat reads as a discrete trigger on controls and FX (like thrown/caught/tapped).
+function _audioDecay(dt) { const k = Math.exp(-dt * 6); for (const id in _audio.tracks) _audio.tracks[id].hit *= k; }
+const _aval = (id, f, def) => { const t = _track(id); return t ? t[f] : def; };
+function level(id) { return signal(() => _aval(id, 'level', 0)); }
+function hit(id)   { return signal(() => _aval(id, 'hit', 0)); }
+function band(id, n = 0) { return signal(() => { const t = _track(id); if (!t || !t.bands.length) return 0; return t.bands[Math.max(0, Math.min(t.bands.length - 1, n | 0))] || 0; }); }
+const _third = (id, w) => { const t = _track(id); if (!t || !t.bands.length) return 0; const b = t.bands, n = b.length, s = Math.max(1, Math.floor(n / 3)); const lo = w * s, hi = w === 2 ? n : (w + 1) * s; let sum = 0, c = 0; for (let i = lo; i < hi; i++) { sum += b[i] || 0; c++; } return c ? sum / c : 0; };
+function low(id)  { return signal(() => _third(id, 0)); }
+function mid(id)  { return signal(() => _third(id, 1)); }
+function high(id) { return signal(() => _third(id, 2)); }
+
 // slider(value, min?, max?, default?): just returns `value` — it's a plain number in the patch.
 // The editor renders an inline draggable slider over the call (see editor.js); dragging rewrites
 // `value` in the source and re-runs, so the number you see IS the control. min/max (default
@@ -1019,6 +1057,7 @@ export const DSL = {
   mouseX, mouseY, mouseDown, _setPointer,
   cc, gate, vel, note, pc, bend, onNote, dev, _midiInput, _midiFrame,
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, flight, gyro, _jug, _jugInput, _jugDecay,
+  level, band, low, mid, high, hit, _audio, _audioInput, _audioDecay,
   hasOnset, span, isOsc, isSpring, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,
 };
