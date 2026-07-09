@@ -13,7 +13,7 @@ import { StreamLanguage, HighlightStyle, syntaxHighlighting, indentUnit } from '
 import { Tag } from '@lezer/highlight';
 
 // ── Loom vocabulary (highlight only — kept in sync with the DSL) ──
-const FN = new Set(['shape', 's', 'n', 'stack', 'cat', 'slowcat', 'fastcat', 'seq', 'sequence', 'timecat',
+const FN = new Set(['shape', 's', 'n', 'polygon', 'polyline', 'stack', 'cat', 'slowcat', 'fastcat', 'seq', 'sequence', 'timecat',
   'pure', 'silence', 'run', 'range', 'mini', 'euclid', 'fast', 'slow', 'rev', 'choose', 'irand', 'pick', 'iff', 'osc', 'env',
   'palette', 'bg', 'group', 'echo', 'spring', 'physics', 'slider', 'cc', 'gate', 'vel', 'note', 'pc', 'bend', 'onNote', 'dev',
   'ballX', 'ballY', 'ballSeen', 'moving', 'thrown', 'caught', 'tapped', 'flight', 'gyro',

@@ -43,7 +43,7 @@
   #feedcam[hidden] { display:none; }
   /* juggling-feed config — lives in its own sidebar pane (data-pane="feed"), opened by #feedbtn */
   .feedcfg { display:flex; flex-direction:column; gap:11px; font:500 12px/1.3 var(--mono); color:var(--ink); }
-  #feedbtn[hidden], #linkbtn[hidden] { display:none; }   /* niche local tools — hidden until in use */
+  #feedbtn[hidden] { display:none; }   /* niche local tool — hidden until the feed's in use */
   .fphdr { display:flex; align-items:center; gap:7px; font:600 10px/1 var(--mono); letter-spacing:.08em;
     text-transform:uppercase; color:var(--muted); padding-bottom:5px; }
   .fphdr.fpgap { margin-top:6px; border-top:1px solid var(--line); padding-top:15px; }   /* second section divider */
@@ -534,7 +534,7 @@
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.3 2.4c-.8.3-1.3.9-1.3 1.7v.4"/><path d="M12 17h.01"/></svg></button>
     <button class="btn icon" id="feedbtn" aria-label="juggling feed" data-tip="juggling feed" hidden>
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.9 16.1a10 10 0 0 1 0-8.2M19.1 7.9a10 10 0 0 1 0 8.2M7.8 13.2a5 5 0 0 1 0-2.4M16.2 10.8a5 5 0 0 1 0 2.4"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg></button>
-    <button class="btn icon" id="linkbtn" aria-label="ableton link" data-tip="ableton link · audio + tempo" hidden>
+    <button class="btn icon" id="linkbtn" aria-label="ableton link" data-tip="ableton link · audio + tempo">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h3l2.5-6 4 15 3-9L20 12h2"/></svg></button>
   </nav>
 
@@ -574,6 +574,7 @@
         <h3>sources</h3>
         <code>shape("circle*8")</code><p>emit glyphs (alias <code>s</code>)</p>
         <code>n("0 1 2")</code><p>numbered dots · <code>run(8)</code> = 0…7</p>
+        <code>polygon(["a","b","c"])</code><p>one shape drawn as edges through N points — a ball id, or an explicit <code>[x,y]</code> pair (0..1). <code>polyline</code> leaves it open. Sampled per onset, so <code>.fast()</code> to track live points. Edges are lines → <code>.color/.weight/.cap</code> apply.</p>
         <code>bg("#101820")</code><p>set the canvas background, stack it in</p>
         <p class="shapes">shapes: dot circle ring arc square box tri pent hex star plus line cross</p>
         <p class="shapes">3D (tumble with rotateX/Y): cube sphere torus octa</p>

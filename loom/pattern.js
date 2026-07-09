@@ -1037,6 +1037,21 @@ function reifyControl(arg, numeric) {
 function shape(arg) { return reify(arg).fmap((v) => ({ shape: String(v) })); }
 const s = shape;
 function n(arg) { return reify(arg).fmap((v) => ({ shape: 'dot', n: Number(v) })); }
+
+// polygon / polyline: ONE glyph drawn as edges through a list of points. Each point is either a
+// ball id ("a" → [ballX("a"), ballY("a")]) or an explicit [x, y] pair, where x/y are 0..1 across
+// the canvas (numbers, oscs, or live signals). The points are sampled at each onset and the edges
+// are drawn as line glyphs (so .color/.weight/.cap/.blend and group FX all apply) — the renderer
+// expands it (see spawn/spawnPoly in main.js, which has the pixel dims for correct angles/lengths).
+// Sampled per onset, so .fast(n) it to track moving signals smoothly. polygon closes last→first;
+// polyline leaves it open. `polygon(["a","b","c"])` = a live triangle through three balls.
+function _polySrc(pts, closed) {
+  const verts = (Array.isArray(pts) ? pts : []).map((p) =>
+    typeof p === 'string' ? [ballX(p), ballY(p)] : (Array.isArray(p) ? [p[0], p[1]] : [0.5, 0.5]));
+  return pure({ _poly: { verts, closed } });
+}
+function polygon(pts) { return _polySrc(pts, true); }
+function polyline(pts) { return _polySrc(pts, false); }
 function run(k) { return fastcat(...Array.from({ length: k }, (_, i) => pure(i))); }
 function range(pat, lo, hi) { return reify(pat).range(lo, hi); }
 
@@ -1051,7 +1066,7 @@ function rev(p) { return reify(p).rev(); }
 export const DSL = {
   Pattern, pure, silence, stack, slowcat, fastcat, cat, seq, sequence, timecat,
   fast, slow, rev, run, range, mini, euclid,
-  shape, s, n, choose, irand, pick, iff, osc, env, palette, bg, group, echo, spring, physics, slider, _setBgSink,
+  shape, s, n, polygon, polyline, choose, irand, pick, iff, osc, env, palette, bg, group, echo, spring, physics, slider, _setBgSink,
   $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   mouseX, mouseY, mouseDown, _setPointer,

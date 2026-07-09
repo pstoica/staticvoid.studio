@@ -223,8 +223,40 @@ function run() {
 // ── glyph spawning ────────────────────────────────────────────────────────────────
 const PALETTE = ['#ff5d73', '#ffd166', '#6df0c2', '#56b6ff', '#b58cff', '#ff9d5c'];
 
+// polygon/polyline: one source hap becomes N line glyphs, one per edge. We resolve each vertex to
+// a pixel point HERE (spawn owns W/H + numAt/signal sampling) so a diagonal edge gets the right
+// angle + length on any aspect ratio, then synthesize a 'line' value per edge and spawn it — so the
+// edges inherit the poly's colour/weight/cap/blend/group and flow through the normal pipeline.
+function spawnPoly(v, onset) {
+  const poly = v._poly, pts = (poly && poly.verts) || [];
+  const n = pts.length;
+  if (n < 2) return;                                   // need at least one edge
+  const minDim = Math.min(W, H), phase = onset - Math.floor(onset);
+  const sample = (a) => {                               // vertex coord → number (0..1): number | osc | live signal
+    if (a == null) return 0.5;
+    if (isOsc(a)) return numAt(a, 0, phase, elapsed, 0, cycle);
+    if (a instanceof DSL.Pattern) { for (const h of a.query(DSL.span(onset, onset))) if (h.value != null) return +h.value; return 0.5; }
+    return +a || 0;
+  };
+  const P = pts.map((p) => [sample(p[0]), sample(p[1])]);
+  // style-only base: drop the poly marker + every geometry field (we set those per edge)
+  const base = { ...v };
+  for (const k of ['_poly', 'x', 'y', 'radius', 'angle', 'gridX', 'gridY', 'pan', 'rotate', 'spin', 'size', 'open']) delete base[k];
+  base.shape = 'line';
+  base.cap = v.cap || 'round';                          // round caps read as joined corners
+  const edges = poly.closed ? n : n - 1;
+  for (let i = 0; i < edges; i++) {
+    const a = P[i], b = P[(i + 1) % n];
+    const dxp = (b[0] - a[0]) * W, dyp = (b[1] - a[1]) * H;   // pixel-space edge vector
+    const len = Math.hypot(dxp, dyp);
+    if (len < 1e-6) continue;                           // skip coincident points
+    spawn({ ...base, x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2, size: len / 2 / minDim, open: 0, rotate: Math.atan2(dyp, dxp) / TAU }, onset);
+  }
+}
+
 function spawn(value, onset) {
   const v = value || {};
+  if (v._poly) { spawnPoly(v, onset); return; }
   const minDim = Math.min(W, H);
   const phase = onset - Math.floor(onset);
 
@@ -2062,17 +2094,14 @@ setInterval(() => {
 applyVideo();
 feedConnect();
 
-// ── Link bridges: two more WS feeds, no camera/UI (audio DSP + tempo). Same opt-in shape as the
-// juggling feed above — OFF by default, read-only, auto-reconnect ~1s, offline just holds signal
-// defaults. Both talk to ~/Code/link-audio-bridge (see loom/AUDIO_FEED.md). Enable per-session:
-//   • ?audio  / ?audio=host:port   → Link Audio per-track DSP   (bridge default ws://localhost:8090)
-//   • ?link   / ?link=host:port    → Link tempo/beat → clock    (bridge default ws://localhost:8091)
-//   • window.loom.audioFeed.enabled = true / .host = '…'   (likewise window.loom.linkFeed); persists.
-//   • window.loom.audio(msg) / window.loom.link(msg) still inject frames for testing without a host.
-function extFeed(param, defHost, onMsg, onEnable) {
-  const ON_KEY = 'loom.' + param + 'On', HOST_KEY = 'loom.' + param + 'Host';
+// ── Link bridges: two more WS feeds, no camera (audio DSP + tempo). Read-only, auto-reconnect ~1s,
+// offline just holds signal defaults. Both talk to ~/Code/link-audio-bridge (see loom/AUDIO_FEED.md).
+// Enabled from the Link pane (toolbar antenna #linkbtn) — connect toggle + host per bridge; the
+// choice + host persist. window.loom.audioFeed/linkFeed { enabled, host, connected } mirror it, and
+// window.loom.audio(msg) / window.loom.link(msg) inject frames for testing without a host.
+function extFeed(defHost, keyBase, onMsg) {
+  const ON_KEY = 'loom.' + keyBase + 'On', HOST_KEY = 'loom.' + keyBase + 'Host';
   const st = { on: localStorage.getItem(ON_KEY) === '1', host: localStorage.getItem(HOST_KEY) || defHost, ws: null };
-  { const p = new URLSearchParams(location.search).get(param); if (p != null) { st.on = true; if (p) st.host = p; } }   // ?param or ?param=host:port
   function connect() {
     if (!st.on || st.ws) return;
     try { st.ws = new WebSocket('ws://' + st.host); }
@@ -2085,39 +2114,32 @@ function extFeed(param, defHost, onMsg, onEnable) {
   return {
     connect,
     get enabled() { return st.on; },
-    set enabled(v) { st.on = !!v; localStorage.setItem(ON_KEY, v ? '1' : '0'); if (v) { connect(); onEnable && onEnable(); } else drop(); },
+    set enabled(v) { st.on = !!v; localStorage.setItem(ON_KEY, v ? '1' : '0'); if (v) connect(); else drop(); },
     get host() { return st.host; },
     set host(h) { st.host = String(h).trim() || defHost; localStorage.setItem(HOST_KEY, st.host); if (st.on) { drop(); connect(); } },
     get connected() { return !!(st.ws && st.ws.readyState === 1); },
     get status() { return !st.on ? 'off' : (st.ws && st.ws.readyState === 1) ? 'on' : 'wait'; },   // for the config UI dot
   };
 }
-
-// ── Link config pane (data-pane="link", toolbar antenna #linkbtn): connect toggles + host inputs
-// for both bridges, with live status dots + readouts. Same niche-tool reveal as the juggling feed —
-// the button stays off the public UI until audio/tempo is actually in use (URL param or enabled).
-const LINK_SHOW_KEY = 'loom.linkShow';
-const lp = { btn: $('#linkbtn'), pane: $('#side .tabpane[data-pane="link"]'),
-  aOn: $('#audioon'), aHost: $('#audiohostin'), aDot: $('#audiodot'), aStat: $('#audiostat'), aTracks: $('#audiotracks'),
-  lOn: $('#linkon'), lHost: $('#linkhostin'), lDot: $('#linkdot'), lStat: $('#linkstat'), lRead: $('#linkreadout') };
-function revealLink() { if (lp.btn && lp.btn.hidden) { lp.btn.hidden = false; localStorage.setItem(LINK_SHOW_KEY, '1'); } }
-function syncLinkUI() {   // reflect current bridge state into the controls (called on pane show)
-  if (!lp.aOn) return;
-  lp.aOn.checked = audioFeed.enabled; lp.aHost.value = audioFeed.host;
-  lp.lOn.checked = linkFeed.enabled; lp.lHost.value = linkFeed.host;
-}
-
-const audioFeed = extFeed('audio', 'localhost:8090', (m) => DSL._audioInput(m), revealLink);
-const linkFeed = extFeed('link', 'localhost:8091', (m) => _linkInput(m), revealLink);
+const audioFeed = extFeed('localhost:8090', 'audio', (m) => DSL._audioInput(m));
+const linkFeed = extFeed('localhost:8091', 'link', (m) => _linkInput(m));
 audioFeed.connect();
 linkFeed.connect();
 window.loom.audioFeed = audioFeed;   // { enabled, host, connected } — mirrors window.loom.feed
 window.loom.linkFeed = linkFeed;
 
-const linkShow = audioFeed.enabled || linkFeed.enabled || localStorage.getItem(LINK_SHOW_KEY) === '1';
-if (linkShow) { localStorage.setItem(LINK_SHOW_KEY, '1'); if (lp.btn) lp.btn.hidden = false; }
+// ── Link config pane (data-pane="link", toolbar antenna #linkbtn): connect toggle + host per bridge,
+// with live status dots + readouts. Unlike the juggling feed, the button is always in the toolbar.
+const lp = { btn: $('#linkbtn'), pane: $('#side .tabpane[data-pane="link"]'),
+  aOn: $('#audioon'), aHost: $('#audiohostin'), aDot: $('#audiodot'), aStat: $('#audiostat'), aTracks: $('#audiotracks'),
+  lOn: $('#linkon'), lHost: $('#linkhostin'), lDot: $('#linkdot'), lStat: $('#linkstat'), lRead: $('#linkreadout') };
+function syncLinkUI() {   // reflect current bridge state into the controls (called on pane show)
+  if (!lp.aOn) return;
+  lp.aOn.checked = audioFeed.enabled; lp.aHost.value = audioFeed.host;
+  lp.lOn.checked = linkFeed.enabled; lp.lHost.value = linkFeed.host;
+}
 if (lp.btn) lp.btn.addEventListener('click', () => setSide(!onTab('link'), 'link'));
-if (lp.aOn) lp.aOn.addEventListener('change', () => { audioFeed.enabled = lp.aOn.checked; });   // setter reveals the button
+if (lp.aOn) lp.aOn.addEventListener('change', () => { audioFeed.enabled = lp.aOn.checked; });
 if (lp.aHost) lp.aHost.addEventListener('change', () => { audioFeed.host = lp.aHost.value.trim(); lp.aHost.value = audioFeed.host; });
 if (lp.lOn) lp.lOn.addEventListener('change', () => { linkFeed.enabled = lp.lOn.checked; });
 if (lp.lHost) lp.lHost.addEventListener('change', () => { linkFeed.host = lp.lHost.value.trim(); lp.lHost.value = linkFeed.host; });
