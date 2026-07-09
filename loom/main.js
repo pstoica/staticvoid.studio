@@ -1669,6 +1669,7 @@ const panes = [...side.querySelectorAll('.tabpane')];
 function showTab(name) {
   panes.forEach((p) => { p.hidden = p.dataset.pane !== name; });
   if (name === 'feed') syncFeedUI();             // reflect current feed state into the controls
+  if (name === 'link') syncLinkUI();             // …likewise the Link audio/tempo controls
   localStorage.setItem('loom.sidetab', name);
   requestAnimationFrame(relayoutScrollbars);     // the newly-shown pane's overlay bar needs a fresh measure
 }
@@ -2068,7 +2069,7 @@ feedConnect();
 //   • ?link   / ?link=host:port    → Link tempo/beat → clock    (bridge default ws://localhost:8091)
 //   • window.loom.audioFeed.enabled = true / .host = '…'   (likewise window.loom.linkFeed); persists.
 //   • window.loom.audio(msg) / window.loom.link(msg) still inject frames for testing without a host.
-function extFeed(param, defHost, onMsg) {
+function extFeed(param, defHost, onMsg, onEnable) {
   const ON_KEY = 'loom.' + param + 'On', HOST_KEY = 'loom.' + param + 'Host';
   const st = { on: localStorage.getItem(ON_KEY) === '1', host: localStorage.getItem(HOST_KEY) || defHost, ws: null };
   { const p = new URLSearchParams(location.search).get(param); if (p != null) { st.on = true; if (p) st.host = p; } }   // ?param or ?param=host:port
@@ -2084,18 +2085,61 @@ function extFeed(param, defHost, onMsg) {
   return {
     connect,
     get enabled() { return st.on; },
-    set enabled(v) { st.on = !!v; localStorage.setItem(ON_KEY, v ? '1' : '0'); if (v) connect(); else drop(); },
+    set enabled(v) { st.on = !!v; localStorage.setItem(ON_KEY, v ? '1' : '0'); if (v) { connect(); onEnable && onEnable(); } else drop(); },
     get host() { return st.host; },
     set host(h) { st.host = String(h).trim() || defHost; localStorage.setItem(HOST_KEY, st.host); if (st.on) { drop(); connect(); } },
     get connected() { return !!(st.ws && st.ws.readyState === 1); },
+    get status() { return !st.on ? 'off' : (st.ws && st.ws.readyState === 1) ? 'on' : 'wait'; },   // for the config UI dot
   };
 }
-const audioFeed = extFeed('audio', 'localhost:8090', (m) => DSL._audioInput(m));
-const linkFeed = extFeed('link', 'localhost:8091', (m) => _linkInput(m));
+
+// ── Link config pane (data-pane="link", toolbar antenna #linkbtn): connect toggles + host inputs
+// for both bridges, with live status dots + readouts. Same niche-tool reveal as the juggling feed —
+// the button stays off the public UI until audio/tempo is actually in use (URL param or enabled).
+const LINK_SHOW_KEY = 'loom.linkShow';
+const lp = { btn: $('#linkbtn'), pane: $('#side .tabpane[data-pane="link"]'),
+  aOn: $('#audioon'), aHost: $('#audiohostin'), aDot: $('#audiodot'), aStat: $('#audiostat'), aTracks: $('#audiotracks'),
+  lOn: $('#linkon'), lHost: $('#linkhostin'), lDot: $('#linkdot'), lStat: $('#linkstat'), lRead: $('#linkreadout') };
+function revealLink() { if (lp.btn && lp.btn.hidden) { lp.btn.hidden = false; localStorage.setItem(LINK_SHOW_KEY, '1'); } }
+function syncLinkUI() {   // reflect current bridge state into the controls (called on pane show)
+  if (!lp.aOn) return;
+  lp.aOn.checked = audioFeed.enabled; lp.aHost.value = audioFeed.host;
+  lp.lOn.checked = linkFeed.enabled; lp.lHost.value = linkFeed.host;
+}
+
+const audioFeed = extFeed('audio', 'localhost:8090', (m) => DSL._audioInput(m), revealLink);
+const linkFeed = extFeed('link', 'localhost:8091', (m) => _linkInput(m), revealLink);
 audioFeed.connect();
 linkFeed.connect();
 window.loom.audioFeed = audioFeed;   // { enabled, host, connected } — mirrors window.loom.feed
 window.loom.linkFeed = linkFeed;
+
+const linkShow = audioFeed.enabled || linkFeed.enabled || localStorage.getItem(LINK_SHOW_KEY) === '1';
+if (linkShow) { localStorage.setItem(LINK_SHOW_KEY, '1'); if (lp.btn) lp.btn.hidden = false; }
+if (lp.btn) lp.btn.addEventListener('click', () => setSide(!onTab('link'), 'link'));
+if (lp.aOn) lp.aOn.addEventListener('change', () => { audioFeed.enabled = lp.aOn.checked; });   // setter reveals the button
+if (lp.aHost) lp.aHost.addEventListener('change', () => { audioFeed.host = lp.aHost.value.trim(); lp.aHost.value = audioFeed.host; });
+if (lp.lOn) lp.lOn.addEventListener('change', () => { linkFeed.enabled = lp.lOn.checked; });
+if (lp.lHost) lp.lHost.addEventListener('change', () => { linkFeed.host = lp.lHost.value.trim(); lp.lHost.value = linkFeed.host; });
+function setLinkDot(dot, stat, s) {
+  if (!dot) return;
+  dot.className = 'fpdot' + (s === 'on' ? ' on' : s === 'wait' ? ' wait' : '');
+  stat.textContent = s === 'on' ? 'live' : s === 'wait' ? 'connecting…' : 'off';
+}
+const _spark = '▁▂▃▄▅▆▇█';
+setInterval(() => {   // live dots + readouts, only while the pane is open (cheap)
+  if (!lp.pane || lp.pane.hidden) return;
+  setLinkDot(lp.aDot, lp.aStat, audioFeed.status);
+  setLinkDot(lp.lDot, lp.lStat, linkFeed.status);
+  const t = DSL._audio.tracks, ids = Object.keys(t).sort();
+  lp.aTracks.textContent = ids.length ? ids.map((k) => {
+    const o = t[k], lv = o.level || 0, bar = _spark[Math.min(7, Math.max(0, Math.floor(lv * 8)))];
+    return `${k.padEnd(6)} ${bar} ${lv.toFixed(2)}${o.hit > 0.1 ? '  ‹hit›' : ''}`;   // fixed width → columns
+  }).join('\n') : 'no tracks — waiting for the bridge';
+  lp.lRead.textContent = _link.active
+    ? `${_link.bpm.toFixed(1)} bpm · beat ${(((_link.beat % _link.quantum) + _link.quantum) % _link.quantum).toFixed(2)}/${_link.quantum}`
+    : 'clock: internal';
+}, 140);
 
 resize();
 setCps(cps);
