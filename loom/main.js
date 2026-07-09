@@ -2061,6 +2061,42 @@ setInterval(() => {
 applyVideo();
 feedConnect();
 
+// ── Link bridges: two more WS feeds, no camera/UI (audio DSP + tempo). Same opt-in shape as the
+// juggling feed above — OFF by default, read-only, auto-reconnect ~1s, offline just holds signal
+// defaults. Both talk to ~/Code/link-audio-bridge (see loom/AUDIO_FEED.md). Enable per-session:
+//   • ?audio  / ?audio=host:port   → Link Audio per-track DSP   (bridge default ws://localhost:8090)
+//   • ?link   / ?link=host:port    → Link tempo/beat → clock    (bridge default ws://localhost:8091)
+//   • window.loom.audioFeed.enabled = true / .host = '…'   (likewise window.loom.linkFeed); persists.
+//   • window.loom.audio(msg) / window.loom.link(msg) still inject frames for testing without a host.
+function extFeed(param, defHost, onMsg) {
+  const ON_KEY = 'loom.' + param + 'On', HOST_KEY = 'loom.' + param + 'Host';
+  const st = { on: localStorage.getItem(ON_KEY) === '1', host: localStorage.getItem(HOST_KEY) || defHost, ws: null };
+  { const p = new URLSearchParams(location.search).get(param); if (p != null) { st.on = true; if (p) st.host = p; } }   // ?param or ?param=host:port
+  function connect() {
+    if (!st.on || st.ws) return;
+    try { st.ws = new WebSocket('ws://' + st.host); }
+    catch { st.ws = null; return; }
+    st.ws.onmessage = (e) => { try { onMsg(JSON.parse(e.data)); } catch { /* skip a bad frame */ } };
+    st.ws.onclose = () => { st.ws = null; if (st.on) setTimeout(connect, 1000); };   // reconnect while enabled
+    st.ws.onerror = () => { try { st.ws.close(); } catch {} };
+  }
+  function drop() { if (st.ws) { try { st.ws.close(); } catch {} st.ws = null; } }
+  return {
+    connect,
+    get enabled() { return st.on; },
+    set enabled(v) { st.on = !!v; localStorage.setItem(ON_KEY, v ? '1' : '0'); if (v) connect(); else drop(); },
+    get host() { return st.host; },
+    set host(h) { st.host = String(h).trim() || defHost; localStorage.setItem(HOST_KEY, st.host); if (st.on) { drop(); connect(); } },
+    get connected() { return !!(st.ws && st.ws.readyState === 1); },
+  };
+}
+const audioFeed = extFeed('audio', 'localhost:8090', (m) => DSL._audioInput(m));
+const linkFeed = extFeed('link', 'localhost:8091', (m) => _linkInput(m));
+audioFeed.connect();
+linkFeed.connect();
+window.loom.audioFeed = audioFeed;   // { enabled, host, connected } — mirrors window.loom.feed
+window.loom.linkFeed = linkFeed;
+
 resize();
 setCps(cps);
 setDecay(decayScale);
