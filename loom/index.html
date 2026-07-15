@@ -626,6 +626,7 @@
         <h3>shader fx <span>(chain onto a group)</span></h3>
         <code>.pixelate(n) .blur(n)</code><p>mosaic · gaussian glow</p>
         <code>.feedback(fade, zoom, rot) .trails(fade)</code><p>trails / tunnel, warps the previous frame</p>
+        <code>.feedback(fade, zoom, rot, f =&gt; f.hue(0.015).blur(1.5))</code><p>the last arg <em>embeds effects inside the loop</em>: they run on the history every frame and <em>compound</em> as it recirculates — hue keeps rotating, blur keeps diffusing (an effect chained after feedback touches the output once). small values; params patternable</p>
         <code>.kaleido(n) .mirror()</code><p>radial wedges · left/right symmetry</p>
         <code>.tile(x, y) .dots(n)</code><p>grid repeat · halftone dots (grow with brightness)</p>
         <code>.rgbshift(amt, ang) .posterize(n)</code><p>channel split · colour quantize</p>

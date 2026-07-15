@@ -113,8 +113,8 @@ Effects **chain in call order**, each is a shader pass over the layer's texture:
 | --- | --- | --- |
 | `.pixelate(block)` | block size (px) | mosaic / blocky downscale |
 | `.blur(radius)` | radius (px) | gaussian blur → soft glow |
-| `.feedback(fade, zoom, rot)` | fade `0..1`, zoom `~1`, rot turns | trails / tunnel, composites over a warped copy of the previous frame |
-| `.trails(fade)` | fade `0..1` | feedback with no zoom / rotation |
+| `.feedback(fade, zoom, rot, loop?)` | fade `0..1`, zoom `~1`, rot turns, loop = `f => f.…` | trails / tunnel, composites over a warped copy of the previous frame. `loop` **embeds effects inside the feedback** (see below) |
+| `.trails(fade, loop?)` | fade `0..1` | feedback with no zoom / rotation |
 | `.hue(t)` | turns | rotate hue |
 | `.brightness(b)` `.contrast(c)` `.saturate(s)` | `1` = identity (`saturate(0)` = grey) | colour grade |
 | `.negative(amount)` `.invert(amount)` | `0..1` (`0` = off) | invert colours |
@@ -159,6 +159,23 @@ and off (the pass is skipped, not run as identity): `pixelate(≤1)`, `blur(0)`,
 `scale(1)`, `move(0,0)`, `turn(0)`, `aspect(≤0)`, `feedback` with fade `0`, and `grade`
 at its identity (`hue 0`, the rest `1`). So `kaleido("<6 0>")` folds every other
 cycle, `mirror("1 0")` flips on and off, `blur(saw.range(0, 12))` swells in.
+
+**Embedded effects inside feedback.** `feedback`'s optional last arg is a builder
+whose chain runs **on the history each frame, inside the loop** — so those effects
+**compound** as the image recirculates (hue keeps rotating, blur keeps diffusing,
+displace keeps melting), unlike a chained effect after `feedback`, which touches the
+output once and never the history:
+
+```js
+group(shape("ring*5").radius(saw.range(0.05, 0.4))
+  .color(palette("neon").at(saw.range(0, 1))).weight(0.008))
+  .feedback(0.96, 1.03, 0.015, f => f.hue(0.015).blur(1.5))
+// rainbow tunnel: trails hue-shift and soften the older they get
+```
+
+Any FX verb works inside the loop, params are patternable as usual
+(`f => f.blur("<0 2>")` alternates per cycle), and small values go a long way —
+the effect is applied **every frame**, so `hue(0.015)` is a full rainbow in ~1s.
 
 > Note: FX live on the group, evaluated per-frame, so per-event combinators like
 > `.sometimes` don't apply to them, pattern the FX param instead (as above).

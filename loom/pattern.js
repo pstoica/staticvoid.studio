@@ -777,8 +777,15 @@ class Group {
   }
   pixelate(n) { this._fx.pixelate = n; return this._push({ type: 'pixelate', block: n }); }      // block size, px
   blur(n = 4) { return this._push({ type: 'blur', radius: n }); }                                  // gaussian radius, px
-  feedback(fade = 0.92, zoom = 1.0, rot = 0) { return this._push({ type: 'feedback', fade, zoom, rot }); } // trails/tunnel
-  trails(fade = 0.92) { return this._push({ type: 'feedback', fade, zoom: 1.0, rot: 0 }); }        // feedback, no warp
+  // feedback(fade, zoom, rot, loop?): trails/tunnel. The optional 4th arg EMBEDS effects
+  // inside the loop — a builder fn whose chain runs on the HISTORY each frame before it's
+  // composited and re-stored, so those effects COMPOUND as the image recirculates (hue
+  // keeps rotating, blur keeps diffusing, displace keeps melting), unlike a chain effect
+  // after feedback, which is applied once to the output:
+  //   .feedback(0.97, 1.02, 0, f => f.hue(0.02).blur(1.5))   // rainbow tunnel, trails soften as they sink
+  // Loop params are patternable like any FX param (resolved against global time per frame).
+  feedback(fade = 0.92, zoom = 1.0, rot = 0, loop) { return this._push({ type: 'feedback', fade, zoom, rot, loop: _loopFx(loop) }); }
+  trails(fade = 0.92, loop) { return this._push({ type: 'feedback', fade, zoom: 1.0, rot: 0, loop: _loopFx(loop) }); }  // feedback, no warp
   hue(t = 0) { return this._push({ type: 'grade', hue: t }); }                                     // hue shift, turns
   brightness(b = 1) { return this._push({ type: 'grade', brightness: b }); }                       // 1 = identity
   contrast(c = 1) { return this._push({ type: 'grade', contrast: c }); }                           // 1 = identity
@@ -826,6 +833,18 @@ class Group {
     return this._pat.query(s).map((h) => hap(h.whole, h.part, Object.assign({}, h.value, extra)));
   }
 }
+// build an EMBEDDED fx chain for feedback's loop arg: `f => f.hue(0.02).blur(1.5)` gets a
+// builder with every Group FX verb but none of Group's registration — Object.create skips
+// the constructor, so no gid is minted and nothing lands in _groupFx; we only harvest the
+// chain the callback pushed. (query() would fail on it, but the builder is never queried.)
+function _loopFx(f) {
+  if (typeof f !== 'function') return undefined;
+  const c = Object.create(Group.prototype);
+  c._fx = { chain: [] };
+  f(c);
+  return c._fx.chain.length ? c._fx.chain : undefined;
+}
+
 // variadic like stack(), so group(bg(...), shape(...)) works as expected (not just
 // group(stack(...))). one arg passes through unchanged.
 function group(...pats) { return new Group(pats.length > 1 ? stack(...pats) : (pats[0] || silence)); }

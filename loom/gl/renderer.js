@@ -926,7 +926,7 @@ export class GLRenderer {
     const dw = Math.max(1, Math.round(this.W * this.DPR)), dh = Math.max(1, Math.round(this.H * this.DPR));
     let rt = this.groupRTs.get(gid);
     if (!rt || rt.w !== dw || rt.h !== dh) {
-      if (rt) { rt.a.dispose(); rt.b.dispose(); if (rt.hist) { rt.hist[0].dispose(); rt.hist[1].dispose(); } if (rt.mip) rt.mip.dispose(); }
+      if (rt) this._disposeRT(rt);
       const opt = { depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
       // `a` also holds glyphs + imported meshes, so it needs a depth buffer for mesh
       // self-occlusion; `b` is only an FX ping-pong, no depth.
@@ -1372,9 +1372,21 @@ export class GLRenderer {
         this._blit(m, read.texture, write); swap();
       } else if (t === 'feedback') {
         this._ensureHistory(rt);
+        let histTex = rt.hist[rt.histCur].texture;
+        // EMBEDDED loop effects (feedback's 4th arg): run the sub-chain on the HISTORY
+        // before it's composited and re-stored, so each recirculation applies them again —
+        // they COMPOUND over frames (hue keeps rotating, blur keeps diffusing), unlike a
+        // chain effect after feedback, which touches the output once and never the history.
+        // Recurses through _applyChain on a dedicated half-float scratch pair, so every FX
+        // (and its skip-when-off logic) works inside the loop unchanged.
+        if (e.loop && e.loop.length) {
+          const lrt = this._ensureLoop(rt);
+          this._blit(this.fx.copy, histTex, lrt.a);
+          histTex = this._applyChain(lrt, { chain: e.loop });
+        }
         const next = rt.hist[1 - rt.histCur];
         const m = this.fx.feedback;
-        m.uniforms.tHist.value = rt.hist[rt.histCur].texture;
+        m.uniforms.tHist.value = histTex;
         m.uniforms.uFade.value = this._num(e.fade, 0.92);
         m.uniforms.uZoom.value = this._num(e.zoom, 1.0);
         m.uniforms.uRot.value = this._num(e.rot, 0);
@@ -1395,6 +1407,26 @@ export class GLRenderer {
     const opt = { depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType };
     rt.hist = [new THREE.WebGLRenderTarget(rt.w, rt.h, opt), new THREE.WebGLRenderTarget(rt.w, rt.h, opt)];
     rt.histW = rt.w; rt.histH = rt.h; rt.histCur = 0;
+  }
+  // lazily allocate the scratch pair the embedded feedback-loop chain ping-pongs on.
+  // Half-float like the history itself: the processed history is what gets re-stored,
+  // and an 8-bit round-trip would quantize the geometric fade — dim trails would floor
+  // at a few /255 and ghost permanently. Shaped like a group rt ({a, b, w, h}) so
+  // _applyChain recurses on it unchanged (mip/hist attach lazily if the loop uses them).
+  _ensureLoop(rt) {
+    if (rt.loop && rt.loop.w === rt.w && rt.loop.h === rt.h) return rt.loop;
+    if (rt.loop) this._disposeRT(rt.loop);
+    const opt = { depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType };
+    rt.loop = { a: new THREE.WebGLRenderTarget(rt.w, rt.h, opt), b: new THREE.WebGLRenderTarget(rt.w, rt.h, opt), w: rt.w, h: rt.h };
+    return rt.loop;
+  }
+  // dispose a group rt and everything lazily attached to it (history, mip, loop scratch —
+  // recursive, since a loop scratch can itself grow a mip/history/loop).
+  _disposeRT(rt) {
+    rt.a.dispose(); rt.b.dispose();
+    if (rt.hist) { rt.hist[0].dispose(); rt.hist[1].dispose(); rt.hist = null; }
+    if (rt.mip) { rt.mip.dispose(); rt.mip = null; }
+    if (rt.loop) { this._disposeRT(rt.loop); rt.loop = null; }
   }
   // lazily allocate the mipmapped scratch the pixelate pass averages over
   _ensureMip(rt) {
@@ -1427,8 +1459,7 @@ export class GLRenderer {
   _pruneGroups(activeGroups) {
     for (const gid of [...this.groupRTs.keys()]) {
       if (!activeGroups || !activeGroups.has(gid)) {
-        const rt = this.groupRTs.get(gid);
-        rt.a.dispose(); rt.b.dispose(); if (rt.hist) { rt.hist[0].dispose(); rt.hist[1].dispose(); } if (rt.mip) rt.mip.dispose();
+        this._disposeRT(this.groupRTs.get(gid));
         this.groupRTs.delete(gid);
       }
     }
