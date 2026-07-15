@@ -601,6 +601,7 @@
         <code>.alpha(0..1) .opacity(0..1) .pan(0..1) .jitter(0..0.1)</code>
         <code>.attack(s) .decay(s)</code><p>fade-in / fade-out (s alias <code>.life</code>)</p>
         <code>.attack(s, "outBack") .decay(s, "inOutSine")</code><p>shape the fade with a Penner curve (2nd arg)</p>
+        <code>.hold(cond)</code><p><em>sustain</em>: while <code>cond</code> is truthy the envelope parks at full presence; the decay runs from release. cond is live (re-read every frame): <code>.hold(gate(1))</code> while a MIDI key is down, <code>.hold(mouseDown)</code> while pressed, <code>.hold(1)</code> until clear</p>
         <code>.blend("source-over"|"screen"|"lighter"|"multiply")</code>
       </section>
       <section data-cat="xform">
@@ -659,6 +660,7 @@
         <code>.quantize(n) .segment(n)</code><p>snap the <em>value</em> to n steps · snap the <em>time</em> to n steps/cycle (alias <code>.seg</code>)</p>
         <code>.ease("outExpo")</code><p>shape a 0..1 signal/osc through a Penner curve <em>before</em> <code>.range()</code> — in/out/inOut × quad·cubic·quart·expo·sine·back·elastic·bounce. <code>saw.ease("outExpo").range(0,1)</code></p>
         <code>osc(…).spring(stiffness, damping)</code><p>chase the osc's (usually <code>.quantize</code>d) output with a damped spring — per-glyph momentum / overshoot / settle. <code>.x(osc(0.2,"saw").quantize(8).spring(150,11))</code> settles between steps</p>
+        <code>spring(target, k?, d?)</code><p>free-function form; the target may also be a <em>live signal</em> or mini-notation: <code>.x(spring(note(1)))</code> glides to each new note, <code>spring(mouseX)</code> chases the pointer, <code>spring("&lt;0.2 0.8&gt;")</code> lurches between steps. pair with <code>.hold(gate(1))</code> for a mono voice</p>
         <code>.add(x) .sub(x) .mul(x) .div(x)</code><p>x may be a number <em>or a pattern</em></p>
         <code>.x( saw.add(sine.range(0, 0.1)) )</code><p>← wobble a ramp by a sine</p>
       </section>

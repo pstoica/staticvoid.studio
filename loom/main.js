@@ -274,7 +274,7 @@ function spawn(value, onset) {
   const sprInit = {};
   for (const f of SPRING_FIELDS) if (isSpring(v[f])) {
     const sd = v[f].__spring;
-    const x0 = numAt(sd.target, 0, phase, elapsed, 0, cycle);
+    const x0 = springTarget(sd.target, 0, phase, elapsed, 0, cycle);
     springs.push({ field: f, target: sd.target, k: sd.k, d: sd.d, x: x0, v: 0 });
     sprInit[f] = x0;
   }
@@ -317,6 +317,8 @@ function spawn(value, onset) {
     blend: v.blend || 'source-over',
     age: 0,
     ageCycles: 0,              // age in CYCLES, accumulated per frame → tempo-synced oscs survive a live cps change
+    envAge: 0,                 // the ENVELOPE's clock: tracks age, but parks at `attack` while held (sustain)
+    hold: v.hold != null ? v.hold : null,   // live sustain condition (signal/osc/pattern/number), sampled per frame
     attack: v.attack != null ? v.attack : 0.06,
     // fade-out seconds; default ~1 cycle. The master slider is baked in HERE so
     // each glyph keeps the decay it was born with.
@@ -489,6 +491,18 @@ function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
   return r;
 }
 const numAt = (a, age, gp = 0, st = 0, ageC = null, stC = null) => (isOsc(a) ? evalOsc(a.__osc, age, gp, st, ageC, stC) : a);
+// a spring target may also be a live SIGNAL / pattern — spring(note(1)) chases the held
+// note, spring("<0.2 0.8>") a per-cycle step. numAt alone would pass the Pattern through
+// unresolved and NaN the field. Signals read external state, so the sample instant is
+// "now" (the current global cycle, with the tiny forward window discrete patterns need).
+const springTarget = (t, age, gp, st, ageC, stC) => {
+  if (t instanceof DSL.Pattern) {
+    const hs = t.query(DSL.span(cycle, cycle + 1e-4));
+    for (const h of hs) if (h.value != null) return +h.value;
+    return 0;
+  }
+  return numAt(t, age, gp, st, ageC, stC);
+};
 // freeze SIGNAL-valued osc params to their value at the glyph's onset, so a live osc can be based
 // on a per-glyph signal: osc(r).range(note(1), note(1).add(.1)) keeps the waveform LIVE but
 // captures the note's hue ONCE at spawn (numAt only evals numbers/oscs, so a raw signal param
@@ -955,7 +969,12 @@ function tick(dt) {
     const p = particles[i];
     p.age += dt;
     p.ageCycles += dt * cps;                          // accumulates at the live tempo (no retroactive warp)
-    if (p.age >= p.attack + p.decay) {                // expired → drop (and free its body)
+    // the envelope's own clock: identical to age for ordinary glyphs, but while a .hold()
+    // condition is truthy it PARKS at the top of the attack (sustain at full presence);
+    // release resumes the decay. Re-holding mid-decay snaps back to full (v1, OBJECTS.md).
+    if (p.hold != null && p.envAge + dt >= p.attack && evalGlobal(p.hold, cycle, elapsed) > 0.5) p.envAge = p.attack;
+    else p.envAge += dt;
+    if (p.envAge >= p.attack + p.decay) {             // expired → drop (and free its body)
       if (p.body && p.pid) { const wd = physWorlds.get(p.pid); if (wd) wd.remove(p.body); p.body = null; }
       continue;
     }
@@ -965,11 +984,11 @@ function tick(dt) {
     // elastic) flat-tops rather than blowing out. (Future: route overshoot into a
     // size pop for a true bounce-in — see ROADMAP.)
     let env;
-    if (p.age < p.attack) {
-      const t = p.attack > 0 ? p.age / p.attack : 1;
+    if (p.envAge < p.attack) {
+      const t = p.attack > 0 ? p.envAge / p.attack : 1;
       env = p.attackEase ? applyEase(p.attackEase, t) : t;
     } else {
-      const t = (p.age - p.attack) / p.decay;
+      const t = (p.envAge - p.attack) / p.decay;
       env = p.decayEase ? applyEase(p.decayEase, 1 - t) : 1 - t;
     }
     p._env = Math.max(0, Math.min(1, env));
@@ -981,7 +1000,7 @@ function tick(dt) {
       const sub = Math.min(8, Math.max(1, Math.ceil(dt / 0.008)));
       const h = dt / sub;
       for (const s of p.springs) {
-        const tgt = numAt(s.target, p.age, p.phase, p.spawnT, p.ageCycles, p.spawnCycle);
+        const tgt = springTarget(s.target, p.age, p.phase, p.spawnT, p.ageCycles, p.spawnCycle);
         for (let k = 0; k < sub; k++) {
           s.v += (s.k * (tgt - s.x) - s.d * s.v) * h;
           s.x += s.v * h;

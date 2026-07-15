@@ -283,6 +283,17 @@ class Pattern {
   attack(a, curve) { const p = this.set('attack', a); return curve != null ? p.set('attackEase', curve) : p; }
   decay(a, curve)  { const p = this.set('decay', a);  return curve != null ? p.set('decayEase', curve) : p; }
   life(a, curve)   { return this.decay(a, curve); } // alias for decay
+  // hold(cond): SUSTAIN. While `cond` is truthy (>0.5) the lifetime envelope parks at the
+  // top of its attack (full presence); the decay only runs once it releases — the segment
+  // the attack/decay envelope never had, so a HELD note can finally hold a glyph:
+  // `.hold(gate(1))` sustains while a key is down, `.hold(mouseDown)` while pressed,
+  // `.hold(1)` until the clear button. cond is LIVE — re-sampled every frame like an FX
+  // param (signal / osc / mini-notation / number) — so it's carried raw on the value,
+  // NOT sampled at onset via set() (freezing a hold at spawn would defeat it).
+  hold(cond = 1) {
+    const c = typeof cond === 'string' ? mini(cond) : cond;
+    return this.fmap((v) => Object.assign({}, v, { hold: c }));
+  }
 }
 
 const NUMERIC = new Set(['size','x','y','radius','angle','gridX','gridY','rotate','rotateX','rotateY','spin','alpha','pan','jitter','weight','attack','decay','fill','stroke','vertex','open']);
@@ -677,6 +688,7 @@ function env(attack = 0.1, decay = 1, easeIn, easeOut) {
 // (under-damped → overshoot; over-damped → glide). The renderer owns the integration;
 // here we just package the target + constants. Use on x/y/radius/angle/size/rotate/etc.
 function spring(target, stiffness = 120, damping = 14) {
+  if (typeof target === 'string') target = mini(target);   // mini-notation target → live stepped pattern
   return { __spring: { target, k: stiffness, d: damping } };
 }
 const isSpring = (a) => a != null && typeof a === 'object' && a.__spring !== undefined;

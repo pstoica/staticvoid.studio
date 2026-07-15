@@ -264,6 +264,7 @@ filled, outlined, or both. All four are patterns, so `.fill("1 0")`,
 | `.decay(s)` | fade-out time / lifetime. default ≈ one cycle. alias: `.life(s)` |
 | `.attack(s, curve)` | shape the fade-**in** with an easing curve, e.g. `.attack(0.3, "outBack")` |
 | `.decay(s, curve)` | shape the fade-**out**, e.g. `.decay(2, "inOutSine")` (curve names: see *Easing* above) |
+| `.hold(cond)` | **sustain**: while `cond` is truthy (`>0.5`) the envelope parks at the top of its attack (full presence); the decay runs from release. `cond` is **live** (re-sampled every frame): `.hold(gate(1))` sustains while a key is down, `.hold(mouseDown)` while pressed, `.hold(1)` until clear. Re-holding mid-decay snaps back to full |
 
 The optional second arg shapes that envelope segment with an easing curve instead of a
 straight line. The envelope drives per-glyph **alpha** (`0..1`), so overshooting curves
@@ -568,7 +569,9 @@ shape("ring*5")
 - **stiffness** (default `120`) = pull toward the target — higher snaps faster.
 - **damping** (default `14`) = how fast the wobble dies. **Under-damped** (`d < 2√k`)
   overshoots and rings; **over-damped** glides in with no overshoot.
-- Free-function form: `spring(target, stiffness, damping)` (target = an osc or number).
+- Free-function form: `spring(target, stiffness, damping)` — target = an osc, number, **live
+  signal** (`spring(note(1))` glides to each new note; `spring(mouseX)` chases the pointer),
+  or mini-notation (`spring("<0.2 0.8>")` lurches between per-cycle steps).
 - Works on **position** (`x` `y` `radius` `angle` `pan`) and the **scalar** controls
   (`size` `rotate` `rotateX` `rotateY` `weight` `outline` `open` `alpha` `shade`). Each
   glyph carries its own spring state from birth, so glyphs settle independently. *(Not
