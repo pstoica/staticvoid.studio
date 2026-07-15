@@ -130,6 +130,9 @@ let decayScale = 1.5;   // master multiplier on a new glyph's decay (how long it
 const DEFAULT_BG = '#0a0a0a';
 let bgColor = DEFAULT_BG; // resolved canvas background for the current frame
 let bgSource = DEFAULT_BG; // raw bg arg (string/number/pattern/osc), resolved each frame, so bg() is patternable
+const DEFAULT_PERSP = 2.6; // 3D-tilt camera distance, glyph radii (matches the historical hardcoded pinhole)
+let perspSource = DEFAULT_PERSP; // raw persp() arg, resolved each frame like bg (0 = orthographic)
+let perspVal = DEFAULT_PERSP;    // this frame's resolved value (read by drawShape3D; sent to the GL renderer)
 let showClock = localStorage.getItem('loom.clock') !== '0'; // playhead sweep on/off
 let traceMode = false; // trace path, UI toggle removed for now; renderer support stays
 let lastT = performance.now();
@@ -183,6 +186,7 @@ function compile(code) {
 function run() {
   try {
     bgSource = DEFAULT_BG;                // bg("…") in the patch overrides this during compile
+    perspSource = DEFAULT_PERSP;          // persp(…) in the patch overrides this during compile
     pattern = compile(editor.getCode());
     // Soft re-run: keep the live glyphs so editing the patch doesn't blank the screen.
     // Group ids are stable by creation order, so each frame the live glyphs re-read their
@@ -348,6 +352,12 @@ function spawn(value, onset) {
     body: null,                // rapier rigid body handle once created
     physRot: 0,                // body rotation (rad), synced from the sim each frame
   };
+  // torus family: the raymarched tube radius rides the outline control (a fraction of the
+  // size, so it scales), and .weight() sets it absolutely — both already live-patternable.
+  // When neither is given, default the tube by name: torus/donut = fat, hoop = hula hoop.
+  if (SHAPE_ID[p.shape] === 13 && p.outline == null && v.weight == null)
+    p.outline = v.shape === 'hoop' ? 0.045 : 0.28;
+
   // .id(key): upsert — if a live glyph is already registered under this key, the fresh
   // capture above becomes an in-place RE-TARGET of it instead of a new particle (the mono
   // voice; OBJECTS.md phase 1). Continuity is grafted from the old particle — its clocks
@@ -620,7 +630,7 @@ function cssToRGB(s) {
 // Mirrors drawGlyph's mod resolution but emits numbers + float rgb for the GPU.
 const SHAPE_ID = { dot: 0, circle: 0, ring: 1, arc: 2, square: 3, box: 3, tri: 4, pent: 5, hex: 6, star: 7, plus: 8, line: 9, cross: 10,
   // 3D raymarched shapes (normal-shaded, tumbled by rotateX/rotateY/spin)
-  cube: 11, box3: 11, sphere: 12, ball: 12, torus: 13, donut: 13, octa: 14, octahedron: 14,
+  cube: 11, box3: 11, sphere: 12, ball: 12, torus: 13, donut: 13, hoop: 13, octa: 14, octahedron: 14,
   // imported FBX meshes (renderer maps id >= 15 to a model, lazy-loaded on first use)
   bong: 15, knot: 16, amongus: 17, sus: 17, balloons: 18, balloon: 18, chain: 19 };
 const OUTLINE_IDS = new Set([1, 2, 9, 10]);
@@ -829,14 +839,14 @@ function bodyCollider(name, rPx) {
 function drawShape3D(g, name, r, rz, rx, ry, o, vertex) {
   const geom = shapeGeom(name, r, o.open);
   const cz = Math.cos(rz), sz = Math.sin(rz), cx = Math.cos(rx), sx = Math.sin(rx), cy = Math.cos(ry), sy = Math.sin(ry);
-  const d = 2.6 * Math.max(1, r);                       // camera distance, in units of r
+  const d = perspVal > 0 ? perspVal * Math.max(1, r) : 0;   // camera distance (persp() global; 0 = orthographic)
   // Tilt the flat shape in 3D (X then Y) and project it, THEN spin it in the
   // picture plane (Z). Keeping Z out of the 3D pipeline means the tilt produces
   // a clean perspective trapezoid instead of a sheared parallelogram.
   const project = (px, py) => {
     let x = px, y = py * cx, z = py * sx;                   // X rotation (world horizontal axis)
     const x2 = x * cy + z * sy; z = -x * sy + z * cy; x = x2; // Y rotation (world vertical axis)
-    const s = d / (d - z);                                  // perspective divide
+    const s = d > 0 ? d / (d - z) : 1;                      // perspective divide (ortho: none)
     const X = x * s, Y = y * s;
     return [X * cz - Y * sz, X * sz + Y * cz];               // Z spin, in screen space
   };
@@ -947,6 +957,7 @@ function tick(dt) {
   DSL._audioDecay(dt); // age the Link-Audio transient pulses (hit) the same way
   DSL._midiFrame();    // snapshot this frame's MIDI note-ons for onNote() (one glyph per note)
   bgColor = bgEval(bgSource, cycle, elapsed);   // bg() is patternable, resolve per frame
+  perspVal = Math.max(0, +evalGlobal(perspSource, cycle, elapsed) || 0);   // persp() too (0 = ortho)
   if (glr) glr.setBackground(bgColor);
   // Clean redraw: wipe the buffer completely every frame, then repaint only the
   // live particles. Nothing is ever baked in, so there's no alpha residue/ghosting.
@@ -1147,7 +1158,7 @@ function tick(dt) {
   // so a layer effect (pixelate) can be applied before compositing. `vis` excludes
   // muted / non-soloed layers.
   if (USE_GL) {
-    glr.render({ live: vis, minDim, resolve: glResolve, evalGlobal, elapsed, W, H, cycle, showClock, traceMode });
+    glr.render({ live: vis, minDim, resolve: glResolve, evalGlobal, elapsed, W, H, cycle, showClock, traceMode, persp: perspVal });
   } else {
     const buckets = new Map();   // gid -> particle[]
     for (const p of vis) {
@@ -2028,6 +2039,7 @@ function startEngine() {
 $('#warnok').addEventListener('click', () => { localStorage.setItem('loom.epilepsy', '1'); warn.hidden = true; startEngine(); });
 
 DSL._setBgSink((c) => { bgSource = c; });   // bg("…") stores its (raw) arg here at compile time; resolved per-frame in tick
+DSL._setPerspSink((v) => { perspSource = v; });   // persp(n) likewise (0 = orthographic tilt)
 
 // feed the live pointer (mouse + touch) into the mouseX/mouseY/mouseDown signals. Position
 // is 0..1 of the canvas; clamped so off-canvas reads stay in range. Pointer events cover

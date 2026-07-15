@@ -577,7 +577,8 @@
         <code>polygon(["a","b","c"])</code><p>one shape drawn as edges through N points — a ball id, or an explicit <code>[x,y]</code> pair (0..1). <code>polyline</code> leaves it open. Sampled per onset, so <code>.fast()</code> to track live points. Edges are lines → <code>.color/.weight/.cap</code> apply.</p>
         <code>bg("#101820")</code><p>set the canvas background, stack it in</p>
         <p class="shapes">shapes: dot circle ring arc square box tri pent hex star plus line cross</p>
-        <p class="shapes">3D (tumble with rotateX/Y): cube sphere torus octa</p>
+        <p class="shapes">3D (tumble with rotateX/Y): cube sphere torus hoop octa</p>
+        <p>torus/hoop tube thickness = <code>.outline(o)</code> (fraction of size; <code>hoop</code> = thin hula-hoop default, <code>torus</code> = fat donut), face-on at rest — <code>shape("hoop").rotateX(0.19)</code> tilts it mid-swing</p>
         <p class="shapes">meshes (flat-tinted, load on first use): bong knot amongus balloons chain</p>
         <p>3D shapes are matte by default (<code>.shade(0)</code> = flat/unlit); <code>.fill(0).stroke().weight(w)</code> = wireframe (edges on cube/octa, silhouette on sphere/torus)</p>
         <code>.shade(0..1)</code><p>3D-ify a shape: 2D shapes puff into glossy plastic toys (a <code>ring</code> → a shiny tube), 3D shapes get matte faceted lighting</p>
@@ -592,6 +593,7 @@
         <code>.grid(cols, rows)</code><p>lay events into a grid by onset</p>
         <code>.rotate(turns) .spin(turns/s)</code><p>Z spin · 1 = full turn</p>
         <code>.rotateX(turns) .rotateY(turns)</code><p>3D tilt (foreshorten)</p>
+        <code>persp(n)</code><p>the 3D-tilt camera, global (sits in a stack): n = distance in glyph radii, default 2.6 (close/dramatic — the near edge swells, tumbling wobbles). <code>persp(0)</code> = <em>orthographic</em>: a tilted circle is an exact centred ellipse, pinned while it tumbles. patternable like <code>bg()</code></p>
         <code>.fill(1|0) .stroke(1|0) .vertex(1|0)</code><p>draw modes, independent &amp; patternable. <code>.fill(0).vertex()</code> = dots only</p>
         <code>.weight(0..0.1)</code><p>stroke / line / vertex-dot size (absolute)</p>
         <code>.outline(0..0.3)</code><p>stroke size relative to the shape — scales with <code>.size()</code></p>

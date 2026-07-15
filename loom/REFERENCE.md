@@ -51,8 +51,12 @@ Sources turn tokens into glyph events. They are the start of every chain.
 `star` `plus` `line` `cross`. (`ring`/`line`/`cross` are always stroked.)
 
 **3D shapes** (raymarched, tumbled by `rotateX`/`rotateY`/`spin`): `cube` `sphere`
-`torus` `octa`. Drive `size` + the rotations, e.g.
-`shape("cube").rotateX(saw.range(0,1).slow(8))`. **Matte-shaded by default** so they
+`torus` `hoop` `octa`. Drive `size` + the rotations, e.g.
+`shape("cube").rotateX(saw.range(0,1).slow(8))`. The torus family is **face-on at
+rest** (like `ring`) and its **tube thickness rides `outline`** (a fraction of the
+size — or `.weight()` for absolute): `torus` defaults fat (`0.28`), **`hoop` defaults
+thin (`0.045`) — a hula hoop**: `shape("hoop").rotateX(0.19)` tilts it mid-swing, and
+`.outline(osc(0.2).range(0.03, 0.3))` breathes between the two. **Matte-shaded by default** so they
 read as 3D (like a p5 `sphere`); `.shade(0)` flattens to an unlit silhouette,
 `.shade(1)` deepens the shading (no gloss). **`.fill(0).stroke().weight(w)`** draws
 them as a wireframe — edges for `cube`/`octa`, the grazing silhouette for `sphere`/`torus`.
@@ -247,6 +251,7 @@ against **global time** each frame like FX params — so the whole field can mov
 > first uses `physics()`, while it loads.)
 | `.rotate(t)` | turns (`1` = 360°) | static Z rotation |
 | `.rotateX(t)` `.rotateY(t)` | turns | 3D tilt (foreshortening) around the horizontal / vertical axis |
+| `persp(n)` | camera distance in glyph radii; global (sits in a `stack`) | how strong the pinhole is when a **flat** shape is tilted — default `2.6` (close, dramatic: the near edge swells, a tumbling shape's visual centre wobbles). **`persp(0)` = orthographic**: a tilted circle is an exact centred ellipse, pure and pinned. Patternable like `bg()`; the raymarched 3D shapes are orthographic already |
 | `.spin(t)` | turns/second | continuous Z rotation |
 | `.pan(n)` | `0..1` (0=left · .5=centre · 1=right) | horizontal x-shift of the centre (the stereo-pan analog), mostly a `jux` primitive, not very useful alone |
 | `.jitter(n)` | `0..0.1` typical | random positional scatter |

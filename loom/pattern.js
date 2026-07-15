@@ -749,6 +749,18 @@ function _setBgSink(fn) { _bgSink = fn; }
 // is mini-notation (bg("<#001 #103>")), and oscs / patterns / palettes also work.
 function bg(color) { if (_bgSink) _bgSink(typeof color === 'string' ? mini(color) : color); return silence; }
 
+// ── perspective (the 3D-tilt camera) ─────────────────────────────────────────────
+// persp(n) sets how strong the pinhole perspective is when a FLAT shape is tilted with
+// rotateX/rotateY: n = camera distance in glyph radii (default 2.6 — close, dramatic;
+// the near edge swells and a tumbling shape's visual centre wobbles). persp(0) — or a
+// bare persp() — is ORTHOGRAPHIC: a tilted circle is an exact centred ellipse, pure and
+// pinned while it tumbles. Patternable like bg() (number / osc / pattern / mini string,
+// resolved per frame); returns silence so it sits in a stack(...). The raymarched 3D
+// shapes (cube/sphere/torus/hoop/octa) are orthographic already and ignore this.
+let _perspSink = null;
+function _setPerspSink(fn) { _perspSink = fn; }
+function persp(n = 0) { if (_perspSink) _perspSink(typeof n === 'string' ? mini(n) : n); return silence; }
+
 // ── groups ──────────────────────────────────────────────────────────────────────
 // group(pattern) is a layer rendered to its own buffer, so an effect can be
 // applied to the whole layer before it's composited. group(...).pixelate(n) is the
@@ -1124,7 +1136,7 @@ function rev(p) { return reify(p).rev(); }
 export const DSL = {
   Pattern, pure, silence, stack, slowcat, fastcat, cat, seq, sequence, timecat,
   fast, slow, rev, run, range, mini, euclid,
-  shape, s, n, polygon, polyline, choose, irand, pick, iff, osc, env, palette, bg, group, echo, spring, physics, slider, _setBgSink,
+  shape, s, n, polygon, polyline, choose, irand, pick, iff, osc, env, palette, bg, persp, group, echo, spring, physics, slider, _setBgSink, _setPerspSink,
   $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg, _resetIds, _getIdKeys,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   mouseX, mouseY, mouseDown, _setPointer,

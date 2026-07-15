@@ -130,6 +130,7 @@ const TRACE_CAP = 8192;         // max points in the trace polyline
 const VERT = `
 precision highp float;
 uniform vec2 uResolution;       // viewport in CSS px (W, H); pixel→NDC mapping
+uniform float uPersp;           // tilt camera distance, glyph radii; <= 0 = orthographic
 in vec3 position;        // quad corner in -1..1
 in vec2 iPos;            // glyph centre, pixel space
 in float iRadius;        // glyph radius, px
@@ -176,13 +177,19 @@ void main() {
   // Emitting the perspective divide through gl_Position.w (rather than dividing
   // here) makes the rasteriser interpolate vLocal perspective-correctly, so the
   // SDF rides the tilted plane exactly. With rotX=rotY=0 this is the flat ortho.
+  // uPersp = camera distance in glyph radii (the persp() global); <= 0 means
+  // ORTHOGRAPHIC — a tilted circle projects to an exact centred ellipse, no
+  // near-edge swelling, no centroid wobble while tumbling.
   float cx = cos(iRotX), sx = sin(iRotX), cy = cos(iRotY), sy = sin(iRotY);
   float x = local.x;
   float y = local.y * cx;
   float z = local.y * sx;
   float x2 = x * cy + z * sy; z = -x * sy + z * cy; x = x2;
-  float d = 2.6 * max(1.0, iRadius);         // camera distance, px
-  float w = max((d - z) / d, 0.01);          // homogeneous depth (1 when flat)
+  float w = 1.0;
+  if (uPersp > 0.0) {
+    float d = uPersp * max(1.0, iRadius);    // camera distance, px
+    w = max((d - z) / d, 0.01);              // homogeneous depth (1 when flat)
+  }
   float cz = cos(iRot), sz = sin(iRot);      // Z spin, screen space
   vec2 N = vec2(x * cz - y * sz, x * sz + y * cz);
   vec2 P = N + iPos * w;                      // offset is perspective, centre is affine (×w)
@@ -294,9 +301,14 @@ float sdPlus(vec2 p, vec2 b){
 mat3 rotX3(float a){ float c=cos(a), s=sin(a); return mat3(1.0,0.0,0.0, 0.0,c,s, 0.0,-s,c); }
 mat3 rotY3(float a){ float c=cos(a), s=sin(a); return mat3(c,0.0,-s, 0.0,1.0,0.0, s,0.0,c); }
 mat3 rotZ3(float a){ float c=cos(a), s=sin(a); return mat3(c,s,0.0, -s,c,0.0, 0.0,0.0,1.0); }
-float map3(int id, vec3 p, float r){
+float map3(int id, vec3 p, float r, float tube){
   if (id == 12) return length(p) - r*0.9;                                       // sphere
-  if (id == 13) { vec2 t = vec2(length(p.xz) - r*0.6, p.y); return length(t) - r*0.28; } // torus
+  // torus / hoop: ring radius = r - tube, so the outer edge sits exactly at the glyph
+  // size; tube (px) rides the weight/outline controls — .outline(0.05) = a hula hoop,
+  // the fat-donut default comes from spawn (outline 0.28 when nothing is set). The ring
+  // lies in the xy plane (axis toward the camera): FACE-ON at rest like every other Loom
+  // shape, so rotateX tilts it away into the hula pose (it used to rest edge-on, a bar).
+  if (id == 13) { float tu = clamp(tube, r*0.01, r*0.49); vec2 t = vec2(length(p.xy) - (r - tu), p.z); return length(t) - tu; }
   if (id == 14) { p = abs(p); return (p.x+p.y+p.z - r*1.1) * 0.5773; }          // octahedron
   vec3 b = abs(p) - vec3(r*0.58);                                               // cube (id 11)
   return length(max(b, 0.0)) + min(max(b.x, max(b.y, b.z)), 0.0);
@@ -313,9 +325,10 @@ void main(){
     mat3 Ri = transpose(R);                               // world → object (orthonormal)
     vec3 ro = Ri * vec3(q, vR * 2.2);
     vec3 rd = Ri * vec3(0.0, 0.0, -1.0);
+    float tube = vWeight;                                 // torus/hoop tube radius, px (weight/outline)
     float t = 0.0; bool hit = false;
     for (int i = 0; i < 44; i++) {
-      float dd = map3(id, ro + rd * t, vR);
+      float dd = map3(id, ro + rd * t, vR, tube);
       if (dd < 0.0015 * vR) { hit = true; break; }
       t += dd;
       if (t > vR * 5.0) break;
@@ -324,9 +337,9 @@ void main(){
     vec3 pp = ro + rd * t;
     float e = max(vR * 0.012, 0.3);
     vec3 n = normalize(vec3(
-      map3(id, pp + vec3(e,0.0,0.0), vR) - map3(id, pp - vec3(e,0.0,0.0), vR),
-      map3(id, pp + vec3(0.0,e,0.0), vR) - map3(id, pp - vec3(0.0,e,0.0), vR),
-      map3(id, pp + vec3(0.0,0.0,e), vR) - map3(id, pp - vec3(0.0,0.0,e), vR)));
+      map3(id, pp + vec3(e,0.0,0.0), vR, tube) - map3(id, pp - vec3(e,0.0,0.0), vR, tube),
+      map3(id, pp + vec3(0.0,e,0.0), vR, tube) - map3(id, pp - vec3(0.0,e,0.0), vR, tube),
+      map3(id, pp + vec3(0.0,0.0,e), vR, tube) - map3(id, pp - vec3(0.0,0.0,e), vR, tube)));
     vec3 nw = R * n;                                      // object normal → world
     // flat by default (shade 0 = solid colour). shade > 0 mixes in a faceted
     // diffuse term (no rim/specular), so it's matte/poster, never glossy. lit from
@@ -817,7 +830,7 @@ export class GLRenderer {
     this._ensureCapacity(4096);
 
     // a material per blend mode (premultiplied output → custom blend factors)
-    this.uniforms = { uResolution: { value: new THREE.Vector2(1, 1) } };
+    this.uniforms = { uResolution: { value: new THREE.Vector2(1, 1) }, uPersp: { value: 2.6 } };
     // DoubleSide: the pixel-space projection flips Y, which inverts triangle
     // winding — without this, front-face culling drops every quad.
     const base = { glslVersion: THREE.GLSL3, uniforms: this.uniforms, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide };
@@ -1027,6 +1040,7 @@ export class GLRenderer {
     }
     const live = (state && state.live) || [];
     this._minDim = state ? state.minDim : Math.min(this.W, this.H);
+    this.uniforms.uPersp.value = state && state.persp != null ? state.persp : 2.6;   // persp() global (per frame)
     this._resolve = state && state.resolve;
     this._eg = (state && state.evalGlobal) || ((v) => (typeof v === 'number' ? v : 0));
     this._cycle = state ? state.cycle || 0 : 0;
