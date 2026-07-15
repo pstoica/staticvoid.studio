@@ -579,6 +579,29 @@ shape("ring*5")
 
 `quantize` snaps amplitude, not time, so `sine.quantize(4)` lingers at the peaks/troughs (where the sine is slow) and flickers through the middle. For even rhythmic steps use `.segment(n)` (or drive it with a time-linear ramp like `saw`/`tri`). They compose: `perlin.segment(8).quantize(4)` = organic walk, plucked on 8ths, into 4 colours. `palette("rainbow").at(perlin.range(0,1).segment(8))` plucks the background on a grid.
 
+### Objects — `.id()` (mono voice)
+
+Normally every onset spawns a **new** glyph. **`.id(key)`** makes ONE addressable object:
+the first onset with a key spawns its glyph, every later onset with the **same key
+re-targets it in place** — sprung fields **glide** there (momentum carries over), plain
+fields **snap** (re-frozen at the new onset), and the lifetime refreshes to the top of the
+attack (so it stays alive while onsets keep coming, and decays when they stop). The mono
+synth voice:
+
+```js
+onNote(1, "circle").id("v1")
+  .x(spring(note(1), 90, 12))          // glide to each new note
+  .color(palette("neon").at(pc(1)))    // snap to the note's hue
+  .hold(gate(1))                       // sustain while a key is down
+```
+
+- Not MIDI-specific: `shape("dot*8").id("w").x(spring(mouseX, 80, 10))` = ONE dot chasing
+  the pointer (stepped 8×/cycle), not a trail of them.
+- Keys are patternable: `.id("a b c")` round-robins onsets across three objects.
+- Same key from two places (e.g. inside `jux`/`superimpose`): last writer wins — fork the
+  copy's key (`jux(p => p.id("v1R"))`) if you want two objects.
+- The clear button kills objects like any glyph. Design notes: `OBJECTS.md`.
+
 ### Live oscillators
 
 A signal is sampled **once at a glyph's onset and frozen**. An **`osc`** keeps

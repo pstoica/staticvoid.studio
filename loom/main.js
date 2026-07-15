@@ -136,6 +136,7 @@ let lastT = performance.now();
 const pointerState = { x: 0.5, y: 0.5, down: 0 };   // live pointer, mirrored to the mouseX/Y signals + editor badges
 
 const particles = [];
+const objects = new Map();   // .id(key) registry: key → live particle (upsert target; see OBJECTS.md)
 
 // ── compile user code into a Pattern ──────────────────────────────────────────────
 let activeLayers = [];   // names of the running patch's $(...) layers (substrate for the mixer)
@@ -198,7 +199,7 @@ function run() {
       const gens = [...new Set(particles.filter((p) => p.echoFam === fam).map((p) => p.gid))].sort((a, b) => b - a);
       if (gens.length > cap - 1) {
         const keep = new Set(gens.slice(0, Math.max(0, cap - 1)));
-        for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; if (p.echoFam === fam && !keep.has(p.gid)) particles.splice(i, 1); }
+        for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; if (p.echoFam === fam && !keep.has(p.gid)) { if (p.objId && objects.get(p.objId) === p) objects.delete(p.objId); particles.splice(i, 1); } }
       }
     }
     // drop mute/solo state for layers the new patch no longer has, then refresh the chips
@@ -241,7 +242,7 @@ function spawnPoly(v, onset) {
   const P = pts.map((p) => [sample(p[0]), sample(p[1])]);
   // style-only base: drop the poly marker + every geometry field (we set those per edge)
   const base = { ...v };
-  for (const k of ['_poly', 'x', 'y', 'radius', 'angle', 'gridX', 'gridY', 'pan', 'rotate', 'spin', 'size', 'open']) delete base[k];
+  for (const k of ['_poly', 'x', 'y', 'radius', 'angle', 'gridX', 'gridY', 'pan', 'rotate', 'spin', 'size', 'open', 'id']) delete base[k];   // id: N edges must not upsert one key
   base.shape = 'line';
   base.cap = v.cap || 'round';                          // round caps read as joined corners
   const edges = poly.closed ? n : n - 1;
@@ -340,6 +341,36 @@ function spawn(value, onset) {
     body: null,                // rapier rigid body handle once created
     physRot: 0,                // body rotation (rad), synced from the sim each frame
   };
+  // .id(key): upsert — if a live glyph is already registered under this key, the fresh
+  // capture above becomes an in-place RE-TARGET of it instead of a new particle (the mono
+  // voice; OBJECTS.md phase 1). Continuity is grafted from the old particle — its clocks
+  // (so oscs/spin don't skip), each still-sprung field's motion state (so it GLIDES to the
+  // new target), and its physics body — then everything else is copied over it, so the
+  // references held by `particles` and the registry stay valid.
+  if (v.id != null) {
+    const key = String(v.id);
+    const ex = objects.get(key);
+    if (ex) {
+      if (p.springs && ex.springs) for (const s of p.springs) {         // spring continuity
+        const o = ex.springs.find((q) => q.field === s.field);
+        if (o) { s.x = o.x; s.v = o.v; p._spr[s.field] = s.x; }
+      }
+      p.age = ex.age; p.ageCycles = ex.ageCycles;                       // clock continuity
+      p.spawnT = ex.spawnT; p.spawnCycle = ex.spawnCycle;
+      // a re-target refreshes the lifetime to the TOP of the (new) attack — full presence
+      // without re-running the attack (no flash); mid-attack it just keeps rising. So an
+      // un-held object stays alive while onsets keep coming and decays when they stop.
+      p.envAge = Math.min(ex.envAge, p.attack);
+      if (ex.body && ex.pid === p.pid) { p.body = ex.body; p.physRot = ex.physRot; }  // sim keeps the body
+      else if (ex.body && ex.pid) { const wd = physWorlds.get(ex.pid); if (wd) wd.remove(ex.body); }
+      Object.assign(ex, p);
+      ex._rgb = null;                                                   // stale colour cache (glResolve)
+      if (!ex.body) { const xy = resolvePos(ex, minDim, ex.age); ex.x = xy[0]; ex.y = xy[1]; }
+      return;
+    }
+    p.objId = key;
+    objects.set(key, p);
+  }
   const xy = resolvePos(p, minDim, 0);
   p.x = xy[0]; p.y = xy[1];
   particles.push(p);
@@ -350,6 +381,7 @@ function spawn(value, onset) {
 function clearParticles() {
   for (const p of particles) if (p.body && p.pid) { const wd = physWorlds.get(p.pid); if (wd) wd.remove(p.body); }
   particles.length = 0;
+  objects.clear();                                  // .id() objects die with their particles
 }
 
 const NAMED = { red: '#ff5d73', orange: '#ff9d5c', yellow: '#ffd166', green: '#6df0c2',
@@ -974,8 +1006,9 @@ function tick(dt) {
     // release resumes the decay. Re-holding mid-decay snaps back to full (v1, OBJECTS.md).
     if (p.hold != null && p.envAge + dt >= p.attack && evalGlobal(p.hold, cycle, elapsed) > 0.5) p.envAge = p.attack;
     else p.envAge += dt;
-    if (p.envAge >= p.attack + p.decay) {             // expired → drop (and free its body)
+    if (p.envAge >= p.attack + p.decay) {             // expired → drop (and free its body + id)
       if (p.body && p.pid) { const wd = physWorlds.get(p.pid); if (wd) wd.remove(p.body); p.body = null; }
+      if (p.objId && objects.get(p.objId) === p) objects.delete(p.objId);
       continue;
     }
     // attack rises 0→1, decay falls 1→0; an optional Penner curve shapes either
@@ -1132,6 +1165,7 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   mute: (n) => toggleMute(n), solo: (n) => toggleSolo(n),
   ensurePhysics: () => ensureRapier(), physReady: () => !!rapierReady(),
   get bodies() { return particles.filter((p) => p.body).length; }, get pointer() { return pointerState; },
+  get objects() { return [...objects.keys()]; },   // live .id() object keys
   midi: (status, d1, d2, dev) => DSL._midiInput(status, d1, d2, dev),   // inject a MIDI message (for tooling/testing; `dev` = optional device name for dev() scope)
   jug: (m) => DSL._jugInput(m),   // inject a juggling-feed message (for tooling/testing)
   audio: (m) => DSL._audioInput(m),   // inject a Link-Audio-feed message (for tooling/testing)

@@ -294,6 +294,14 @@ class Pattern {
     const c = typeof cond === 'string' ? mini(cond) : cond;
     return this.fmap((v) => Object.assign({}, v, { hold: c }));
   }
+  // id(key): make this glyph an addressable OBJECT (see OBJECTS.md). The first onset
+  // carrying a key spawns its glyph; every later onset with the SAME key RE-TARGETS that
+  // glyph in place instead of spawning another — sprung fields glide (their motion state
+  // carries over), plain fields snap (re-frozen at the new onset), and the lifetime
+  // refreshes to the top of the attack. Keys are strings and patternable (`.id("a b c")`
+  // round-robins onsets across three objects). The mono voice is `.id("v1")` +
+  // `.x(spring(note(1)))` + `.hold(gate(1))`: ONE glyph that slides to each new note.
+  id(a) { return this.set('id', a); }
 }
 
 const NUMERIC = new Set(['size','x','y','radius','angle','gridX','gridY','rotate','rotateX','rotateY','spin','alpha','pan','jitter','weight','attack','decay','fill','stroke','vertex','open']);

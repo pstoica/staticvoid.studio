@@ -661,6 +661,7 @@
         <code>.ease("outExpo")</code><p>shape a 0..1 signal/osc through a Penner curve <em>before</em> <code>.range()</code> — in/out/inOut × quad·cubic·quart·expo·sine·back·elastic·bounce. <code>saw.ease("outExpo").range(0,1)</code></p>
         <code>osc(…).spring(stiffness, damping)</code><p>chase the osc's (usually <code>.quantize</code>d) output with a damped spring — per-glyph momentum / overshoot / settle. <code>.x(osc(0.2,"saw").quantize(8).spring(150,11))</code> settles between steps</p>
         <code>spring(target, k?, d?)</code><p>free-function form; the target may also be a <em>live signal</em> or mini-notation: <code>.x(spring(note(1)))</code> glides to each new note, <code>spring(mouseX)</code> chases the pointer, <code>spring("&lt;0.2 0.8&gt;")</code> lurches between steps. pair with <code>.hold(gate(1))</code> for a mono voice</p>
+        <code>.id(key)</code><p>ONE addressable <em>object</em> instead of a glyph stream: the first onset spawns it, every later onset with the same key <em>re-targets it in place</em> — sprung fields glide, plain fields snap, the lifetime refreshes. mono voice: <code>onNote(1,"circle").id("v1").x(spring(note(1))).hold(gate(1))</code>. keys are patternable (<code>.id("a b c")</code> = 3 round-robin voices)</p>
         <code>.add(x) .sub(x) .mul(x) .div(x)</code><p>x may be a number <em>or a pattern</em></p>
         <code>.x( saw.add(sine.range(0, 0.1)) )</code><p>← wobble a ramp by a sine</p>
       </section>

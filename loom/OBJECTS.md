@@ -1,6 +1,6 @@
 # Loom — persistent objects / mono voice (design draft)
 
-Status: **draft — Phase 0 implemented, Phases 1+ awaiting a yes/no.** The design pass
+Status: **Phases 0–1 implemented (minimal cut); Phase 2 verbs not built.** The design pass
 ROADMAP flagged under MIDI input (ROADMAP.md:104-106): *"monophonic/voice mode (a
 persistent, re-targetable object — needs a design pass; Loom has no
 addressable-updatable-object concept yet)."*
@@ -255,19 +255,25 @@ question the bus roadmap already owns.
    `.hold(gate())` spawns pinned at 36/127 = 0.2835, glides through 0.547 with live
    velocity on a legato re-target, settles at exactly 96/127 = 0.7559 — the mono glide.
 
-**Phase 1 — identity.**
+**Phase 1 — identity.** ✅ **Shipped 2026-07-15 (minimal cut).**
 3. **`.id(key)`** setter (`.set('id', …)` — patternable for free) + `Map key → particle` +
-   the upsert branch in `spawn()`. **The risky part, named:** the re-capture merge. `spawn()`
-   is the most load-bearing function in `main.js` (`main.js:257-344`); the upsert must
-   re-run its capture against the existing particle, preserving `{spring x,v}`, `body`,
-   `age`, replacing `pin`/mods (re-frozen at the new onset)/static fields/`gid`/`layer`/
-   envelope params, seeding a *newly-sprung* field from its current static value (glide
-   from where it was), and recomputing `posLive`. Factor the capture so spawn and upsert
-   share it, or they will drift. Registry cleanup at cull + `clearParticles()` — the same
-   discipline as physics bodies, same orphan hazard if missed.
+   the upsert branch at the tail of `spawn()`. Implementation chose *fresh-capture-then-graft*
+   over factoring: spawn builds the new particle exactly as before, and if the key is live,
+   continuity is grafted from the old particle (clocks `age`/`ageCycles`/`spawnT`/
+   `spawnCycle`; each still-sprung field's `{x, v}`; the physics body when the pid matches)
+   before `Object.assign`-ing the rest over it in place — references in `particles` and the
+   registry stay valid, and the colour cache (`_rgb`) is invalidated. Registry cleanup at
+   cull, `clearParticles()`, and the echo-cap splice; polygon edges strip `id` (N edges must
+   not upsert one key). Deviations from the plan: a *newly*-sprung field seeds at its target
+   (spawn's no-jolt default) rather than the old static value, and re-target refreshes
+   `envAge` to `min(envAge, attack)` — full presence without re-running the attack — so an
+   un-held object lives while onsets keep coming (the "voice steals fade" of Q4). Verified:
+   a 3-note legato line = ONE particle gliding through every intermediate with one continuous
+   `age`; culled objects unregister and rebirth cleanly; `dot*8 .id("w")` holds at exactly
+   one particle and dies when the clock stops; no-`.id` patches byte-identical in behavior.
 4. Default re-target does **not** retrigger the envelope (pure legato — the motion is the
    articulation). `.retrig(1)` opt-in: reset `envAge` to re-run attack *from the current
-   env value* (no flash to zero).
+   env value* (no flash to zero). *(Not built — Phase 2.)*
 
 **Phase 2 — the verbs that fall out.**
 5. `.cut(n)` choke (candidate A, now ~free: force-release by tag in the upsert path).
