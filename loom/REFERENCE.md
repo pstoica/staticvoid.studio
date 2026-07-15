@@ -600,7 +600,10 @@ onNote(1, "circle").id("v1")
 - Keys are patternable: `.id("a b c")` round-robins onsets across three objects.
 - Same key from two places (e.g. inside `jux`/`superimpose`): last writer wins — fork the
   copy's key (`jux(p => p.id("v1R"))`) if you want two objects.
-- The clear button kills objects like any glyph. Design notes: `OBJECTS.md`.
+- Removing an `.id(...)` from the code **releases** its object on the next run — the hold
+  drops and it decays out. (Dynamic keys like `.id(note(1))` can't be tracked; those last
+  until their own hold/decay.) The clear button kills objects like any glyph. Design
+  notes: `OBJECTS.md`.
 
 ### Live oscillators
 

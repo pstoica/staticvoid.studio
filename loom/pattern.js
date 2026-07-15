@@ -301,7 +301,15 @@ class Pattern {
   // refreshes to the top of the attack. Keys are strings and patternable (`.id("a b c")`
   // round-robins onsets across three objects). The mono voice is `.id("v1")` +
   // `.x(spring(note(1)))` + `.hold(gate(1))`: ONE glyph that slides to each new note.
-  id(a) { return this.set('id', a); }
+  // A static key arg is also ENUMERATED into the compile's claimed-key registry (below),
+  // so removing an .id(...) from the code releases its object on the next re-run.
+  id(a) {
+    if (typeof a === 'string' || typeof a === 'number') {
+      try { for (const h of reifyControl(a, false).query(span(0, 8))) if (h.value != null) _idKeys.add(String(h.value)); }
+      catch { /* enumeration is best-effort */ }
+    }
+    return this.set('id', a);
+  }
 }
 
 const NUMERIC = new Set(['size','x','y','radius','angle','gridX','gridY','rotate','rotateX','rotateY','spin','alpha','pan','jitter','weight','attack','decay','fill','stroke','vertex','open']);
@@ -846,6 +854,17 @@ function echo(g, n = 4) {
 let _pid = 0;
 const _physReg = new Map();
 function _resetPhysics() { _pid = 0; _physReg.clear(); }
+
+// ── object-id registry (.id) ────────────────────────────────────────────────────
+// The keys CLAIMED by this compile's .id() calls (reset each compile, like _physReg).
+// A static string/number arg is queried as a pattern over a few cycles at compile time,
+// so "a b c" and "<x y>" enumerate every key they can produce. After a re-run, main.js
+// RELEASES live objects whose key is no longer claimed — their hold drops and they decay
+// out instead of lingering forever. Dynamic keys (.id(note(1))) can't be enumerated and
+// are left to their own hold/decay.
+let _idKeys = new Set();
+function _resetIds() { _idKeys = new Set(); }
+function _getIdKeys() { return _idKeys; }
 class Physics {
   constructor(pat, opts) {
     opts = opts || {};
@@ -1087,11 +1106,11 @@ export const DSL = {
   Pattern, pure, silence, stack, slowcat, fastcat, cat, seq, sequence, timecat,
   fast, slow, rev, run, range, mini, euclid,
   shape, s, n, polygon, polyline, choose, irand, pick, iff, osc, env, palette, bg, group, echo, spring, physics, slider, _setBgSink,
-  $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg,
+  $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg, _resetIds, _getIdKeys,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
   mouseX, mouseY, mouseDown, _setPointer,
   cc, gate, vel, note, pc, bend, onNote, dev, _midiInput, _midiFrame,
-  ballX, ballY, ballSeen, moving, thrown, caught, tapped, flight, gyro, _jug, _jugInput, _jugDecay,
+  ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, flight, gyro, _jug, _jugInput, _jugDecay,
   level, band, low, mid, high, hit, _audio, _audioInput, _audioDecay,
   hasOnset, span, isOsc, isSpring, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,

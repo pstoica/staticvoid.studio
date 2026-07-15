@@ -208,11 +208,16 @@ shape("dot").fast(8).id("w")
   preset switch (`main.js:1564-1565`). Same escape hatch `.decay(Infinity)` already opens,
   but now it's easy to reach. Mitigation: clear stays the hard reset; consider an editor
   badge for live object count.
-- **Soft re-run keeps orphans.** Delete the `id("v1")` line and re-eval: the object stops
-  receiving updates but keeps sampling its hold condition (the particle survives ⌘↵ by
-  design, `main.js:186-193`). It dies when its hold releases — for `hold(gate(1))` that's
-  when you lift the key, which is arguably correct. Patterned keys make compile-time
-  orphan detection impossible in general, so don't pretend to it.
+- **Soft re-run orphans — resolved by static key enumeration** (Patrick hit this on day
+  one: a held object whose `.id(...)` line was deleted lived forever). The original draft
+  claimed compile-time orphan detection was impossible because keys are patternable — too
+  pessimistic: a *static* key arg (string/number) is itself a pure pattern, so each
+  compile enumerates every key it can produce (`"a b c"`, `"<x y>"` — queried over a few
+  cycles into a claimed-key registry, like `_physReg`). After a successful re-run, live
+  objects whose key is no longer claimed get their **hold dropped** and decay out — the
+  object analogue of the soft-re-run cross-fade. Live-editing a *kept* voice is safe: its
+  key is still claimed, so a held note survives ⌘↵. Only truly dynamic keys
+  (`.id(note(1))`) remain untrackable; those objects last until their own hold/decay.
 - **`physics()` × `.id()` is deferred.** Ownership collision: the sim owns position
   (`main.js:1058-1062`); a re-target would have to teleport or impulse the body. v1:
   `id` inside `physics()` updates non-position controls only, position re-targets are

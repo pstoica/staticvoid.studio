@@ -153,6 +153,7 @@ function compile(code) {
   DSL._resetGroups();                    // stable group ids by creation order (live-FX diffing)
   DSL._resetLayers();                    // $(...) layer registry, collected below
   DSL._resetPhysics();                   // physics() group registry (stable pids → live world editing)
+  DSL._resetIds();                       // .id() claimed-key registry (release orphaned objects below)
   const names = Object.keys(DSL);
   const vals = names.map((k) => DSL[k]);
   let result;
@@ -211,6 +212,12 @@ function run() {
     activePhys = new Map(DSL._physReg);
     if (activePhys.size) ensureRapier();
     for (const pid of [...physWorlds.keys()]) if (!activePhys.has(pid)) { physWorlds.get(pid).dispose(); physWorlds.delete(pid); }
+    // release .id() objects whose key the new code no longer claims: drop their hold so
+    // they decay out from here (the object analogue of the soft re-run cross-fade) instead
+    // of a held orphan living forever. Dynamic keys (.id(note(1))) aren't statically
+    // enumerable, so those objects are left to their own hold/decay.
+    const claimed = DSL._getIdKeys();
+    for (const [key, p] of objects) if (!claimed.has(key)) p.hold = null;
     errBar.textContent = '';
     errBar.classList.remove('show');
     localStorage.setItem('loom.code', editor.getCode());
@@ -1166,6 +1173,7 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   ensurePhysics: () => ensureRapier(), physReady: () => !!rapierReady(),
   get bodies() { return particles.filter((p) => p.body).length; }, get pointer() { return pointerState; },
   get objects() { return [...objects.keys()]; },   // live .id() object keys
+  run: (code) => { if (code != null) editor.setCode(String(code)); run(); },   // set code + re-eval (tooling — a scripted ⌘↵)
   midi: (status, d1, d2, dev) => DSL._midiInput(status, d1, d2, dev),   // inject a MIDI message (for tooling/testing; `dev` = optional device name for dev() scope)
   jug: (m) => DSL._jugInput(m),   // inject a juggling-feed message (for tooling/testing)
   audio: (m) => DSL._audioInput(m),   // inject a Link-Audio-feed message (for tooling/testing)
