@@ -137,6 +137,24 @@ class Pattern {
 
   off(t, f) { return stack(this, f(this._late(t))); }
 
+  // burst(n, spread=1): each onset becomes n SIMULTANEOUS copies, the i-th carrying a
+  // phase OFFSET of i/n×spread on top of the event's own onset phase. Everything
+  // phase-driven fans out per copy — the default mandala angle (a ring of n shapes),
+  // grid cells (.grid(3) fills 3×3 at once), the default palette hue, osc .spread() —
+  // so `shape("square").burst(8).radius(0.3)` is 8 squares around a circle PER EVENT,
+  // blooming and fading together (where "square*8" walks the same ring one at a time).
+  // burst(1) is the identity; `spread` < 1 fans across an arc instead of the full turn;
+  // n is patternable ("<4 8>" alternates). Offsets accumulate under nesting.
+  _burst(k, spread) {
+    k = Math.max(1, Math.round(k));
+    return new Pattern((s) => this.query(s).flatMap((h) =>
+      Array.from({ length: k }, (_, i) => hap(h.whole, h.part,
+        (h.value && typeof h.value === 'object')
+          ? Object.assign({}, h.value, { _phaseOff: (h.value._phaseOff || 0) + (i / k) * spread })
+          : h.value))));
+  }
+  burst(n = 6, spread = 1) { return reify(n).fmap((x) => this._burst(x, spread)).innerJoin(); }
+
   // overlay a transformed copy in place, stack(this, f(this)). The plain sibling
   // of jux (superimpose + pan apart) and off (superimpose + delay).
   superimpose(f) { return stack(this, f(this)); }

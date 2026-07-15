@@ -270,7 +270,9 @@ function spawn(value, onset) {
   const v = value || {};
   if (v._poly) { spawnPoly(v, onset); return; }
   const minDim = Math.min(W, H);
-  const phase = onset - Math.floor(onset);
+  // onset phase drives the default ring angle / grid cell / palette hue / osc spread.
+  // burst(n) fans copies of one event by adding a per-copy offset (wrapped to 0..1).
+  const phase = ((onset - Math.floor(onset) + (v._phaseOff || 0)) % 1 + 1) % 1;
 
   // jitter offsets captured once (a control may be an osc; sample it at birth)
   const jit = numAt(v.jitter || 0, 0);
@@ -733,7 +735,9 @@ function resolvePos(p, minDim, age) {
   if (gridX != null) {                                 // grid: cell from onset phase
     const cols = Math.max(1, Math.round(numAt(gridX, age, phase, st, ageC, stC)));
     const rows = Math.max(1, Math.round(numAt(gridY != null ? gridY : gridX, age, phase, st, ageC, stC)));
-    const cell = Math.min(cols * rows - 1, Math.floor((((phase % 1) + 1) % 1) * cols * rows));
+    // tiny epsilon: burst(n) produces phases like exactly i/n, and (i/n)*(n) can float to
+    // 1.9999…98 → floor drops a cell. Nudging by 1e-6 keeps exact boundaries in their cell.
+    const cell = Math.min(cols * rows - 1, Math.floor((((phase % 1) + 1) % 1) * cols * rows + 1e-6));
     px = ((cell % cols) + 0.5) / cols * W;
     py = ((Math.floor(cell / cols) % rows) + 0.5) / rows * H;
   } else {

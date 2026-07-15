@@ -338,6 +338,7 @@ Combinators that reshape a pattern. All return a pattern, so they chain.
 | `.superimpose(p => …)` | overlay a transformed copy in place (parallel voices) |
 | `.jux(p => …)` | superimpose, but pan the two copies apart (left / right) |
 | `.off(t, p => …)` | superimpose, but shift the copy later by `t` cycles (a modifiable echo) |
+| `.burst(n, spread?)` | each onset becomes `n` **simultaneous** copies, phases fanned `i/n` apart — shapes **arranged on shapes**: `shape("square").burst(8).radius(0.3)` = 8 squares around a circle *per event*, blooming and fading together (`"square*8"` walks the same ring one at a time). Everything phase-driven fans out: the ring angle, `.grid(3)` cells (`burst(9).grid(3)` fills the grid at once), the default palette hue, osc `.spread()`. `spread` < 1 fans an arc; `n` patternable (`"<4 8>"`); `burst(1)` = identity |
 | `.degrade()` | drop ~50% of events (seeded by time) |
 | `.degradeBy(p)` | drop a fraction `p` of events |
 | `.sometimes(f)` `.often(f)` `.rarely(f)` | apply `f` to a random share of events |

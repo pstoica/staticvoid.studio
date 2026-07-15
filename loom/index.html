@@ -612,6 +612,7 @@
         <code>.every(n, p =&gt; …) .iter(n) .palindrome()</code>
         <code>.jux(p =&gt; p.rev())</code><p>split a transformed copy left/right</p>
         <code>.off(t, p =&gt; …)</code><p>echo, shifted by t cycles</p>
+        <code>.burst(n, spread?)</code><p>each event becomes n <em>simultaneous</em> copies with fanned phases — shapes arranged on shapes: <code>shape("square").burst(8).radius(0.3)</code> = 8 squares around a circle per event, blooming together ("square*8" walks the ring one at a time). fans everything phase-driven: ring angle, <code>.grid()</code> cells, palette hue, osc <code>.spread()</code>. spread &lt; 1 = an arc; n patternable</p>
         <code>.degrade() .sometimes(p=&gt;…) .often(…) .rarely(…)</code>
         <code>pick(sel, [a, b, c])</code><p>branch by a 0..1 selector (number/pattern/signal) — <code>.size(pick(mouseX, [.02,.06,.1]))</code> · <code>pick("&lt;0 1&gt;", [shape("dot"), shape("ring")])</code> swaps per cycle</p>
         <code>iff(cond, then, else)</code><p>if cond&gt;0.5 then/else — <code>iff(mouseDown, shape("star*5"), shape("dot*5"))</code></p>
