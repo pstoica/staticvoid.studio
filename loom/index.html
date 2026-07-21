@@ -674,6 +674,7 @@
         <code>ballX(id) ballY(id)</code><p>a ball's position, 0..1 of the camera frame. <code>id</code> = "a"/"b"/"c". <code>.x(ballX("a")).y(ballY("a"))</code> trails it — frozen at a glyph's onset / live as an FX param, like any signal</p>
         <code>ballSeen(id) moving(id)</code><p><code>ballSeen</code> = detected this frame · <code>moving</code> = seen <em>and</em> in motion (the host flags a settled ball stationary). Gate at-rest / stale noise: <code>.gate(moving("a"))</code></p>
         <code>thrown(id) caught(id) tapped(id)</code><p>throw / catch / tap as a decaying 0..1 pulse (a flash) — <code>.size(caught("a").range(.03,.2))</code> flares on a catch. <code>tapped</code> peaks with impact</p>
+        <code>held(id) shaken(id)</code><p><code>held</code> = 1 while the ball is held still (latched by hold/active gestures — a mode you can park a visual on); <code>shaken</code> = a deliberate shake as a decaying pulse, amplitude scales with intensity</p>
         <code>flight(id) gyro(id)</code><p><code>flight</code> = last catch's airtime (held) · <code>gyro</code> = on-ball IMU spin 0..1</p>
         <p>each ball is its own input — <code>id</code> joins position + events. The <strong>spatial</strong> layer (where the ball is); the <strong>musical</strong> layer (mapped notes/CC) arrives over MIDI. <strong>off by default</strong> — enable with <code>?feed</code> in the URL, or the antenna button in the toolbar (its pane: host, selfie flip, camera overlay).</p>
       </section>

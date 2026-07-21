@@ -16,7 +16,7 @@ import { Tag } from '@lezer/highlight';
 const FN = new Set(['shape', 's', 'n', 'polygon', 'polyline', 'stack', 'cat', 'slowcat', 'fastcat', 'seq', 'sequence', 'timecat',
   'pure', 'silence', 'run', 'range', 'mini', 'euclid', 'fast', 'slow', 'rev', 'choose', 'irand', 'pick', 'iff', 'osc', 'env',
   'palette', 'bg', 'persp', 'group', 'echo', 'spring', 'physics', 'slider', 'cc', 'gate', 'vel', 'note', 'pc', 'bend', 'onNote', 'dev',
-  'ballX', 'ballY', 'ballSeen', 'moving', 'thrown', 'caught', 'tapped', 'flight', 'gyro',
+  'ballX', 'ballY', 'ballSeen', 'moving', 'thrown', 'caught', 'tapped', 'held', 'shaken', 'flight', 'gyro',
   'level', 'band', 'low', 'mid', 'high', 'hit', '$']);
 const SIG = new Set(['sine', 'cosine', 'saw', 'isaw', 'tri', 'square', 'rand', 'perlin', 'fbm', 'brown',
   'gauss', 'white', 'mouseX', 'mouseY', 'mouseDown']);

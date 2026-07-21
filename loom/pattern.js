@@ -546,6 +546,8 @@ function _midiFrame() {
 //   ballX/ballY(id)  position 0..1 of the camera frame (origin top-left, like mouseX/mouseY)
 //   ballSeen(id)     1 while the ball is detected this frame, else 0
 //   thrown/caught/tapped(id)   discrete throw/catch/tap as a decaying 0..1 pulse (a flash)
+//   shaken(id)       deliberate shake as a decaying 0..1 pulse (amplitude = shake intensity)
+//   held(id)         1 while the ball is held still (latched by hold/active gesture events)
 //   flight(id)       last catch's airtime (seconds, held)     gyro(id)  IMU spin 0..1 (optional)
 // The ball id is the join key — "a"/"b"/"c" (or 0/1/2, or "ball_a") — the SAME across position
 // and events, so each ball is its own independent input. Signals obey the frozen/live rule:
@@ -561,7 +563,7 @@ const _ballId = (id) => {                                          // 0/1/2 · "
 const _ball = (id) => _jug.balls[_ballId(id)];
 // normalise the INCOMING id too (the feed sends "ball_A"/"ball_B"…) so it matches the lowercased
 // key ballX("b") looks up — otherwise "ball_B" is stored but "ball_b" is read and never found.
-const _mkBall = (id) => { const k = _ballId(id); return _jug.balls[k] || (_jug.balls[k] = { x: 0.5, y: 0.5, seen: 0, still: 0, thr: 0, cat: 0, tap: 0, flight: 0, mag: 0, spin: 0, tiltx: 0, tilty: 0 }); };
+const _mkBall = (id) => { const k = _ballId(id); return _jug.balls[k] || (_jug.balls[k] = { x: 0.5, y: 0.5, seen: 0, still: 0, thr: 0, cat: 0, tap: 0, flight: 0, mag: 0, spin: 0, tiltx: 0, tilty: 0, held: 0, shake: 0 }); };
 function _jugInput(m) {                                            // one feed message; switch on type, ignore unknown
   if (!m || typeof m !== 'object') return;
   if (m.type === 'balls' && m.coords) {
@@ -573,11 +575,14 @@ function _jugInput(m) {                                            // one feed m
   else if (m.type === 'tap')   { const b = _mkBall(m.name); b.mag = +m.magnitude || 0; b.tap = Math.min(1, b.mag / 30); }
   else if (m.type === 'imu')   { const b = _mkBall(m.name), g = m.gyro || [0, 0, 0], a = m.accel || [0, 0, 0];
     b.spin = Math.min(1, Math.hypot(g[0], g[1], g[2]) / 35); b.tiltx = (a[0] || 0) / 9.8; b.tilty = (a[1] || 0) / 9.8; }
+  else if (m.type === 'hold')   { _mkBall(m.name).held = 1; }       // latched: settled still
+  else if (m.type === 'active') { _mkBall(m.name).held = 0; }       // latched: moving again
+  else if (m.type === 'shake')  { _mkBall(m.name).shake = Math.min(1, (+m.intensity || 6) / 12); } // pulse, scaled by intensity
   // status + unknown types: ignored (additive / forward-compatible)
 }
 // decay the throw/catch/tap pulses each frame (driven from the tick loop) — a flash to 1 that
 // falls to ~0 over ~0.4s, so an event reads as a discrete trigger on controls and FX alike.
-function _jugDecay(dt) { const k = Math.exp(-dt * 6); for (const id in _jug.balls) { const b = _jug.balls[id]; b.thr *= k; b.cat *= k; b.tap *= k; } }
+function _jugDecay(dt) { const k = Math.exp(-dt * 6); for (const id in _jug.balls) { const b = _jug.balls[id]; b.thr *= k; b.cat *= k; b.tap *= k; b.shake *= k; } }
 const _jval = (id, f, def) => { const b = _ball(id); return b ? b[f] : def; };
 function ballX(id)    { return signal(() => { const x = _jval(id, 'x', 0.5); return _jug.flipX ? 1 - x : x; }); }
 function ballY(id)    { return signal(() => _jval(id, 'y', 0.5)); }
@@ -589,6 +594,10 @@ function caught(id)   { return signal(() => _jval(id, 'cat', 0)); }
 function tapped(id)   { return signal(() => _jval(id, 'tap', 0)); }
 function flight(id)   { return signal(() => _jval(id, 'flight', 0)); }
 function gyro(id)     { return signal(() => _jval(id, 'spin', 0)); }
+// held(id): 1 while the ball is held still (latched by hold/active gesture events, not decayed).
+// shaken(id): decaying 0..1 pulse on a deliberate shake, amplitude scaled by shake intensity.
+function held(id)     { return signal(() => _jval(id, 'held', 0)); }
+function shaken(id)   { return signal(() => _jval(id, 'shake', 0)); }
 
 // ── Link Audio feed (WebSocket per-track DSP), as signals ──────────────────────────
 // A separate local bridge receives Ableton's Link Audio multitrack streams (Live 12.4+), runs

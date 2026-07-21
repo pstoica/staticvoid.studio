@@ -512,6 +512,8 @@ glyph's onset (a trail), live as an FX/physics param.
 | `ballSeen(id)` | `1` while the ball is detected this frame | `0` / `1` |
 | `moving(id)` | `1` while the ball is detected **and** in motion (the host flags a settled ball as stationary) — gate static-feed noise: `.gate(moving("a"))` | `0` / `1` |
 | `thrown(id)` `caught(id)` `tapped(id)` | a throw / catch / tap, as a **decaying pulse** (flashes to 1, falls to 0 over ~0.4 s) | `0..1` |
+| `shaken(id)` | a deliberate **shake**, as a decaying pulse; amplitude scales with shake intensity | `0..1` |
+| `held(id)` | `1` while the ball is **held still** (latched by hold/active gestures, not decayed) — a mode you can hold a visual on | `0` / `1` |
 | `flight(id)` | last catch's airtime, **held** until the next catch | seconds |
 | `gyro(id)` | on-ball spin (IMU), if streaming | `0..1` |
 
