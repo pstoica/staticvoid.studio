@@ -538,7 +538,14 @@ void main() {
   float c = cos(uRot), s = sin(uRot);
   vec2 pr = vec2(c * p.x - s * p.y, s * p.x + c * p.y) / max(uZoom, 0.001);
   pr.x /= uAspect;
-  vec4 hist = texture2D(tHist, pr + 0.5);
+  vec2 q = pr + 0.5;
+  vec4 hist = texture2D(tHist, q);
+  // the history is clamp-to-edge, so warp/blur samples past the frame repeat the border
+  // pixel — energy that should slide OFF the screen piles up along the edges instead,
+  // and the loop compounds it into stuck streaks. Feather the outer few px to zero (and
+  // everything beyond the frame with it) so border energy drains every recirculation.
+  hist *= smoothstep(0.0, 0.004, q.x) * smoothstep(1.0, 0.996, q.x)
+        * smoothstep(0.0, 0.006, q.y) * smoothstep(1.0, 0.994, q.y);
   vec4 cur = texture2D(tMap, vUv);
   // current OVER faded history (premultiplied): trails decay instead of blowing
   // out to white, while zoom/rot still build the tunnel.
