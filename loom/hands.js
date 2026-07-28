@@ -88,8 +88,11 @@ export function getTrackingFlip() { return _flipX; }
 // is "up" when its tip is further from the wrist than its PIP joint (rotation-proof);
 // the thumb when its tip clears its IP joint moving away from the pinky's base.
 // pinch = thumb↔index tip closeness normalised by hand size (1 = touching).
+// Positions are remapped through the same CONTAIN fit the cam() backdrop's main image
+// uses (sx/sy squeeze one axis about the centre), so a dot at fingerX/fingerY lands ON
+// your fingertip in the unwarped image — with or without cam() visible, same coords.
 const TIP = [4, 8, 12, 16, 20], PIP = [3, 6, 10, 14, 18];
-function processHands(res) {
+function processHands(res, sx, sy) {
   const out = [];
   const lms = res.landmarks || [];
   const heds = res.handednesses || res.handedness || [];
@@ -99,40 +102,51 @@ function processHands(res) {
     // our default flip; swap when the mirror is off so "right" stays the user's right.
     let handed = ((heds[i] && heds[i][0] && heds[i][0].categoryName) || '').toLowerCase();
     if (!_flipX) handed = handed === 'left' ? 'right' : handed === 'right' ? 'left' : handed;
-    const X = (p) => (_flipX ? 1 - lm[p].x : lm[p].x);
+    const X = (p) => 0.5 + ((_flipX ? 1 - lm[p].x : lm[p].x) - 0.5) * sx;
+    const Y = (p) => 0.5 + (lm[p].y - 0.5) * sy;
     const d = (a, b) => Math.hypot(lm[a].x - lm[b].x, lm[a].y - lm[b].y);
-    const ref = d(0, 9) || 1e-4;                           // wrist → middle MCP = hand size
+    const ref = d(0, 9) || 1e-4;                           // wrist → middle MCP = hand size (raw frame units)
     out.push({
       handed,
       x: TIP.map((t) => X(t)),
-      y: TIP.map((t) => lm[t].y),
+      y: TIP.map((t) => Y(t)),
       z: TIP.map((t) => lm[t].z),                          // relative depth, wrist-origin; negative = toward camera
       up: TIP.map((t, f) => (f === 0 ? (d(4, 17) > d(3, 17) * 1.05 ? 1 : 0)
                                      : (d(t, 0) > d(PIP[f], 0) * 1.08 ? 1 : 0))),
-      palm: [(X(0) + X(9)) / 2, (lm[0].y + lm[9].y) / 2],
+      palm: [(X(0) + X(9)) / 2, (Y(0) + Y(9)) / 2],
       pinch: Math.max(0, Math.min(1, 1 - d(4, 8) / (1.5 * ref))),
       near: Math.max(0, Math.min(1, (ref - 0.1) / 0.35)),  // apparent hand size = distance proxy (1 = close)
     });
   }
   return { hands: out };
 }
-function processPose(res) {
+function processPose(res, sx, sy) {
   const lm = (res.landmarks && res.landmarks[0]) || null;
   if (!lm) return { seen: 0, x: [], y: [] };
-  return { seen: 1, x: lm.map((p) => (_flipX ? 1 - p.x : p.x)), y: lm.map((p) => p.y) };
+  return { seen: 1,
+    x: lm.map((p) => 0.5 + ((_flipX ? 1 - p.x : p.x) - 0.5) * sx),
+    y: lm.map((p) => 0.5 + (p.y - 0.5) * sy) };
 }
 
-// One detection pass, called from Loom's tick. Returns { hands?, pose? } states to push
-// into the DSL, or null when there's nothing new (not loaded / no fresh video frame).
-export function trackTick(nowMs) {
+// One detection pass, called from Loom's tick. cw/ch = the canvas size, so positions can
+// be remapped through the contain fit (see above). Returns { hands?, pose? } states to
+// push into the DSL, or null when there's nothing new (not loaded / no fresh frame).
+export function trackTick(nowMs, cw, ch) {
   if (_failed || !_video || _video.readyState < 2) return null;
   const ts = Math.round(nowMs);
   if (ts <= _lastTs) return null;                          // timestamps must increase (loom.step bursts)
   _lastTs = ts;
+  // contain-fit squeeze factors: video aspect vs canvas aspect (identity if either unknown)
+  let sx = 1, sy = 1;
+  const tw = _video.videoWidth, th = _video.videoHeight;
+  if (tw && th && cw && ch) {
+    const At = tw / th, Av = cw / ch;
+    if (At < Av) sx = At / Av; else sy = Av / At;
+  }
   const out = {};
   try {
-    if (_hand) out.hands = processHands(_hand.detectForVideo(_video, ts));
-    if (_pose) out.pose = processPose(_pose.detectForVideo(_video, ts));
+    if (_hand) out.hands = processHands(_hand.detectForVideo(_video, ts), sx, sy);
+    if (_pose) out.pose = processPose(_pose.detectForVideo(_video, ts), sx, sy);
   } catch (e) { _warn('detection failed', e); return null; }
   return (out.hands || out.pose) ? out : null;
 }

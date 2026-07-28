@@ -979,7 +979,7 @@ function tick(dt) {
   DSL._audioDecay(dt); // age the Link-Audio transient pulses (hit) the same way
   DSL._midiFrame();    // snapshot this frame's MIDI note-ons for onNote() (one glyph per note)
   if (trackingReady()) {   // MediaPipe hand/pose detection (only once loaded; ~ms on GPU)
-    const ts = trackTick(performance.now());
+    const ts = trackTick(performance.now(), W, H);   // W/H → positions align with the contain-fit image
     if (ts) { if (ts.hands) DSL._handInput(ts.hands); if (ts.pose) DSL._poseInput(ts.pose); }
   }
   // surface camera/tracking state transitions (starting → live / blocked) so a blank
