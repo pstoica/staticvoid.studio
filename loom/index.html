@@ -684,7 +684,8 @@
         <code>fingerUp(f) fingersUp()</code><p><code>fingerUp</code> = 1 while that finger is <em>extended</em> — draw whichever fingers are out: <code>.gate(fingerUp(1))</code>. <code>fingersUp()</code> counts them, 0..5</p>
         <code>pinch() palmX() palmY() handSeen()</code><p><code>pinch</code> = thumb↔index closeness 0..1 (1 = touching — a free continuous knob); palm centre; 1 while a hand is tracked</p>
         <code>poseX(j) poseY(j) poseSeen()</code><p>body joints by name ("nose" "lwrist" "rwrist" "lhip" "rankle" …) — <code>.x(poseX("nose")).y(poseY("nose"))</code> is a person-trail</p>
-        <p>all take an optional hand arg: 0 = first seen · "left"/"right" · 1/2. <strong>lazy</strong>: the model + webcam load only when a patch uses a signal (first run prompts for the camera). selfie-mirrored by default (<code>loom.cam.flipX</code>); <code>loom.cam.view(true)</code> shows the webcam behind the glyphs</p>
+        <code>cam(opacity?)</code><p>show the <em>webcam behind the glyphs</em> — the patch-declared backdrop, like <code>bg()</code> but a live camera (sits in a stack; opacity patternable: <code>cam(0.35)</code>, <code>cam(pinch())</code> fades in as you pinch). works alone, no tracking signals needed</p>
+        <p>all take an optional hand arg: 0 = first seen · "left"/"right" · 1/2. <strong>lazy</strong>: the model + webcam load only when a patch uses a signal or <code>cam()</code> (first run prompts for the camera). selfie-mirrored by default (<code>loom.cam.flipX</code>)</p>
       </section>
       <section data-cat="pal">
         <h3>palettes <span>(named ramps)</span></h3>

@@ -134,6 +134,8 @@ let bgSource = DEFAULT_BG; // raw bg arg (string/number/pattern/osc), resolved e
 const DEFAULT_PERSP = 2.6; // 3D-tilt camera distance, glyph radii (matches the historical hardcoded pinhole)
 let perspSource = DEFAULT_PERSP; // raw persp() arg, resolved each frame like bg (0 = orthographic)
 let perspVal = DEFAULT_PERSP;    // this frame's resolved value (read by drawShape3D; sent to the GL renderer)
+let camSource = 0;         // raw cam() opacity arg (0 = no webcam backdrop), reset each run, patternable
+let camShown = false;      // whether the cam() backdrop currently owns the GL camera overlay
 let showClock = localStorage.getItem('loom.clock') !== '0'; // playhead sweep on/off
 let traceMode = false; // trace path, UI toggle removed for now; renderer support stays
 let lastT = performance.now();
@@ -189,6 +191,7 @@ function run() {
   try {
     bgSource = DEFAULT_BG;                // bg("…") in the patch overrides this during compile
     perspSource = DEFAULT_PERSP;          // persp(…) in the patch overrides this during compile
+    camSource = 0;                        // cam(…) likewise (0 = no webcam backdrop)
     pattern = compile(editor.getCode());
     // Soft re-run: keep the live glyphs so editing the patch doesn't blank the screen.
     // Group ids are stable by creation order, so each frame the live glyphs re-read their
@@ -227,7 +230,7 @@ function run() {
     // hand/pose tracking: if the patch created any tracking signal, lazily load MediaPipe
     // + request the webcam (idempotent; a patch without them never touches the camera).
     const tw = DSL._getTracking();
-    if (tw.hands || tw.pose) ensureTracking(tw);
+    if (tw.hands || tw.pose || tw.cam) ensureTracking(tw);
     errBar.textContent = '';
     errBar.classList.remove('show');
     localStorage.setItem('loom.code', editor.getCode());
@@ -973,6 +976,15 @@ function tick(dt) {
   bgColor = bgEval(bgSource, cycle, elapsed);   // bg() is patternable, resolve per frame
   perspVal = Math.max(0, +evalGlobal(perspSource, cycle, elapsed) || 0);   // persp() too (0 = ortho)
   if (glr) glr.setBackground(bgColor);
+  // cam(): the patch-declared webcam backdrop, resolved per frame (opacity patternable).
+  // setCameraSource is cheap when the element is unchanged; on turn-off, hand the overlay
+  // back to whatever the juggling-feed config wants (applyVideo re-asserts it).
+  if (glr) {
+    const camO = Math.max(0, Math.min(1, +evalGlobal(camSource, cycle, elapsed) || 0));
+    const vid = trackingVideo();
+    if (camO > 0 && vid) { glr.setCameraSource(vid, getTrackingFlip(), camO); camShown = true; }
+    else if (camShown) { camShown = false; glr.setCameraSource(null); applyVideo(); }
+  }
   // Clean redraw: wipe the buffer completely every frame, then repaint only the
   // live particles. Nothing is ever baked in, so there's no alpha residue/ghosting.
   // "Trails" come from particles fading out over their own lifetime, not from a veil.
@@ -2063,6 +2075,7 @@ $('#warnok').addEventListener('click', () => { localStorage.setItem('loom.epilep
 
 DSL._setBgSink((c) => { bgSource = c; });   // bg("…") stores its (raw) arg here at compile time; resolved per-frame in tick
 DSL._setPerspSink((v) => { perspSource = v; });   // persp(n) likewise (0 = orthographic tilt)
+DSL._setCamSink((o) => { camSource = o; });       // cam(opacity) — the webcam backdrop
 
 // feed the live pointer (mouse + touch) into the mouseX/mouseY/mouseDown signals. Position
 // is 0..1 of the canvas; clamped so off-canvas reads stay in range. Pointer events cover

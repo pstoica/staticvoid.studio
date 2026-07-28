@@ -52,6 +52,8 @@ async function ensureCamera() {
 // additive — a re-run that adds pose signals only loads the pose model. Never throws.
 export function ensureTracking(want) {
   if (_failed || !want) return;
+  // cam() backdrop alone: just the webcam, no models, no wasm — the cheapest path.
+  if (want.cam && !_video && !_videoLoading) ensureCamera().catch((e) => _warn('camera unavailable', e));
   if (want.hands && !_hand && !_handLoading) {
     _handLoading = Promise.all([ensureVision(), ensureCamera()]).then(([v]) =>
       v.m.HandLandmarker.createFromOptions(v.fileset, {

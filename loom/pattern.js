@@ -617,8 +617,8 @@ function shaken(id)   { return signal(() => _jval(id, 'shake', 0)); }
 // rule: `.x(fingerX(1))` per-glyph freezes at onset (a trail), live as FX/physics params.
 const _handState = { hands: [] };
 const _poseState = { seen: 0, x: [], y: [] };
-let _trackWant = { hands: false, pose: false };
-function _resetTracking() { _trackWant = { hands: false, pose: false }; }
+let _trackWant = { hands: false, pose: false, cam: false };
+function _resetTracking() { _trackWant = { hands: false, pose: false, cam: false }; }
 function _getTracking() { return _trackWant; }
 function _handInput(st) { _handState.hands = (st && st.hands) || []; }
 function _poseInput(st) { _poseState.seen = st && st.seen ? 1 : 0; _poseState.x = (st && st.x) || []; _poseState.y = (st && st.y) || []; }
@@ -645,6 +645,17 @@ const _joint = (j) => (typeof j === 'number' ? j : (POSE_JOINT[String(j).toLower
 function poseX(j = 'nose') { _trackWant.pose = true; const i = _joint(j); return signal(() => (_poseState.x[i] != null ? _poseState.x[i] : 0.5)); }
 function poseY(j = 'nose') { _trackWant.pose = true; const i = _joint(j); return signal(() => (_poseState.y[i] != null ? _poseState.y[i] : 0.5)); }
 function poseSeen() { _trackWant.pose = true; return signal(() => _poseState.seen); }
+
+// cam(opacity?): show the WEBCAM behind the glyphs — the patch-declared backdrop, like
+// bg() but a live camera. Sits in a stack(...) (returns silence); opacity is patternable
+// (number / osc / pattern / mini string, resolved per frame): `cam(0.35)` a faint layer,
+// `cam(osc(0.05).range(0.1, 0.8))` breathes, `cam(pinch())` fades in as you pinch.
+// Works with or without the tracking signals (alone it just turns the camera on — the
+// same lazy request; no camera / denied → no backdrop, nothing breaks). Selfie-mirrored
+// with the signals (window.loom.cam.flipX), so you and your drawing agree on left/right.
+let _camSink = null;
+function _setCamSink(fn) { _camSink = fn; }
+function cam(opacity = 1) { _trackWant.cam = true; if (_camSink) _camSink(typeof opacity === 'string' ? mini(opacity) : opacity); return silence; }
 
 // ── Link Audio feed (WebSocket per-track DSP), as signals ──────────────────────────
 // A separate local bridge receives Ableton's Link Audio multitrack streams (Live 12.4+), runs
@@ -1217,7 +1228,7 @@ export const DSL = {
   cc, gate, vel, note, pc, bend, onNote, dev, _midiInput, _midiFrame,
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, flight, gyro, _jug, _jugInput, _jugDecay,
   fingerX, fingerY, fingerUp, fingersUp, pinch, palmX, palmY, handSeen, poseX, poseY, poseSeen,
-  _handInput, _poseInput, _resetTracking, _getTracking,
+  cam, _setCamSink, _handInput, _poseInput, _resetTracking, _getTracking,
   level, band, low, mid, high, hit, _audio, _audioInput, _audioDecay,
   hasOnset, span, isOsc, isSpring, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,

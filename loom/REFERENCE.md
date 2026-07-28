@@ -563,8 +563,11 @@ hold their defaults.
 | `poseSeen()` | `1` while a person is tracked | `0`/`1` |
 
 `hand`: `0` = first seen (default), `"left"`/`"right"` = by handedness, `1`/`2` = first/second.
-The view is **selfie-mirrored by default** (`window.loom.cam.flipX`); `window.loom.cam.view(true)`
-shows the webcam behind the glyphs. Signals obey the frozen/live rule — per-glyph controls
+The view is **selfie-mirrored by default** (`window.loom.cam.flipX`). **`cam(opacity?)`** shows
+the webcam **behind the glyphs** — the patch-declared backdrop, like `bg()` but a live camera
+(sits in a `stack`, opacity patternable per frame): `cam(0.35)` a faint layer,
+`cam(osc(0.05).range(0.1, 0.8))` breathes, `cam(pinch())` fades in as you pinch. It works
+alone too (no tracking signals — just the camera). Signals obey the frozen/live rule — per-glyph controls
 freeze at onset (so a stream of glyphs at a fingertip leaves a **trail**), FX/physics params
 stay live. **Draw whichever fingers are out:**
 
