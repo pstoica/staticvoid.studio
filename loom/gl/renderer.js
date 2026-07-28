@@ -529,11 +529,15 @@ precision highp float;
 uniform sampler2D tMap;    // current layer
 uniform sampler2D tHist;   // previous accumulation
 uniform float uFade, uZoom, uRot;
+uniform float uAspect;     // canvas w/h — rotate in pixel-true space, or a non-square
+                           // canvas shears the history diagonally about the centre
 varying vec2 vUv;
 void main() {
   vec2 p = vUv - 0.5;
+  p.x *= uAspect;
   float c = cos(uRot), s = sin(uRot);
   vec2 pr = vec2(c * p.x - s * p.y, s * p.x + c * p.y) / max(uZoom, 0.001);
+  pr.x /= uAspect;
   vec4 hist = texture2D(tHist, pr + 0.5);
   vec4 cur = texture2D(tMap, vUv);
   // current OVER faded history (premultiplied): trails decay instead of blowing
@@ -908,7 +912,7 @@ export class GLRenderer {
       copy: fsMat(COPY_FRAG, { tMap: { value: null } }),
       pixelate: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: PIXELATE_FRAG3, uniforms: { tMap: { value: null }, uTexel: { value: V2() }, uBlock: { value: 1 }, uLod: { value: 0 } }, depthTest: false, depthWrite: false }),
       blur: fsMat(BLUR_FRAG, { tMap: { value: null }, uTexel: { value: V2() }, uDir: { value: V2() }, uRadius: { value: 4 } }),
-      feedback: fsMat(FEEDBACK_FRAG, { tMap: { value: null }, tHist: { value: null }, uFade: { value: 0.92 }, uZoom: { value: 1 }, uRot: { value: 0 } }),
+      feedback: fsMat(FEEDBACK_FRAG, { tMap: { value: null }, tHist: { value: null }, uFade: { value: 0.92 }, uZoom: { value: 1 }, uRot: { value: 0 }, uAspect: { value: 1 } }),
       grade: fsMat(GRADE_FRAG, { tMap: { value: null }, uHue: { value: 0 }, uBright: { value: 1 }, uContrast: { value: 1 }, uSat: { value: 1 } }),
       negative: fsMat(NEGATIVE_FRAG, { tMap: { value: null }, uAmount: { value: 1 } }),
       displace: fsMat(DISPLACE_FRAG, { tMap: { value: null }, uAmount: { value: 0.02 }, uScale: { value: 3 }, uTime: { value: 0 } }),
@@ -1418,6 +1422,7 @@ export class GLRenderer {
         m.uniforms.uFade.value = this._num(e.fade, 0.92);
         m.uniforms.uZoom.value = this._num(e.zoom, 1.0);
         m.uniforms.uRot.value = this._num(e.rot, 0);
+        m.uniforms.uAspect.value = rt.w / Math.max(1, rt.h);
         this._blit(m, read.texture, next);            // result → next history at full (half-float) precision
         rt.histCur = 1 - rt.histCur;
         this._blit(this.fx.copy, next.texture, write); swap();   // bring it into a working buffer for the rest of the chain
