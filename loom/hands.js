@@ -44,6 +44,7 @@ async function ensureCamera() {
     const v = document.createElement('video');
     v.muted = true; v.playsInline = true; v.srcObject = stream;
     await v.play();
+    v.width = v.videoWidth; v.height = v.videoHeight;   // belt-and-braces: consumers that read .width see real dims
     _video = v;
     if (_state !== 'blocked') _state = 'live';   // frames are flowing (models may still be fetching)
     return v;

@@ -980,7 +980,9 @@ export class GLRenderer {
     if (!src) { this.camActive = false; return; }
     if (!this.camTex || this.camTex.image !== src) {
       if (this.camTex) this.camTex.dispose();
-      this.camTex = new THREE.Texture(src);
+      // a <video> needs VideoTexture: plain Texture sizes itself from image.width, which
+      // is 0 on a video element (its size is videoWidth) → it uploads an empty/black frame.
+      this.camTex = (src.tagName === 'VIDEO') ? new THREE.VideoTexture(src) : new THREE.Texture(src);
       this.camTex.minFilter = THREE.LinearFilter; this.camTex.magFilter = THREE.LinearFilter;
       this.camTex.generateMipmaps = false; this.camTex.colorSpace = THREE.SRGBColorSpace;
       this.camBgMat.map = this.camTex; this.camFgMat.map = this.camTex;
