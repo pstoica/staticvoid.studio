@@ -24,8 +24,9 @@ let _pose = null, _poseLoading = null;      // PoseLandmarker
 let _failed = false;                        // any hard failure → stay silent forever after
 let _lastTs = -1;                           // detectForVideo timestamps must strictly increase
 let _flipX = true;                          // selfie mirror (default on: move right → drawing moves right)
+let _state = 'off';                         // 'off' | 'starting' | 'live' | 'blocked' — surfaced in the UI
 
-const _warn = (what, e) => { if (!_failed) console.warn('Loom tracking: ' + what, e || ''); _failed = true; };
+const _warn = (what, e) => { if (!_failed) console.warn('Loom tracking: ' + what, e || ''); _failed = true; _state = 'blocked'; };
 
 async function ensureVision() {
   if (_mp) return _mp;
@@ -43,7 +44,9 @@ async function ensureCamera() {
     const v = document.createElement('video');
     v.muted = true; v.playsInline = true; v.srcObject = stream;
     await v.play();
-    return (_video = v);
+    _video = v;
+    if (_state !== 'blocked') _state = 'live';   // frames are flowing (models may still be fetching)
+    return v;
   })();
   return _videoLoading;
 }
@@ -52,6 +55,7 @@ async function ensureCamera() {
 // additive — a re-run that adds pose signals only loads the pose model. Never throws.
 export function ensureTracking(want) {
   if (_failed || !want) return;
+  if (_state === 'off' && (want.cam || want.hands || want.pose)) _state = 'starting';
   // cam() backdrop alone: just the webcam, no models, no wasm — the cheapest path.
   if (want.cam && !_video && !_videoLoading) ensureCamera().catch((e) => _warn('camera unavailable', e));
   if (want.hands && !_hand && !_handLoading) {
@@ -74,6 +78,7 @@ export function ensureTracking(want) {
 
 export const trackingReady = () => !!(_video && (_hand || _pose));
 export const trackingVideo = () => _video;                 // for the GL camera overlay
+export const trackingState = () => _state;                 // 'off' | 'starting' | 'live' | 'blocked'
 export function setTrackingFlip(v) { _flipX = !!v; }
 export function getTrackingFlip() { return _flipX; }
 

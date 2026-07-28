@@ -8,7 +8,7 @@
 import { DSL } from './pattern.js';
 import { GLRenderer } from './gl/renderer.js';
 import { ensureRapier, rapierReady, PhysWorld } from './physics.js';
-import { ensureTracking, trackingReady, trackingVideo, trackTick, setTrackingFlip, getTrackingFlip } from './hands.js';
+import { ensureTracking, trackingReady, trackingVideo, trackingState, trackTick, setTrackingFlip, getTrackingFlip } from './hands.js';
 import { createEditor } from './editor.js';
 import REFERENCE from './REFERENCE.md?raw';   // full cheatsheet text, for the "copy for LLM" button
 
@@ -136,6 +136,7 @@ let perspSource = DEFAULT_PERSP; // raw persp() arg, resolved each frame like bg
 let perspVal = DEFAULT_PERSP;    // this frame's resolved value (read by drawShape3D; sent to the GL renderer)
 let camSource = 0;         // raw cam() opacity arg (0 = no webcam backdrop), reset each run, patternable
 let camShown = false;      // whether the cam() backdrop currently owns the GL camera overlay
+let lastTrackState = 'off'; // last surfaced camera/tracking state (toast on transitions)
 let showClock = localStorage.getItem('loom.clock') !== '0'; // playhead sweep on/off
 let traceMode = false; // trace path, UI toggle removed for now; renderer support stays
 let lastT = performance.now();
@@ -230,7 +231,15 @@ function run() {
     // hand/pose tracking: if the patch created any tracking signal, lazily load MediaPipe
     // + request the webcam (idempotent; a patch without them never touches the camera).
     const tw = DSL._getTracking();
-    if (tw.hands || tw.pose || tw.cam) ensureTracking(tw);
+    if (tw.hands || tw.pose || tw.cam) {
+      ensureTracking(tw);
+      // if the camera is already known-blocked, say so on every run — otherwise the patch
+      // just draws nothing (gates closed, signals 0) with no clue why.
+      if (trackingState() === 'blocked') {
+        errBar.textContent = 'camera unavailable — tracking signals read 0. Allow camera access for this site, then reload.';
+        errBar.classList.add('show');
+      }
+    }
     errBar.textContent = '';
     errBar.classList.remove('show');
     localStorage.setItem('loom.code', editor.getCode());
@@ -973,6 +982,15 @@ function tick(dt) {
     const ts = trackTick(performance.now());
     if (ts) { if (ts.hands) DSL._handInput(ts.hands); if (ts.pose) DSL._poseInput(ts.pose); }
   }
+  // surface camera/tracking state transitions (starting → live / blocked) so a blank
+  // canvas is never a mystery — the gates read 0 until the camera actually sees you.
+  const trkSt = trackingState();
+  if (trkSt !== lastTrackState) {
+    if (trkSt === 'starting') showToast('camera starting — allow access if prompted');
+    else if (trkSt === 'live') showToast('camera live');
+    else if (trkSt === 'blocked') { errBar.textContent = 'camera unavailable — tracking signals read 0. Allow camera access for this site, then reload.'; errBar.classList.add('show'); }
+    lastTrackState = trkSt;
+  }
   bgColor = bgEval(bgSource, cycle, elapsed);   // bg() is patternable, resolve per frame
   perspVal = Math.max(0, +evalGlobal(perspSource, cycle, elapsed) || 0);   // persp() too (0 = ortho)
   if (glr) glr.setBackground(bgColor);
@@ -1217,6 +1235,7 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   pose: (st) => DSL._poseInput(st),   // inject pose-tracking state (likewise)
   cam: {   // MediaPipe camera config (tracking starts lazily when a patch uses a hand/pose signal)
     get ready() { return trackingReady(); },
+    get state() { return trackingState(); },   // 'off' | 'starting' | 'live' | 'blocked'
     get flipX() { return getTrackingFlip(); },
     set flipX(v) { setTrackingFlip(v); },
     // show the webcam behind the glyphs (the same GL overlay the juggling feed uses)

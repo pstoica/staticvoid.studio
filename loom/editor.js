@@ -222,7 +222,7 @@ const sliderPlugin = ViewPlugin.fromClass(class {
 // the call-style ones (cc(7,1), vel(1), ballX("a")…) via window.loom.sig(name, …args).
 const liveBadges = new Set();
 let liveRAF = 0;
-const BOOL_SIGS = new Set(['mouseDown', 'gate', 'ballSeen', 'moving']);   // shown as ●/○, not a number
+const BOOL_SIGS = new Set(['mouseDown', 'gate', 'ballSeen', 'moving', 'fingerUp', 'handSeen', 'poseSeen']);   // shown as ●/○, not a number
 function badgeValue(el) {
   const name = el.dataset.sig;
   const L = typeof window !== 'undefined' && window.loom;
@@ -274,7 +274,8 @@ class LiveSigWidget extends WidgetType {
   ignoreEvent() { return true; }
 }
 // call-style live signals (one arg list, no nested parens — so .gate(ballSeen("a")) won't match)
-const CALL_SIGS = 'cc|gate|vel|note|pc|bend|ballX|ballY|ballSeen|moving|thrown|caught|tapped|flight|gyro';
+const CALL_SIGS = 'cc|gate|vel|note|pc|bend|ballX|ballY|ballSeen|moving|thrown|caught|tapped|held|shaken|flight|gyro'
+  + '|fingerX|fingerY|fingerUp|fingersUp|pinch|palmX|palmY|handSeen|poseX|poseY|poseSeen';
 const callRe = new RegExp('\\b(' + CALL_SIGS + ')\\(([^()]*)\\)', 'g');
 const parseArgs = (s) => s.split(',').map((a) => a.trim()).filter(Boolean)
   .map((a) => (/^-?[\d.]+$/.test(a) ? +a : a.replace(/^["']|["']$/g, '')));

@@ -572,13 +572,23 @@ freeze at onset (so a stream of glyphs at a fingertip leaves a **trail**), FX/ph
 stay live. **Draw whichever fingers are out:**
 
 ```js
-stack(...[0,1,2,3,4].map(f =>
-  shape("dot*8").x(fingerX(f)).y(fingerY(f))
-    .gate(fingerUp(f))                       // draw only while that finger is extended
-    .color(palette("neon").at(f / 5))
-    .size(0.025).decay(0.8)
-))
+stack(
+  cam(0.25),                                 // webcam faintly behind (see below)
+  shape("ring*4").x(palmX()).y(palmY())      // an UNGATED palm cursor — something shows
+    .size(0.05).weight(0.004).decay(0.6)     // as soon as a hand is seen at all
+    .gate(handSeen()),
+  ...[0,1,2,3,4].map(f =>
+    shape("dot*8").x(fingerX(f)).y(fingerY(f))
+      .gate(fingerUp(f))                     // draw only while that finger is extended
+      .color(palette("neon").at(f / 5))
+      .size(0.025).decay(0.8))
+)
 ```
+
+The editor shows a **live badge** after each tracking signal (like `mouseX`), so you can see
+`fingerUp(1) ●/○` flip as you extend the finger — if the badges sit at `○`/`0.50`, the camera
+isn't seeing a hand yet (a toast reports *camera starting / live*; a persistent bar appears
+if the camera is blocked).
 
 A person-trail is one line: `shape("dot*16").x(poseX("nose")).y(poseY("nose")).decay(2)` —
 or attach the physics attractor to a wrist: `{ attract: 1, ax: poseX("rwrist"), ay: poseY("rwrist") }`.
