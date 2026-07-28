@@ -599,6 +599,53 @@ function gyro(id)     { return signal(() => _jval(id, 'spin', 0)); }
 function held(id)     { return signal(() => _jval(id, 'held', 0)); }
 function shaken(id)   { return signal(() => _jval(id, 'shake', 0)); }
 
+// ── hand + pose tracking (MediaPipe webcam), as signals ───────────────────────────
+// The camera as a native input. main.js/hands.js own MediaPipe + the webcam (both
+// LAZY — see hands.js) and push compact per-frame state into _handInput/_poseInput;
+// the signals below read it. Creating any of these signals flags the compile as
+// wanting that tracker (_trackWant), which is what kicks the lazy load + camera
+// permission on run — a patch that never mentions them never touches the camera.
+//   fingerX/fingerY(f, hand?)  fingertip position, 0..1 (f: 0=thumb 1=index … 4=pinky)
+//   fingerUp(f, hand?)         1 while that finger is EXTENDED ("which fingers are out")
+//   fingersUp(hand?)           how many fingers are out, 0..5
+//   pinch(hand?)               thumb↔index closeness, 0..1 (1 = touching)
+//   palmX/palmY(hand?)         palm centre        handSeen(hand?)  1 while tracked
+//   poseX/poseY(j)             body joint (name: "nose" "lwrist" "rankle" … or index)
+//   poseSeen()                 1 while a person is tracked
+// hand: 0 = first seen (default), "left"/"right" = by handedness, 1/2 = first/second.
+// Selfie-mirrored by default (window.loom.cam.flipX). Signals obey the frozen/live
+// rule: `.x(fingerX(1))` per-glyph freezes at onset (a trail), live as FX/physics params.
+const _handState = { hands: [] };
+const _poseState = { seen: 0, x: [], y: [] };
+let _trackWant = { hands: false, pose: false };
+function _resetTracking() { _trackWant = { hands: false, pose: false }; }
+function _getTracking() { return _trackWant; }
+function _handInput(st) { _handState.hands = (st && st.hands) || []; }
+function _poseInput(st) { _poseState.seen = st && st.seen ? 1 : 0; _poseState.x = (st && st.x) || []; _poseState.y = (st && st.y) || []; }
+const _handAt = (sel) => {
+  const hs = _handState.hands;
+  if (!hs.length) return null;
+  if (sel === 'left' || sel === 'right') { for (const h of hs) if (h.handed === sel) return h; return null; }
+  const i = typeof sel === 'number' && sel >= 1 ? sel - 1 : 0;
+  return hs[i] || null;
+};
+const _fin = (f) => Math.max(0, Math.min(4, f | 0));
+function fingerX(f = 1, hand = 0) { _trackWant.hands = true; return signal(() => { const h = _handAt(hand); return h ? h.x[_fin(f)] : 0.5; }); }
+function fingerY(f = 1, hand = 0) { _trackWant.hands = true; return signal(() => { const h = _handAt(hand); return h ? h.y[_fin(f)] : 0.5; }); }
+function fingerUp(f = 1, hand = 0) { _trackWant.hands = true; return signal(() => { const h = _handAt(hand); return h ? h.up[_fin(f)] : 0; }); }
+function fingersUp(hand = 0) { _trackWant.hands = true; return signal(() => { const h = _handAt(hand); return h ? h.up.reduce((a, b) => a + b, 0) : 0; }); }
+function pinch(hand = 0) { _trackWant.hands = true; return signal(() => { const h = _handAt(hand); return h ? h.pinch : 0; }); }
+function palmX(hand = 0) { _trackWant.hands = true; return signal(() => { const h = _handAt(hand); return h ? h.palm[0] : 0.5; }); }
+function palmY(hand = 0) { _trackWant.hands = true; return signal(() => { const h = _handAt(hand); return h ? h.palm[1] : 0.5; }); }
+function handSeen(hand = 0) { _trackWant.hands = true; return signal(() => (_handAt(hand) ? 1 : 0)); }
+// pose joints (MediaPipe 33-landmark body): named or by raw index
+const POSE_JOINT = { nose: 0, lear: 7, rear: 8, lshoulder: 11, rshoulder: 12, lelbow: 13, relbow: 14,
+  lwrist: 15, rwrist: 16, lhip: 23, rhip: 24, lknee: 25, rknee: 26, lankle: 27, rankle: 28 };
+const _joint = (j) => (typeof j === 'number' ? j : (POSE_JOINT[String(j).toLowerCase()] != null ? POSE_JOINT[String(j).toLowerCase()] : 0));
+function poseX(j = 'nose') { _trackWant.pose = true; const i = _joint(j); return signal(() => (_poseState.x[i] != null ? _poseState.x[i] : 0.5)); }
+function poseY(j = 'nose') { _trackWant.pose = true; const i = _joint(j); return signal(() => (_poseState.y[i] != null ? _poseState.y[i] : 0.5)); }
+function poseSeen() { _trackWant.pose = true; return signal(() => _poseState.seen); }
+
 // ── Link Audio feed (WebSocket per-track DSP), as signals ──────────────────────────
 // A separate local bridge receives Ableton's Link Audio multitrack streams (Live 12.4+), runs
 // per-track DSP (level + FFT bands + transients), and pushes plain JSON over a WebSocket — the
@@ -1169,6 +1216,8 @@ export const DSL = {
   mouseX, mouseY, mouseDown, _setPointer,
   cc, gate, vel, note, pc, bend, onNote, dev, _midiInput, _midiFrame,
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, flight, gyro, _jug, _jugInput, _jugDecay,
+  fingerX, fingerY, fingerUp, fingersUp, pinch, palmX, palmY, handSeen, poseX, poseY, poseSeen,
+  _handInput, _poseInput, _resetTracking, _getTracking,
   level, band, low, mid, high, hit, _audio, _audioInput, _audioDecay,
   hasOnset, span, isOsc, isSpring, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,

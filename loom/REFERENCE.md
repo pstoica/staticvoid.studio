@@ -544,6 +544,43 @@ canvas — the visuals composite straight over the live camera, pixel-aligned wi
 (so a dot at `ballX/ballY` lands on the real ball). `window.loom.jug(msg)` injects a feed message
 for testing without the host.
 
+### Hands & body (`fingerX` / `fingerUp` / `poseX` / … — MediaPipe webcam)
+
+The **camera as an input**: hand + body tracking runs in the browser (MediaPipe), entirely
+**lazy** — a patch that uses one of these signals loads the model and asks for the webcam on
+run; a patch that doesn't never touches the camera. No camera / denied → the signals just
+hold their defaults.
+
+| Signal | Meaning | Range |
+| --- | --- | --- |
+| `fingerX(f, hand?)` `fingerY(f, hand?)` | fingertip position (`f`: `0`=thumb `1`=index `2`=middle `3`=ring `4`=pinky) | `0..1` |
+| `fingerUp(f, hand?)` | `1` while that finger is **extended** | `0`/`1` |
+| `fingersUp(hand?)` | how many fingers are out | `0..5` |
+| `pinch(hand?)` | thumb↔index closeness (`1` = touching) — a free continuous controller | `0..1` |
+| `palmX(hand?)` `palmY(hand?)` | palm centre | `0..1` |
+| `handSeen(hand?)` | `1` while a hand is tracked | `0`/`1` |
+| `poseX(j)` `poseY(j)` | body joint — by name (`"nose"` `"lwrist"` `"rwrist"` `"lhip"` `"rankle"` …) or raw index | `0..1` |
+| `poseSeen()` | `1` while a person is tracked | `0`/`1` |
+
+`hand`: `0` = first seen (default), `"left"`/`"right"` = by handedness, `1`/`2` = first/second.
+The view is **selfie-mirrored by default** (`window.loom.cam.flipX`); `window.loom.cam.view(true)`
+shows the webcam behind the glyphs. Signals obey the frozen/live rule — per-glyph controls
+freeze at onset (so a stream of glyphs at a fingertip leaves a **trail**), FX/physics params
+stay live. **Draw whichever fingers are out:**
+
+```js
+stack(...[0,1,2,3,4].map(f =>
+  shape("dot*8").x(fingerX(f)).y(fingerY(f))
+    .gate(fingerUp(f))                       // draw only while that finger is extended
+    .color(palette("neon").at(f / 5))
+    .size(0.025).decay(0.8)
+))
+```
+
+A person-trail is one line: `shape("dot*16").x(poseX("nose")).y(poseY("nose")).decay(2)` —
+or attach the physics attractor to a wrist: `{ attract: 1, ax: poseX("rwrist"), ay: poseY("rwrist") }`.
+`window.loom.hand(state)` / `window.loom.pose(state)` inject frames for testing without a webcam.
+
 | Method | Effect |
 | --- | --- |
 | `.range(lo, hi)` | remap a `0..1` signal into `[lo, hi]`; **`lo`/`hi` may each be a number, pattern, or osc** |

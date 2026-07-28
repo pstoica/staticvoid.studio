@@ -8,6 +8,7 @@
 import { DSL } from './pattern.js';
 import { GLRenderer } from './gl/renderer.js';
 import { ensureRapier, rapierReady, PhysWorld } from './physics.js';
+import { ensureTracking, trackingReady, trackingVideo, trackTick, setTrackingFlip, getTrackingFlip } from './hands.js';
 import { createEditor } from './editor.js';
 import REFERENCE from './REFERENCE.md?raw';   // full cheatsheet text, for the "copy for LLM" button
 
@@ -157,6 +158,7 @@ function compile(code) {
   DSL._resetLayers();                    // $(...) layer registry, collected below
   DSL._resetPhysics();                   // physics() group registry (stable pids → live world editing)
   DSL._resetIds();                       // .id() claimed-key registry (release orphaned objects below)
+  DSL._resetTracking();                  // hand/pose signal usage flags (kicks the lazy camera below)
   const names = Object.keys(DSL);
   const vals = names.map((k) => DSL[k]);
   let result;
@@ -222,6 +224,10 @@ function run() {
     // enumerable, so those objects are left to their own hold/decay.
     const claimed = DSL._getIdKeys();
     for (const [key, p] of objects) if (!claimed.has(key)) p.hold = null;
+    // hand/pose tracking: if the patch created any tracking signal, lazily load MediaPipe
+    // + request the webcam (idempotent; a patch without them never touches the camera).
+    const tw = DSL._getTracking();
+    if (tw.hands || tw.pose) ensureTracking(tw);
     errBar.textContent = '';
     errBar.classList.remove('show');
     localStorage.setItem('loom.code', editor.getCode());
@@ -960,6 +966,10 @@ function tick(dt) {
   DSL._jugDecay(dt);   // age the juggling throw/catch/tap pulses (decays even when paused)
   DSL._audioDecay(dt); // age the Link-Audio transient pulses (hit) the same way
   DSL._midiFrame();    // snapshot this frame's MIDI note-ons for onNote() (one glyph per note)
+  if (trackingReady()) {   // MediaPipe hand/pose detection (only once loaded; ~ms on GPU)
+    const ts = trackTick(performance.now());
+    if (ts) { if (ts.hands) DSL._handInput(ts.hands); if (ts.pose) DSL._poseInput(ts.pose); }
+  }
   bgColor = bgEval(bgSource, cycle, elapsed);   // bg() is patternable, resolve per frame
   perspVal = Math.max(0, +evalGlobal(perspSource, cycle, elapsed) || 0);   // persp() too (0 = ortho)
   if (glr) glr.setBackground(bgColor);
@@ -1191,6 +1201,15 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   run: (code) => { if (code != null) editor.setCode(String(code)); run(); },   // set code + re-eval (tooling — a scripted ⌘↵)
   midi: (status, d1, d2, dev) => DSL._midiInput(status, d1, d2, dev),   // inject a MIDI message (for tooling/testing; `dev` = optional device name for dev() scope)
   jug: (m) => DSL._jugInput(m),   // inject a juggling-feed message (for tooling/testing)
+  hand: (st) => DSL._handInput(st),   // inject hand-tracking state (for tooling/testing without a webcam)
+  pose: (st) => DSL._poseInput(st),   // inject pose-tracking state (likewise)
+  cam: {   // MediaPipe camera config (tracking starts lazily when a patch uses a hand/pose signal)
+    get ready() { return trackingReady(); },
+    get flipX() { return getTrackingFlip(); },
+    set flipX(v) { setTrackingFlip(v); },
+    // show the webcam behind the glyphs (the same GL overlay the juggling feed uses)
+    view(on = true, opacity = 0.35) { if (!glr) return; glr.setCameraSource(on ? trackingVideo() : null, getTrackingFlip(), opacity); },
+  },
   audio: (m) => DSL._audioInput(m),   // inject a Link-Audio-feed message (for tooling/testing)
   link: (m) => _linkInput(m),   // inject an Ableton-Link tempo message (for tooling/testing)
   get linked() { return _link.active; },
