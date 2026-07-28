@@ -1000,7 +1000,7 @@ function tick(dt) {
   if (glr) {
     const camO = Math.max(0, Math.min(1, +evalGlobal(camSource, cycle, elapsed) || 0));
     const vid = trackingVideo();
-    if (camO > 0 && vid) { glr.setCameraSource(vid, getTrackingFlip(), camO); camShown = true; }
+    if (camO > 0 && vid) { glr.setCameraSource(vid, getTrackingFlip(), camO, 'fill'); camShown = true; }
     else if (camShown) { camShown = false; glr.setCameraSource(null); applyVideo(); }
   }
   // Clean redraw: wipe the buffer completely every frame, then repaint only the
@@ -1239,7 +1239,7 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
     get flipX() { return getTrackingFlip(); },
     set flipX(v) { setTrackingFlip(v); },
     // show the webcam behind the glyphs (the same GL overlay the juggling feed uses)
-    view(on = true, opacity = 0.35) { if (!glr) return; glr.setCameraSource(on ? trackingVideo() : null, getTrackingFlip(), opacity); },
+    view(on = true, opacity = 0.35) { if (!glr) return; glr.setCameraSource(on ? trackingVideo() : null, getTrackingFlip(), opacity, 'fill'); },
   },
   audio: (m) => DSL._audioInput(m),   // inject a Link-Audio-feed message (for tooling/testing)
   link: (m) => _linkInput(m),   // inject an Ableton-Link tempo message (for tooling/testing)

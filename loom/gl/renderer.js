@@ -976,7 +976,13 @@ export class GLRenderer {
 
   // point the camera quads at an <img>/<video> (the juggling feed), or null to turn it off. flipX
   // mirrors (selfie). opacity dims the sharp foreground. Called when the feed overlay is toggled.
-  setCameraSource(src, flipX, opacity) {
+  setCameraSource(src, flipX, opacity, fit) {
+    // fit picks what fills the leftover bars around the aspect-correct (contain) copy:
+    // 'bars' (default) = a zoomed COVER copy (the juggling feed's look); 'fill' = the
+    // same frame STRETCHED to the canvas (the cam() backdrop) — no warping on the main
+    // image, and the bars continue it instead of zooming it. The stretched copy is
+    // slightly dimmed so the seam reads as backdrop, not a glitch.
+    this.camFit = fit || 'bars';
     if (!src) { this.camActive = false; return; }
     if (!this.camTex || this.camTex.image !== src) {
       if (this.camTex) this.camTex.dispose();
@@ -991,7 +997,7 @@ export class GLRenderer {
     this.camTex.center.set(0.5, 0.5);
     this.camTex.repeat.set(flipX ? -1 : 1, -1);            // x: selfie mirror · y: -1 corrects the Y-down ortho
     const op = opacity != null ? opacity : 1;
-    this.camFgMat.opacity = this.camBgMat.opacity = op;   // bg fills opaque (no dimming) — same as fg
+    this.camFgMat.opacity = this.camBgMat.opacity = op;   // both regions fade uniformly
     this.camFgMat.transparent = this.camBgMat.transparent = op < 1;
     this.camActive = true;
   }
@@ -1004,8 +1010,10 @@ export class GLRenderer {
     if (!tw || !th) return;
     const W = this.camera.right || 1, H = this.camera.bottom || 1, At = tw / th, Av = W / H;
     const wide = At > Av;                                  // feed wider than the viewport?
-    const fgW = wide ? W : H * At, fgH = wide ? W / At : H;          // contain: largest that fits
-    const bgW = wide ? H * At : W, bgH = wide ? H : W / At;          // cover: smallest that fills
+    const fgW = wide ? W : H * At, fgH = wide ? W / At : H;          // contain: largest that fits, no warping
+    // what the bars behind it show: 'fill' = the frame stretched to the canvas; else a zoomed cover copy
+    const bgW = this.camFit === 'fill' ? W : (wide ? H * At : W);
+    const bgH = this.camFit === 'fill' ? H : (wide ? H : W / At);
     this.camFg.scale.set(fgW, fgH, 1); this.camFg.position.set(W / 2, H / 2, 0);
     this.camBg.scale.set(bgW, bgH, 1); this.camBg.position.set(W / 2, H / 2, 0);
   }
@@ -1026,12 +1034,16 @@ export class GLRenderer {
     if (this.camActive && this.camTex && this.camTex.image && (this.camTex.image.naturalWidth || this.camTex.image.videoWidth)) {
       this._fitCamera();
       this.camTex.needsUpdate = true;
-      const W = this.camera.right, H = this.camera.bottom, dpr = this.DPR || 1;
+      const W = this.camera.right, H = this.camera.bottom;
       const barX = (W - this.camFg.scale.x) / 2, barY = (H - this.camFg.scale.y) / 2;   // one is ~0
-      // cover copy, clipped to the bar(s) only (scissor is framebuffer px, bottom-left origin)
+      // backdrop copy, clipped to the bar(s) only. Three's setScissor takes CSS px and
+      // applies the pixel ratio ITSELF — pre-multiplying by dpr here made the scissor 2×
+      // too big, so the backdrop spilled past the bar over the contain copy: a doubled-
+      // opacity band exactly barX..2barX wide. (Invisible at opacity 1 — the opaque fg
+      // hides the overlap — which is why the juggling feed never showed it.)
       this.camBg.visible = true; this.camFg.visible = false;
       r.setScissorTest(true);
-      const bar = (x, y, w, h) => { if (w > 0.5 && h > 0.5) { r.setScissor(x * dpr, y * dpr, w * dpr, h * dpr); r.render(this.bgScene, this.camera); } };
+      const bar = (x, y, w, h) => { if (w > 0.5 && h > 0.5) { r.setScissor(x, y, w, h); r.render(this.bgScene, this.camera); } };
       if (barX > 0.5) { bar(0, 0, barX, H); bar(W - barX, 0, barX, H); }               // side bars
       if (barY > 0.5) { bar(0, 0, W, barY); bar(0, H - barY, W, barY); }               // top/bottom bars
       r.setScissorTest(false);

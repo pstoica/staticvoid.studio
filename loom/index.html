@@ -154,9 +154,10 @@
   #editwrap { position:relative; flex:1; min-height:0; margin:0 22px 0 0; padding-left:22px; font-weight:500; transition:opacity .3s var(--ease); }
   #editwrap .cm-editor { height:100%; background:transparent; }
   #editwrap .cm-scroller { font-weight:500; }
-  /* native text selection — a DARK highlight so selected text always has a contrast fallback,
+  /* native text selection — a LIGHT translucent highlight (the code sits on dark hugging
+     boxes, so a dark selection vanished into them; light reads at a glance),
      even over a white bg() patch (the old translucent blue washed out). */
-  #editwrap .cm-content ::selection, #editwrap .cm-line::selection, #editwrap ::selection { background:rgba(18,22,33,.92); }
+  #editwrap .cm-content ::selection, #editwrap .cm-line::selection, #editwrap ::selection { background:rgba(145,160,255,.32); }
 
   /* ── custom overlay scrollbar ──────────────────────────────────────────────────────────────
      native ::-webkit-scrollbar can't animate (verified: it snaps mid-transition), so this is a
@@ -683,6 +684,7 @@
         <code>fingerX(f) fingerY(f)</code><p>fingertip position 0..1 (<code>f</code>: 0=thumb 1=index 2=middle 3=ring 4=pinky) — frozen at onset = a trail, live as an FX/physics param, like any signal</p>
         <code>fingerUp(f) fingersUp()</code><p><code>fingerUp</code> = 1 while that finger is <em>extended</em> — draw whichever fingers are out: <code>.gate(fingerUp(1))</code>. <code>fingersUp()</code> counts them, 0..5</p>
         <code>pinch() palmX() palmY() handSeen()</code><p><code>pinch</code> = thumb↔index closeness 0..1 (1 = touching — a free continuous knob); palm centre; 1 while a hand is tracked</p>
+        <code>handNear() fingerZ(f)</code><p>depth, approximately: <code>handNear</code> = how close the hand is from its apparent size (0 far → 1 close — push your hand at the camera); <code>fingerZ</code> = a tip's relative depth in the hand (→1 pointing at the camera)</p>
         <code>poseX(j) poseY(j) poseSeen()</code><p>body joints by name ("nose" "lwrist" "rwrist" "lhip" "rankle" …) — <code>.x(poseX("nose")).y(poseY("nose"))</code> is a person-trail</p>
         <code>cam(opacity?)</code><p>show the <em>webcam behind the glyphs</em> — the patch-declared backdrop, like <code>bg()</code> but a live camera (sits in a stack; opacity patternable: <code>cam(0.35)</code>, <code>cam(pinch())</code> fades in as you pinch). works alone, no tracking signals needed</p>
         <p>all take an optional hand arg: 0 = first seen · "left"/"right" · 1/2. <strong>lazy</strong>: the model + webcam load only when a patch uses a signal or <code>cam()</code> (first run prompts for the camera). selfie-mirrored by default (<code>loom.cam.flipX</code>)</p>

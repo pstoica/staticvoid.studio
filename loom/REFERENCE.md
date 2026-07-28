@@ -557,6 +557,8 @@ hold their defaults.
 | `fingerUp(f, hand?)` | `1` while that finger is **extended** | `0`/`1` |
 | `fingersUp(hand?)` | how many fingers are out | `0..5` |
 | `pinch(hand?)` | thumb↔index closeness (`1` = touching) — a free continuous controller | `0..1` |
+| `fingerZ(f, hand?)` | the tip's **relative depth** within the hand (~`0.5` = wrist plane, → `1` pointing at the camera). Approximate — good for gestures, not measurement | `0..1` |
+| `handNear(hand?)` | how **close** the whole hand is, from its apparent size (`0` far → `1` arm's-length-close) — the "push your hand at the camera" knob | `0..1` |
 | `palmX(hand?)` `palmY(hand?)` | palm centre | `0..1` |
 | `handSeen(hand?)` | `1` while a hand is tracked | `0`/`1` |
 | `poseX(j)` `poseY(j)` | body joint — by name (`"nose"` `"lwrist"` `"rwrist"` `"lhip"` `"rankle"` …) or raw index | `0..1` |

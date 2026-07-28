@@ -638,6 +638,13 @@ function pinch(hand = 0) { _trackWant.hands = true; return signal(() => { const 
 function palmX(hand = 0) { _trackWant.hands = true; return signal(() => { const h = _handAt(hand); return h ? h.palm[0] : 0.5; }); }
 function palmY(hand = 0) { _trackWant.hands = true; return signal(() => { const h = _handAt(hand); return h ? h.palm[1] : 0.5; }); }
 function handSeen(hand = 0) { _trackWant.hands = true; return signal(() => (_handAt(hand) ? 1 : 0)); }
+// depth, two flavours (MediaPipe has no true metric depth): fingerZ = the tip's RELATIVE
+// depth within the hand (wrist-origin; mapped so ~0.5 = wrist plane, → 1 pointing at the
+// camera, → 0 tucked away) — good for "finger toward me" gestures; handNear = the whole
+// hand's distance proxy from its APPARENT SIZE (0 far, → 1 at arm's-length-close) — the
+// practical "push your hand at the camera" knob.
+function fingerZ(f = 1, hand = 0) { _trackWant.hands = true; return signal(() => { const h = _handAt(hand); return h && h.z ? Math.max(0, Math.min(1, 0.5 - h.z[_fin(f)] * 3)) : 0.5; }); }
+function handNear(hand = 0) { _trackWant.hands = true; return signal(() => { const h = _handAt(hand); return h && h.near != null ? h.near : 0; }); }
 // pose joints (MediaPipe 33-landmark body): named or by raw index
 const POSE_JOINT = { nose: 0, lear: 7, rear: 8, lshoulder: 11, rshoulder: 12, lelbow: 13, relbow: 14,
   lwrist: 15, rwrist: 16, lhip: 23, rhip: 24, lknee: 25, rknee: 26, lankle: 27, rankle: 28 };
@@ -1227,7 +1234,7 @@ export const DSL = {
   mouseX, mouseY, mouseDown, _setPointer,
   cc, gate, vel, note, pc, bend, onNote, dev, _midiInput, _midiFrame,
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, flight, gyro, _jug, _jugInput, _jugDecay,
-  fingerX, fingerY, fingerUp, fingersUp, pinch, palmX, palmY, handSeen, poseX, poseY, poseSeen,
+  fingerX, fingerY, fingerZ, fingerUp, fingersUp, pinch, palmX, palmY, handSeen, handNear, poseX, poseY, poseSeen,
   cam, _setCamSink, _handInput, _poseInput, _resetTracking, _getTracking,
   level, band, low, mid, high, hit, _audio, _audioInput, _audioDecay,
   hasOnset, span, isOsc, isSpring, ease, EASE,

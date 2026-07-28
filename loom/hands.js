@@ -106,10 +106,12 @@ function processHands(res) {
       handed,
       x: TIP.map((t) => X(t)),
       y: TIP.map((t) => lm[t].y),
+      z: TIP.map((t) => lm[t].z),                          // relative depth, wrist-origin; negative = toward camera
       up: TIP.map((t, f) => (f === 0 ? (d(4, 17) > d(3, 17) * 1.05 ? 1 : 0)
                                      : (d(t, 0) > d(PIP[f], 0) * 1.08 ? 1 : 0))),
       palm: [(X(0) + X(9)) / 2, (lm[0].y + lm[9].y) / 2],
       pinch: Math.max(0, Math.min(1, 1 - d(4, 8) / (1.5 * ref))),
+      near: Math.max(0, Math.min(1, (ref - 0.1) / 0.35)),  // apparent hand size = distance proxy (1 = close)
     });
   }
   return { hands: out };
