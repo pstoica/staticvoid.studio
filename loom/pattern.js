@@ -925,15 +925,19 @@ class Group {
     if (typeof ratio === 'string' && ratio.includes(':')) { const [w, h] = ratio.split(':'); r = parseFloat(w) / parseFloat(h); }
     return this._push({ type: 'aspect', ratio: r });
   }
-  // silhouette(mode): mask this group by the PERSON in the webcam (MediaPipe selfie
+  // silhouette(mode, snap): mask this group by the PERSON in the webcam (MediaPipe selfie
   // segmentation — the first consumer of the MASKING.md model, ahead of named buses).
   // mode 1 (default) keeps the group INSIDE your body; -1 keeps everything EXCEPT you
   // (you become a hole in the layer); 0 = off. Patternable ("<1 -1>" flips per cycle).
+  // `snap` decides WHEN the mask is (re)captured: truthy on a frame → snapshot the pose,
+  // hold it until the next truthy frame. Default 1 = live follow; "<1 0 0 0>" freezes a
+  // pose once per 4 cycles; gate(1) stamps it on a MIDI hit; mouseDown on click — layer
+  // several groups with offset snap patterns for a trail of frozen body-echoes.
   // Soft edges come free (it's a confidence mask). Chain order matters and is the fun:
   // .silhouette().feedback(…) lets trails escape your body; .feedback().silhouette()
   // clips the whole fog to it. Lazy like the other trackers — using this verb is what
   // loads the segmentation model + camera.
-  silhouette(mode = 1) { _trackWant.seg = true; return this._push({ type: 'silhouette', mode }); }
+  silhouette(mode = 1, snap = 1) { _trackWant.seg = true; return this._push({ type: 'silhouette', mode, snap }); }
   query(s) {
     // normal groups render under their stable gid (live-FX diffing). echo() groups render
     // each compile's glyphs under a unique frozen generation id, so editing forks a new

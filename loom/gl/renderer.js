@@ -1339,7 +1339,7 @@ export class GLRenderer {
   // the final texture. feedback uses a separate persistent history pair (rt.h).
   _applyChain(rt, fx) {
     if (!fx || !fx.chain || !fx.chain.length) return rt.a.texture;
-    let read = rt.a, write = rt.b;
+    let read = rt.a, write = rt.b, silhIdx = -1;
     const swap = () => { const t = read; read = write; write = t; };
     const texel = (m) => m.uniforms.uTexel.value.set(1 / rt.w, 1 / rt.h);
     // Every effect has an "off" value for its main param so it can be patterned
@@ -1375,13 +1375,32 @@ export class GLRenderer {
         const m = this.fx.negative; m.uniforms.uAmount.value = amount;
         this._blit(m, read.texture, write); swap();
       } else if (t === 'silhouette') {
+        silhIdx++;
         const mode = this._num(e.mode, 1);
-        if (mode === 0 || !this.personTex) continue;   // off, or no mask yet (segmenter loading)
+        if (mode === 0) continue;                      // off
+        // snap: truthy this frame → capture the live mask into this entry's HELD copy
+        // (per group × per chain position, so layers can freeze different poses); the
+        // default constant 1 recaptures every frame = live follow.
+        const snap = this._num(e.snap == null ? 1 : e.snap, 1) > 0.5;
+        if (!rt.silh) rt.silh = {};
+        let held = rt.silh[silhIdx];
+        if (snap && this.personTex) {
+          const src = this.personTex.image;
+          if (!held || held.tex.image.width !== src.width || held.tex.image.height !== src.height) {
+            if (held) held.tex.dispose();
+            held = rt.silh[silhIdx] = { tex: new THREE.DataTexture(new Float32Array(src.data.length), src.width, src.height, THREE.RedFormat, THREE.FloatType) };
+            held.tex.minFilter = THREE.LinearFilter; held.tex.magFilter = THREE.LinearFilter;
+          }
+          held.tex.image.data.set(src.data);
+          held.tex.needsUpdate = true;
+          held.aspect = this.personAspect; held.flip = this.personFlip;
+        }
+        if (!held) continue;                           // nothing captured yet (loading / never snapped)
         const m = this.fx.silhouette;
-        m.uniforms.tMask.value = this.personTex;
+        m.uniforms.tMask.value = held.tex;
         m.uniforms.uMode.value = mode;
-        m.uniforms.uFlip.value = this.personFlip ? 1 : 0;
-        const At = this.personAspect || 1, Av = rt.w / rt.h;   // same contain fit as the signals
+        m.uniforms.uFlip.value = held.flip ? 1 : 0;
+        const At = held.aspect || 1, Av = rt.w / rt.h;  // same contain fit as the signals
         m.uniforms.uScale.value.set(At < Av ? At / Av : 1, At > Av ? Av / At : 1);
         this._blit(m, read.texture, write); swap();
       } else if (t === 'displace') {
@@ -1519,6 +1538,7 @@ export class GLRenderer {
     if (rt.hist) { rt.hist[0].dispose(); rt.hist[1].dispose(); rt.hist = null; }
     if (rt.mip) { rt.mip.dispose(); rt.mip = null; }
     if (rt.loop) { this._disposeRT(rt.loop); rt.loop = null; }
+    if (rt.silh) { for (const k in rt.silh) rt.silh[k].tex.dispose(); rt.silh = null; }
   }
   // lazily allocate the mipmapped scratch the pixelate pass averages over
   _ensureMip(rt) {
