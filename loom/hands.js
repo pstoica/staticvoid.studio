@@ -16,11 +16,13 @@ const MP_VERSION = '1.0.0';   // keep in lockstep with package.json @mediapipe/t
 const WASM_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`;
 const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
+const SEG_MODEL = 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite';
 
 let _mp = null, _mpLoading = null;          // the tasks-vision module + FilesetResolver result
 let _video = null, _videoLoading = null;    // shared webcam element (one stream for both models)
 let _hand = null, _handLoading = null;      // HandLandmarker
 let _pose = null, _poseLoading = null;      // PoseLandmarker
+let _seg = null, _segLoading = null;        // ImageSegmenter (person silhouette)
 let _failed = false;                        // any hard failure → stay silent forever after
 let _lastTs = -1;                           // detectForVideo timestamps must strictly increase
 let _flipX = true;                          // selfie mirror (default on: move right → drawing moves right)
@@ -75,9 +77,17 @@ export function ensureTracking(want) {
       }).then((p) => (_pose = p))
     ).catch((e) => _warn('pose unavailable (camera or model)', e));
   }
+  if (want.seg && !_seg && !_segLoading) {
+    _segLoading = Promise.all([ensureVision(), ensureCamera()]).then(([v]) =>
+      v.m.ImageSegmenter.createFromOptions(v.fileset, {
+        baseOptions: { modelAssetPath: SEG_MODEL, delegate: 'GPU' },
+        runningMode: 'VIDEO', outputConfidenceMasks: true, outputCategoryMask: false,
+      }).then((s) => (_seg = s))
+    ).catch((e) => _warn('segmentation unavailable (camera or model)', e));
+  }
 }
 
-export const trackingReady = () => !!(_video && (_hand || _pose));
+export const trackingReady = () => !!(_video && (_hand || _pose || _seg));
 export const trackingVideo = () => _video;                 // for the GL camera overlay
 export const trackingState = () => _state;                 // 'off' | 'starting' | 'live' | 'blocked'
 export function setTrackingFlip(v) { _flipX = !!v; }
@@ -147,6 +157,16 @@ export function trackTick(nowMs, cw, ch) {
   try {
     if (_hand) out.hands = processHands(_hand.detectForVideo(_video, ts), sx, sy);
     if (_pose) out.pose = processPose(_pose.detectForVideo(_video, ts), sx, sy);
+    if (_seg) {
+      // callback form: the MPMask is only valid inside — getAsFloat32Array copies it out.
+      // Selfie segmenter emits person confidence; some builds emit [background, person].
+      _seg.segmentForVideo(_video, ts, (res) => {
+        const cms = res.confidenceMasks;
+        const mk = cms && (cms.length > 1 ? cms[1] : cms[0]);
+        if (mk) out.mask = { data: mk.getAsFloat32Array(), w: mk.width, h: mk.height,
+                             vw: _video.videoWidth, vh: _video.videoHeight };
+      });
+    }
   } catch (e) { _warn('detection failed', e); return null; }
-  return (out.hands || out.pose) ? out : null;
+  return (out.hands || out.pose || out.mask) ? out : null;
 }

@@ -617,8 +617,8 @@ function shaken(id)   { return signal(() => _jval(id, 'shake', 0)); }
 // rule: `.x(fingerX(1))` per-glyph freezes at onset (a trail), live as FX/physics params.
 const _handState = { hands: [] };
 const _poseState = { seen: 0, x: [], y: [] };
-let _trackWant = { hands: false, pose: false, cam: false };
-function _resetTracking() { _trackWant = { hands: false, pose: false, cam: false }; }
+let _trackWant = { hands: false, pose: false, cam: false, seg: false };
+function _resetTracking() { _trackWant = { hands: false, pose: false, cam: false, seg: false }; }
 function _getTracking() { return _trackWant; }
 function _handInput(st) { _handState.hands = (st && st.hands) || []; }
 function _poseInput(st) { _poseState.seen = st && st.seen ? 1 : 0; _poseState.x = (st && st.x) || []; _poseState.y = (st && st.y) || []; }
@@ -925,6 +925,15 @@ class Group {
     if (typeof ratio === 'string' && ratio.includes(':')) { const [w, h] = ratio.split(':'); r = parseFloat(w) / parseFloat(h); }
     return this._push({ type: 'aspect', ratio: r });
   }
+  // silhouette(mode): mask this group by the PERSON in the webcam (MediaPipe selfie
+  // segmentation — the first consumer of the MASKING.md model, ahead of named buses).
+  // mode 1 (default) keeps the group INSIDE your body; -1 keeps everything EXCEPT you
+  // (you become a hole in the layer); 0 = off. Patternable ("<1 -1>" flips per cycle).
+  // Soft edges come free (it's a confidence mask). Chain order matters and is the fun:
+  // .silhouette().feedback(…) lets trails escape your body; .feedback().silhouette()
+  // clips the whole fog to it. Lazy like the other trackers — using this verb is what
+  // loads the segmentation model + camera.
+  silhouette(mode = 1) { _trackWant.seg = true; return this._push({ type: 'silhouette', mode }); }
   query(s) {
     // normal groups render under their stable gid (live-FX diffing). echo() groups render
     // each compile's glyphs under a unique frozen generation id, so editing forks a new

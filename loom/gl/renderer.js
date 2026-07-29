@@ -552,6 +552,30 @@ void main() {
   gl_FragColor = clamp(cur + hist * uFade * (1.0 - cur.a), 0.0, 1.0);
 }`;
 
+// person silhouette: multiply the layer by the webcam segmentation mask, sampled through
+// the same contain-fit + selfie-mirror mapping as the tracking signals, so the mask sits
+// exactly on the person in the cam() image. uMode > 0 keeps INSIDE the person, < 0 keeps
+// everything outside. Premultiplied in/out, so a plain multiply masks colour + alpha.
+const SILHOUETTE_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform sampler2D tMask;   // person confidence, video-frame space (row 0 = video top)
+uniform float uMode;       // >0 inside · <0 outside
+uniform float uFlip;       // selfie mirror
+uniform vec2 uScale;       // contain-fit squeeze (canvas → video)
+varying vec2 vUv;
+void main() {
+  vec4 c = texture2D(tMap, vUv);
+  vec2 p = vec2(vUv.x, 1.0 - vUv.y);                     // framebuffer → y-down screen space
+  vec2 v = vec2(0.5) + (p - 0.5) / max(uScale, vec2(1e-4));
+  float m = 0.0;
+  if (v.x > 0.0 && v.x < 1.0 && v.y > 0.0 && v.y < 1.0) {
+    if (uFlip > 0.5) v.x = 1.0 - v.x;
+    m = texture2D(tMask, v).r;
+  }
+  gl_FragColor = c * clamp(uMode > 0.0 ? m : 1.0 - m, 0.0, 1.0);
+}`;
+
 // colour grade: hue (turns), saturate (0..), contrast (1=id), brightness (1=id).
 // input/output premultiplied, so unpremultiply → grade → repremultiply.
 const GRADE_FRAG = `
@@ -922,6 +946,7 @@ export class GLRenderer {
       feedback: fsMat(FEEDBACK_FRAG, { tMap: { value: null }, tHist: { value: null }, uFade: { value: 0.92 }, uZoom: { value: 1 }, uRot: { value: 0 }, uAspect: { value: 1 } }),
       grade: fsMat(GRADE_FRAG, { tMap: { value: null }, uHue: { value: 0 }, uBright: { value: 1 }, uContrast: { value: 1 }, uSat: { value: 1 } }),
       negative: fsMat(NEGATIVE_FRAG, { tMap: { value: null }, uAmount: { value: 1 } }),
+      silhouette: fsMat(SILHOUETTE_FRAG, { tMap: { value: null }, tMask: { value: null }, uMode: { value: 1 }, uFlip: { value: 1 }, uScale: { value: new THREE.Vector2(1, 1) } }),
       displace: fsMat(DISPLACE_FRAG, { tMap: { value: null }, uAmount: { value: 0.02 }, uScale: { value: 3 }, uTime: { value: 0 } }),
       kaleido: fsMat(KALEIDO_FRAG, { tMap: { value: null }, uSlices: { value: 6 } }),
       mirror: fsMat(MIRROR_FRAG, { tMap: { value: null } }),
@@ -984,6 +1009,23 @@ export class GLRenderer {
   }
 
   setBackground(css) { try { this.bg.set(css); } catch { /* keep previous */ } }
+
+  // person segmentation mask (from hands.js): a single-channel float texture updated per
+  // frame. vw/vh = the VIDEO's dims (the mask's own dims can be model-sized), for the
+  // contain-fit mapping the silhouette pass shares with the tracking signals.
+  setPersonMask(mask, flipX) {
+    if (!mask || !mask.data) return;
+    if (!this.personTex || this.personTex.image.width !== mask.w || this.personTex.image.height !== mask.h) {
+      if (this.personTex) this.personTex.dispose();
+      this.personTex = new THREE.DataTexture(mask.data, mask.w, mask.h, THREE.RedFormat, THREE.FloatType);
+      this.personTex.minFilter = THREE.LinearFilter; this.personTex.magFilter = THREE.LinearFilter;
+    } else {
+      this.personTex.image.data = mask.data;
+    }
+    this.personTex.needsUpdate = true;
+    this.personAspect = (mask.vw && mask.vh) ? mask.vw / mask.vh : mask.w / mask.h;
+    this.personFlip = !!flipX;
+  }
 
   // point the camera quads at an <img>/<video> (the juggling feed), or null to turn it off. flipX
   // mirrors (selfie). opacity dims the sharp foreground. Called when the feed overlay is toggled.
@@ -1331,6 +1373,16 @@ export class GLRenderer {
         const amount = this._num(e.amount, 1);
         if (amount <= 0.0) continue;                   // off
         const m = this.fx.negative; m.uniforms.uAmount.value = amount;
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'silhouette') {
+        const mode = this._num(e.mode, 1);
+        if (mode === 0 || !this.personTex) continue;   // off, or no mask yet (segmenter loading)
+        const m = this.fx.silhouette;
+        m.uniforms.tMask.value = this.personTex;
+        m.uniforms.uMode.value = mode;
+        m.uniforms.uFlip.value = this.personFlip ? 1 : 0;
+        const At = this.personAspect || 1, Av = rt.w / rt.h;   // same contain fit as the signals
+        m.uniforms.uScale.value.set(At < Av ? At / Av : 1, At > Av ? Av / At : 1);
         this._blit(m, read.texture, write); swap();
       } else if (t === 'displace') {
         const amount = this._num(e.amount, 0.02);

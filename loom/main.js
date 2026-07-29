@@ -231,7 +231,7 @@ function run() {
     // hand/pose tracking: if the patch created any tracking signal, lazily load MediaPipe
     // + request the webcam (idempotent; a patch without them never touches the camera).
     const tw = DSL._getTracking();
-    if (tw.hands || tw.pose || tw.cam) {
+    if (tw.hands || tw.pose || tw.cam || tw.seg) {
       ensureTracking(tw);
       // if the camera is already known-blocked, say so on every run — otherwise the patch
       // just draws nothing (gates closed, signals 0) with no clue why.
@@ -980,7 +980,11 @@ function tick(dt) {
   DSL._midiFrame();    // snapshot this frame's MIDI note-ons for onNote() (one glyph per note)
   if (trackingReady()) {   // MediaPipe hand/pose detection (only once loaded; ~ms on GPU)
     const ts = trackTick(performance.now(), W, H);   // W/H → positions align with the contain-fit image
-    if (ts) { if (ts.hands) DSL._handInput(ts.hands); if (ts.pose) DSL._poseInput(ts.pose); }
+    if (ts) {
+      if (ts.hands) DSL._handInput(ts.hands);
+      if (ts.pose) DSL._poseInput(ts.pose);
+      if (ts.mask && glr) glr.setPersonMask(ts.mask, getTrackingFlip());
+    }
   }
   // surface camera/tracking state transitions (starting → live / blocked) so a blank
   // canvas is never a mystery — the gates read 0 until the camera actually sees you.

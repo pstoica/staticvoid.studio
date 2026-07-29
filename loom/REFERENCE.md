@@ -134,6 +134,7 @@ Effects **chain in call order**, each is a shader pass over the layer's texture:
 | `.slice(count, amount, "h"\|"v"\|"grid")` | bands, uv offset, mode | cut into bands and offset each (pattern `amount` to judder) |
 | `.lens(amount)` | + barrel / − pincushion | radial lens distortion about the centre |
 | `.opacity(alpha)` `.alpha(a)` | `0..1` (`1` = off) | fade the whole group as a unit (modulate to pulse) |
+| `.silhouette(mode?)` | `1` inside · `-1` outside · `0` off | mask the group by the **person in the webcam** (segmentation, soft edges): `1` = the group exists only inside your body, `-1` = you're a hole in it. Patternable (`"<1 -1>"`). Lazy — using it loads the model + camera. Chain order is the fun: `.silhouette().feedback(…)` lets trails escape your body; `.feedback().silhouette()` clips the fog to it |
 | `.scale(s)` | zoom factor (`1` = off) | scale the layer about centre (`s<1` shrinks, bg shows around) |
 | `.move(x, y)` | uv offset | translate the whole layer |
 | `.turn(t)` | turns | rotate the whole layer about centre |
