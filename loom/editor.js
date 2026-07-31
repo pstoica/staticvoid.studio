@@ -25,7 +25,7 @@ const METHOD = new Set(['fast', 'slow', 'rev', 'every', 'iter', 'palindrome', 'j
   'degrade', 'degradeBy', 'unDegradeBy', 'sometimes', 'sometimesBy', 'often', 'rarely', 'when', 'gate', 'early', 'late', 'burst',
   'range', 'add', 'sub', 'mul', 'div', 'color', 'size', 'x', 'y', 'radius', 'angle', 'grid', 'rotate',
   'rotateX', 'rotateY', 'spin', 'blend', 'alpha', 'opacity', 'pan', 'jitter', 'fill', 'stroke', 'weight',
-  'outline', 'shade', 'pixelate', 'blur', 'feedback', 'trails', 'silhouette', 'hue', 'brightness', 'contrast', 'saturate',
+  'outline', 'shade', 'pixelate', 'blur', 'glow', 'feedback', 'trails', 'silhouette', 'hue', 'brightness', 'contrast', 'saturate',
   'negative', 'invert', 'displace', 'kaleido', 'mirror', 'cap', 'join', 'open', 'vertex', 'attack', 'decay',
   'life', 'hold', 'id', 'set', 'spread', 'phase', 'rate', 'quantize', 'ease', 'segment', 'seg', 'sample', 'spring']);
 

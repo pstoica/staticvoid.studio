@@ -243,6 +243,11 @@ function run() {
     errBar.textContent = '';
     errBar.classList.remove('show');
     localStorage.setItem('loom.code', editor.getCode());
+    // reflect which preset this code IS in the list (boot restores the last patch without
+    // ever selecting it). Only update on an exact match — edited code keeps the previous
+    // highlight, so "save" still overwrites the preset you're working on.
+    const m = matchPreset(editor.getCode());
+    if (m) setActive(m);
     syncURL();
   } catch (e) {
     errBar.textContent = String(e.message || e);
@@ -1700,6 +1705,14 @@ function applyPreset(val) {
 const b64e = (s) => btoa(encodeURIComponent(s)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const b64d = (s) => decodeURIComponent(atob(s.replace(/-/g, '+').replace(/_/g, '/')));
 const builtinFor = (code) => Object.keys(PRESETS).find((n) => PRESETS[n].trim() === code.trim()) || null;
+// which preset row (builtin or saved) this exact code is, for the list highlight
+function matchPreset(code) {
+  const b = builtinFor(code);
+  if (b) return 'b:' + b;
+  const u = loadUser();
+  const un = Object.keys(u).find((n) => (u[n] || '').trim() === code.trim());
+  return un ? 'u:' + un : '';
+}
 function syncURL() {
   const name = builtinFor(editor.getCode());
   const qs = name ? 'p=' + encodeURIComponent(name) : 'c=' + b64e(editor.getCode());

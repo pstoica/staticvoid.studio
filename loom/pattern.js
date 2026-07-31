@@ -881,6 +881,12 @@ class Group {
   }
   pixelate(n) { this._fx.pixelate = n; return this._push({ type: 'pixelate', block: n }); }      // block size, px
   blur(n = 4) { return this._push({ type: 'blur', radius: n }); }                                  // gaussian radius, px
+  // glow(amount, reach): light BLEEDS from the layer's content — glyphs illuminate the
+  // space around them with their own colour (a mip-pyramid bloom: one cheap pass, the
+  // hardware pyramid does the spreading). amount = strength (0 = off); reach = how far
+  // the light carries (0 = tight halo, 1 = room-filling wash). Both patternable:
+  // .glow(hit("0").range(0.2, 1.4)) flashes the room on a beat.
+  glow(amount = 0.6, reach = 0.5) { return this._push({ type: 'glow', amount, reach }); }
   // feedback(fade, zoom, rot, loop?): trails/tunnel. The optional 4th arg EMBEDS effects
   // inside the loop — a builder fn whose chain runs on the HISTORY each frame before it's
   // composited and re-stored, so those effects COMPOUND as the image recirculates (hue

@@ -503,6 +503,36 @@ void main() {
   fragColor = textureLod(tMap, center, uLod);
 }`;
 
+// glow: radiant light-bleed from the layer's own content. Samples the mip pyramid of the
+// layer at several LODs and adds the (reach-weighted) sum back over the base — glyphs
+// light up the space around them in their own colour. reach shifts the energy toward the
+// far (blurrier/wider) mips: 0 = tight halo, 1 = room-filling wash. GLSL3 for textureLod.
+const GLOW_FRAG3 = `
+precision highp float;
+uniform sampler2D tMap;    // mipmapped copy of the layer
+uniform float uAmount;
+uniform float uReach;
+in vec2 vUv;
+out vec4 fragColor;
+void main() {
+  vec4 base = texture(tMap, vUv);
+  vec4 acc = vec4(0.0);
+  float wsum = 0.0;
+  float rc = clamp(uReach, 0.02, 0.98);
+  // deep lods carry the far light (each level only reaches ~one of ITS texels), but a
+  // small emitter's energy dilutes ~4x per level — pow(1.9, fi) claws most of that back
+  // so a lone glyph still fills the room. Normalising by the reach weights alone (not
+  // the boost) keeps small sources radiant; the exponential knee soft-clips instead of
+  // flat-clipping when a busy scene pushes the sum high.
+  for (int i = 1; i <= 10; i++) {
+    float fi = float(i);
+    acc += textureLod(tMap, vUv, fi) * pow(rc, fi * 0.6) * pow(1.9, fi);
+    wsum += pow(rc, fi * 0.6);
+  }
+  vec4 glow = vec4(1.0) - exp(-acc / max(wsum, 1e-4) * uAmount * 1.5);
+  fragColor = clamp(base + glow, 0.0, 1.0);
+}`;
+
 // separable gaussian blur (9 taps); run once horizontal, once vertical
 const BLUR_FRAG = `
 precision highp float;
@@ -952,6 +982,7 @@ export class GLRenderer {
       mirror: fsMat(MIRROR_FRAG, { tMap: { value: null } }),
       tile: fsMat(TILE_FRAG, { tMap: { value: null }, uRepeat: { value: V2() } }),
       dots: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: HALFTONE_FRAG3, uniforms: { tMap: { value: null }, uTexel: { value: V2() }, uCell: { value: 8 }, uLod: { value: 0 } }, depthTest: false, depthWrite: false }),
+      glow: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: GLOW_FRAG3, uniforms: { tMap: { value: null }, uAmount: { value: 0.6 }, uReach: { value: 0.5 } }, depthTest: false, depthWrite: false }),
       rgbshift: fsMat(RGBSHIFT_FRAG, { tMap: { value: null }, uOffset: { value: V2() } }),
       posterize: fsMat(POSTERIZE_FRAG, { tMap: { value: null }, uLevels: { value: 4 } }),
       scanlines: fsMat(SCANLINE_FRAG, { tMap: { value: null }, uAmount: { value: 0.5 }, uPeriod: { value: 3 } }),
@@ -1363,6 +1394,15 @@ export class GLRenderer {
         const m = this.fx.blur; texel(m); m.uniforms.uRadius.value = radius;
         m.uniforms.uDir.value.set(1, 0); this._blit(m, read.texture, write); swap();
         m.uniforms.uDir.value.set(0, 1); this._blit(m, read.texture, write); swap();
+      } else if (t === 'glow') {
+        const amount = this._num(e.amount, 0.6);
+        if (amount <= 0.0) continue;                   // off
+        this._ensureMip(rt);
+        this._blit(this.fx.copy, read.texture, rt.mip);
+        const m = this.fx.glow;
+        m.uniforms.uAmount.value = amount;
+        m.uniforms.uReach.value = this._num(e.reach, 0.5);
+        this._blit(m, rt.mip.texture, write); swap();
       } else if (t === 'grade') {
         const hue = this._num(e.hue, 0), bri = this._num(e.brightness, 1), con = this._num(e.contrast, 1), sat = this._num(e.saturate, 1);
         if (hue === 0 && bri === 1 && con === 1 && sat === 1) continue;   // identity → skip

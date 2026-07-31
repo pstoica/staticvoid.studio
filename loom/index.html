@@ -637,6 +637,7 @@
         <code>.dither(n) .scanlines(amt)</code><p>bayer dither · CRT lines</p>
         <code>.slice(n, amt, "grid")</code><p>cut into bands &amp; offset — oscillate <code>amt</code> for glitch (modes: h · v · grid)</p>
         <code>.lens(amt) .opacity(a)</code><p>barrel/pincushion · fade the whole group (modulate <code>a</code> to pulse)</p>
+        <code>.glow(amount, reach?)</code><p><em>light bleeds from the content</em> — glyphs illuminate the space around them in their own colour. reach 0 = tight halo, 1 = wide wash; both patternable (<code>.glow(hit("0").range(0.2, 1.4))</code> flashes on a beat)</p>
         <code>.silhouette(mode?, snap?)</code><p>mask the group by the <em>person in the webcam</em> (segmentation, soft edges): <code>1</code> = glyphs exist only inside your body, <code>-1</code> = you're a hole in the layer, <code>0</code> = off (patternable: <code>"&lt;1 -1&gt;"</code>). <code>snap</code> freezes poses: truthy = recapture, then it <em>holds</em> — default 1 follows live; <code>"&lt;1 0 0 0&gt;"</code> stamps a pose per 4 cycles, <code>gate(1)</code> on a MIDI hit. order matters: <code>.silhouette().feedback()</code> lets trails escape you; <code>.feedback().silhouette()</code> clips the fog to your body. lazy — loads the model + camera on first use</p>
         <code>.scale(s) .move(x, y) .turn(t)</code><p>compose the whole layer: zoom · translate · rotate</p>
         <code>.aspect(16/9) .aspect("9:16")</code><p>crop to an aspect ratio (letterbox; bg shows in the bars)</p>
