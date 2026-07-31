@@ -887,6 +887,19 @@ class Group {
   // the light carries (0 = tight halo, 1 = room-filling wash). Both patternable:
   // .glow(hit("0").range(0.2, 1.4)) flashes the room on a beat.
   glow(amount = 0.6, reach = 0.5) { return this._push({ type: 'glow', amount, reach }); }
+  // meshfill(amount, k): a live MESH GRADIENT under the glyphs — the empty canvas fills
+  // with a smooth colour field whose control points ARE up to k of the group's live
+  // glyphs (their positions, colours and fades). The background becomes a moving
+  // gradient that follows the composition; the glyphs stay crisp on top.
+  // amount = field opacity (0 = off); k ≤ 12 control points.
+  meshfill(amount = 0.5, k = 8) { return this._push({ type: 'meshfill', amount, k }); }
+  // radiance(amount, reach): 2D GLOBAL ILLUMINATION with real occlusion — glyphs LIGHT
+  // the space around them AND cast shadows: any glyph blocks light passing through it,
+  // so a dark glyph is a pure occluder (a wall) and a bright one is a lamp. Brute-force
+  // raymarch at quarter res — the honest tier of radiance cascades, same look, fewer
+  // smarts. amount = light strength (0 = off); reach = ray length (fraction of canvas).
+  // Heavier than glow — one group at a time is wise on laptops.
+  radiance(amount = 0.7, reach = 0.6) { return this._push({ type: 'radiance', amount, reach }); }
   // feedback(fade, zoom, rot, loop?): trails/tunnel. The optional 4th arg EMBEDS effects
   // inside the loop — a builder fn whose chain runs on the HISTORY each frame before it's
   // composited and re-stored, so those effects COMPOUND as the image recirculates (hue

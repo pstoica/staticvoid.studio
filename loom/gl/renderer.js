@@ -619,6 +619,65 @@ void main() {
   gl_FragColor = c * clamp(uMode > 0.0 ? m : 1.0 - m, 0.0, 1.0);
 }`;
 
+// meshfill: a live MESH GRADIENT whose control points are the group's own glyphs —
+// inverse-distance-weighted colour blend (Shepard) of up to 12 points, composited UNDER
+// the layer (it fills the empty space; the glyphs stay crisp on top).
+const MESHFILL_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform vec3 uPts[12];     // xy = position (uv), z = weight
+uniform vec3 uCols[12];    // rgb (unpremultiplied)
+uniform int uCount;
+uniform float uAmount;
+uniform float uAspect;
+varying vec2 vUv;
+void main() {
+  vec4 base = texture2D(tMap, vUv);
+  vec3 acc = vec3(0.0); float wsum = 0.0;
+  for (int i = 0; i < 12; i++) {
+    if (i >= uCount) break;
+    vec2 d = (vUv - uPts[i].xy) * vec2(uAspect, 1.0);
+    float w = uPts[i].z / (dot(d, d) + 0.004);
+    acc += uCols[i] * w; wsum += w;
+  }
+  vec3 field = wsum > 0.0 ? acc / wsum : vec3(0.0);
+  float fa = uAmount * (1.0 - base.a);                 // fill only where the layer is empty
+  gl_FragColor = clamp(vec4(base.rgb + field * fa, base.a + fa), 0.0, 1.0);
+}`;
+
+// radiance: brute-force 2D global illumination with OCCLUSION — for each (low-res) pixel,
+// march rays through the scene texture (rgb = emission, a = occupancy): emission is
+// gathered attenuated by the transmittance so far, so bright glyphs LIGHT the space and
+// any glyph (bright or dark) casts a real shadow behind itself. This is the honest
+// brute-force tier of radiance cascades — same inputs, same look, fewer smarts — run at
+// quarter res and composited through the same soft knee as glow.
+const RADIANCE_FRAG = `
+precision highp float;
+#define TAU 6.28318530718
+uniform sampler2D tMap;    // full-res scene: premultiplied emission + occupancy alpha
+uniform float uReach;      // max ray length, fraction of the canvas
+uniform float uAspect;
+varying vec2 vUv;
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+void main() {
+  vec3 acc = vec3(0.0);
+  float j = hash(vUv);                                  // per-pixel ray-set rotation (kills banding)
+  for (int d = 0; d < 24; d++) {
+    float ang = (float(d) + j) / 24.0 * TAU;
+    vec2 dir = vec2(cos(ang) / uAspect, sin(ang));
+    float T = 1.0;                                      // transmittance along the ray
+    for (int s = 0; s < 24; s++) {
+      float t = (float(s) + 0.5) / 24.0;
+      vec2 p = vUv + dir * (t * t) * uReach;            // quadratic spacing: dense near, sparse far
+      if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0) break;
+      vec4 smp = texture2D(tMap, p);
+      acc += smp.rgb * T;                               // gather emission through the transmittance
+      T *= 1.0 - clamp(smp.a, 0.0, 1.0) * 0.7;          // occupancy absorbs — the shadow
+    }
+  }
+  gl_FragColor = vec4(acc / 24.0 * 0.6, 1.0);           // artistic gain — the knee soft-clips busy scenes
+}`;
+
 // colour grade: hue (turns), saturate (0..), contrast (1=id), brightness (1=id).
 // input/output premultiplied, so unpremultiply → grade → repremultiply.
 const GRADE_FRAG = `
@@ -995,6 +1054,11 @@ export class GLRenderer {
       mirror: fsMat(MIRROR_FRAG, { tMap: { value: null } }),
       tile: fsMat(TILE_FRAG, { tMap: { value: null }, uRepeat: { value: V2() } }),
       dots: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: HALFTONE_FRAG3, uniforms: { tMap: { value: null }, uTexel: { value: V2() }, uCell: { value: 8 }, uLod: { value: 0 } }, depthTest: false, depthWrite: false }),
+      meshfill: fsMat(MESHFILL_FRAG, { tMap: { value: null },
+        uPts: { value: Array.from({ length: 12 }, () => new THREE.Vector3()) },
+        uCols: { value: Array.from({ length: 12 }, () => new THREE.Vector3()) },
+        uCount: { value: 0 }, uAmount: { value: 0.5 }, uAspect: { value: 1 } }),
+      radiance: fsMat(RADIANCE_FRAG, { tMap: { value: null }, uReach: { value: 0.6 }, uAspect: { value: 1 } }),
       glowDown: fsMat(GLOW_DOWN_FRAG, { tMap: { value: null }, uTexel: { value: V2() } }),
       glowUp: fsMat(GLOW_UP_FRAG, { tMap: { value: null }, tAdd: { value: null }, uTexel: { value: V2() }, uSpread: { value: 0.7 } }),
       glowMix: fsMat(GLOW_MIX_FRAG, { tMap: { value: null }, tBloom: { value: null }, uAmount: { value: 0.6 } }),
@@ -1177,6 +1241,7 @@ export class GLRenderer {
     for (const [gid, g] of groups) {
       const rt = this._getGroupRT(gid);
       this._drawGlyphs(g.parts, rt.a);
+      this._chainParts = g.parts;      // meshfill reads the group's live glyphs as control points
       const tex = this._applyChain(rt, g.fx);
       this._composite(tex, g.fx);
     }
@@ -1409,6 +1474,45 @@ export class GLRenderer {
         const m = this.fx.blur; texel(m); m.uniforms.uRadius.value = radius;
         m.uniforms.uDir.value.set(1, 0); this._blit(m, read.texture, write); swap();
         m.uniforms.uDir.value.set(0, 1); this._blit(m, read.texture, write); swap();
+      } else if (t === 'meshfill') {
+        const amount = this._num(e.amount, 0.5);
+        const parts = this._chainParts;
+        if (amount <= 0.0 || !parts || !parts.length || !this._resolve) continue;
+        const m = this.fx.meshfill;
+        const k = Math.max(1, Math.min(12, Math.round(this._num(e.k, 8))));
+        const stride = Math.max(1, Math.floor(parts.length / k));
+        const out = this._scratch;
+        let n = 0;
+        for (let i = 0; i < parts.length && n < k; i += stride) {
+          this._resolve(parts[i], this._minDim, out);
+          if (out.alpha <= 0.02) continue;
+          // glyph css position → this texture's uv (content row 0 = screen bottom)
+          m.uniforms.uPts.value[n].set(out.x / (this.W || 1), 1 - out.y / (this.H || 1), Math.max(0.05, out.alpha));
+          m.uniforms.uCols.value[n].set(out.rgb[0], out.rgb[1], out.rgb[2]);
+          n++;
+        }
+        if (!n) continue;
+        m.uniforms.uCount.value = n;
+        m.uniforms.uAmount.value = Math.min(1, amount);
+        m.uniforms.uAspect.value = rt.w / rt.h;
+        this._blit(m, read.texture, write); swap();
+      } else if (t === 'radiance') {
+        const amount = this._num(e.amount, 0.7);
+        if (amount <= 0.0) continue;                   // off
+        if (!rt.rad || rt.radW !== rt.w || rt.radH !== rt.h) {
+          if (rt.rad) rt.rad.dispose();
+          rt.rad = new THREE.WebGLRenderTarget(Math.max(8, rt.w >> 2), Math.max(8, rt.h >> 2),
+            { depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType });
+          rt.radW = rt.w; rt.radH = rt.h;
+        }
+        const m = this.fx.radiance;
+        m.uniforms.uReach.value = Math.max(0.05, Math.min(1, this._num(e.reach, 0.6)));
+        m.uniforms.uAspect.value = rt.w / rt.h;
+        this._blit(m, read.texture, rt.rad);           // gather the light field at quarter res
+        const cmb = this.fx.glowMix;                   // same soft-knee composite as glow
+        cmb.uniforms.uAmount.value = amount;
+        cmb.uniforms.tBloom.value = rt.rad.texture;
+        this._blit(cmb, read.texture, write); swap();
       } else if (t === 'glow') {
         const amount = this._num(e.amount, 0.6);
         if (amount <= 0.0) continue;                   // off
@@ -1631,6 +1735,7 @@ export class GLRenderer {
     if (rt.loop) { this._disposeRT(rt.loop); rt.loop = null; }
     if (rt.silh) { for (const k in rt.silh) rt.silh[k].tex.dispose(); rt.silh = null; }
     if (rt.glow) { for (const l of rt.glow) { l.down.dispose(); l.up.dispose(); } rt.glow = null; }
+    if (rt.rad) { rt.rad.dispose(); rt.rad = null; }
   }
   // lazily allocate the mipmapped scratch the pixelate pass averages over
   _ensureMip(rt) {

@@ -117,7 +117,9 @@ Effects **chain in call order**, each is a shader pass over the layer's texture:
 | --- | --- | --- |
 | `.pixelate(block)` | block size (px) | mosaic / blocky downscale |
 | `.blur(radius)` | radius (px) | gaussian blur → soft glow |
-| `.glow(amount, reach?)` | strength (`0` = off), reach `0..1` | **light bleeds from the content**: glyphs illuminate the space around them in their own colour (mip-pyramid bloom, one cheap pass). reach `0` = tight halo, `1` = wide wash. Patternable: `.glow(hit("0").range(0.2, 1.4))` flashes the room on a beat |
+| `.glow(amount, reach?)` | strength (`0` = off), reach `0..1` | **light bleeds from the content**: glyphs illuminate the space around them in their own colour (bloom pyramid). reach `0` = tight halo, `1` = wide wash. Patternable: `.glow(hit("0").range(0.2, 1.4))` flashes the room on a beat |
+| `.meshfill(amount, k?)` | field opacity (`0` = off), `k` ≤ 12 points | a live **mesh gradient under the glyphs**: the empty canvas fills with a smooth colour field whose control points ARE the group's glyphs (position + colour + fade) — the background becomes a moving gradient that follows the composition |
+| `.radiance(amount, reach?)` | light strength (`0` = off), ray length `0..1` | **2D global illumination with occlusion**: glyphs light the space AND cast real shadows — any glyph blocks light, so a dark glyph is a wall and a bright one is a lamp (quarter-res raymarch; heavier than `glow`, one group at a time is wise) |
 | `.feedback(fade, zoom, rot, loop?)` | fade `0..1`, zoom `~1`, rot turns, loop = `f => f.…` | trails / tunnel, composites over a warped copy of the previous frame. `loop` **embeds effects inside the feedback** (see below) |
 | `.trails(fade, loop?)` | fade `0..1` | feedback with no zoom / rotation |
 | `.hue(t)` | turns | rotate hue |
