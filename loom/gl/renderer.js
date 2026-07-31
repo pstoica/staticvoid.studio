@@ -503,34 +503,47 @@ void main() {
   fragColor = textureLod(tMap, center, uLod);
 }`;
 
-// glow: radiant light-bleed from the layer's own content. Samples the mip pyramid of the
-// layer at several LODs and adds the (reach-weighted) sum back over the base — glyphs
-// light up the space around them in their own colour. reach shifts the energy toward the
-// far (blurrier/wider) mips: 0 = tight halo, 1 = room-filling wash. GLSL3 for textureLod.
-const GLOW_FRAG3 = `
+// glow: radiant light-bleed from the layer's own content, via a DUAL-FILTER bloom
+// pyramid (Bjørge): progressively downsample the layer, then walk back up with a tent
+// filter, accumulating each level — smooth, round, gaussian-like halos with none of the
+// square mip artifacts. Three passes' worth of shaders:
+const GLOW_DOWN_FRAG = `
 precision highp float;
-uniform sampler2D tMap;    // mipmapped copy of the layer
-uniform float uAmount;
-uniform float uReach;
-in vec2 vUv;
-out vec4 fragColor;
+uniform sampler2D tMap;
+uniform vec2 uTexel;       // 1 / SOURCE size
+varying vec2 vUv;
 void main() {
-  vec4 base = texture(tMap, vUv);
-  vec4 acc = vec4(0.0);
-  float wsum = 0.0;
-  float rc = clamp(uReach, 0.02, 0.98);
-  // deep lods carry the far light (each level only reaches ~one of ITS texels), but a
-  // small emitter's energy dilutes ~4x per level — pow(1.9, fi) claws most of that back
-  // so a lone glyph still fills the room. Normalising by the reach weights alone (not
-  // the boost) keeps small sources radiant; the exponential knee soft-clips instead of
-  // flat-clipping when a busy scene pushes the sum high.
-  for (int i = 1; i <= 10; i++) {
-    float fi = float(i);
-    acc += textureLod(tMap, vUv, fi) * pow(rc, fi * 0.6) * pow(1.9, fi);
-    wsum += pow(rc, fi * 0.6);
-  }
-  vec4 glow = vec4(1.0) - exp(-acc / max(wsum, 1e-4) * uAmount * 1.5);
-  fragColor = clamp(base + glow, 0.0, 1.0);
+  vec2 o = uTexel;
+  vec4 c = texture2D(tMap, vUv) * 4.0
+         + texture2D(tMap, vUv + vec2(-o.x, -o.y)) + texture2D(tMap, vUv + vec2(o.x, -o.y))
+         + texture2D(tMap, vUv + vec2(-o.x,  o.y)) + texture2D(tMap, vUv + vec2(o.x,  o.y));
+  gl_FragColor = c / 8.0;
+}`;
+const GLOW_UP_FRAG = `
+precision highp float;
+uniform sampler2D tMap;    // the LOWER (smaller) level's accumulated glow
+uniform sampler2D tAdd;    // this level's downsampled layer
+uniform vec2 uTexel;       // 1 / lower level size
+uniform float uSpread;     // per-level carry (reach): how much light survives the climb
+varying vec2 vUv;
+void main() {
+  vec2 o = uTexel;
+  vec4 s = texture2D(tMap, vUv + vec2(-o.x * 2.0, 0.0)) + texture2D(tMap, vUv + vec2(o.x * 2.0, 0.0))
+         + texture2D(tMap, vUv + vec2(0.0, -o.y * 2.0)) + texture2D(tMap, vUv + vec2(0.0, o.y * 2.0))
+         + 2.0 * (texture2D(tMap, vUv + vec2(-o.x, -o.y)) + texture2D(tMap, vUv + vec2(o.x, -o.y))
+                + texture2D(tMap, vUv + vec2(-o.x,  o.y)) + texture2D(tMap, vUv + vec2(o.x,  o.y)));
+  gl_FragColor = texture2D(tAdd, vUv) + s / 12.0 * uSpread;
+}`;
+const GLOW_MIX_FRAG = `
+precision highp float;
+uniform sampler2D tMap;    // the layer itself
+uniform sampler2D tBloom;  // the accumulated pyramid
+uniform float uAmount;
+varying vec2 vUv;
+void main() {
+  vec4 base = texture2D(tMap, vUv);
+  vec4 g = vec4(1.0) - exp(-texture2D(tBloom, vUv) * uAmount);   // soft knee, never flat-clips
+  gl_FragColor = clamp(base + g, 0.0, 1.0);
 }`;
 
 // separable gaussian blur (9 taps); run once horizontal, once vertical
@@ -982,7 +995,9 @@ export class GLRenderer {
       mirror: fsMat(MIRROR_FRAG, { tMap: { value: null } }),
       tile: fsMat(TILE_FRAG, { tMap: { value: null }, uRepeat: { value: V2() } }),
       dots: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: HALFTONE_FRAG3, uniforms: { tMap: { value: null }, uTexel: { value: V2() }, uCell: { value: 8 }, uLod: { value: 0 } }, depthTest: false, depthWrite: false }),
-      glow: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: GLOW_FRAG3, uniforms: { tMap: { value: null }, uAmount: { value: 0.6 }, uReach: { value: 0.5 } }, depthTest: false, depthWrite: false }),
+      glowDown: fsMat(GLOW_DOWN_FRAG, { tMap: { value: null }, uTexel: { value: V2() } }),
+      glowUp: fsMat(GLOW_UP_FRAG, { tMap: { value: null }, tAdd: { value: null }, uTexel: { value: V2() }, uSpread: { value: 0.7 } }),
+      glowMix: fsMat(GLOW_MIX_FRAG, { tMap: { value: null }, tBloom: { value: null }, uAmount: { value: 0.6 } }),
       rgbshift: fsMat(RGBSHIFT_FRAG, { tMap: { value: null }, uOffset: { value: V2() } }),
       posterize: fsMat(POSTERIZE_FRAG, { tMap: { value: null }, uLevels: { value: 4 } }),
       scanlines: fsMat(SCANLINE_FRAG, { tMap: { value: null }, uAmount: { value: 0.5 }, uPeriod: { value: 3 } }),
@@ -1397,12 +1412,36 @@ export class GLRenderer {
       } else if (t === 'glow') {
         const amount = this._num(e.amount, 0.6);
         if (amount <= 0.0) continue;                   // off
-        this._ensureMip(rt);
-        this._blit(this.fx.copy, read.texture, rt.mip);
-        const m = this.fx.glow;
-        m.uniforms.uAmount.value = amount;
-        m.uniforms.uReach.value = this._num(e.reach, 0.5);
-        this._blit(m, rt.mip.texture, write); swap();
+        const reach = Math.max(0, Math.min(1, this._num(e.reach, 0.5)));
+        const pyr = this._ensureGlowPyr(rt);
+        if (!pyr.length) continue;
+        // down the pyramid: layer → half → quarter → … (each pass pre-filters 3×3-ish)
+        let srcTex = read.texture, sw = rt.w, sh = rt.h;
+        const dn = this.fx.glowDown;
+        for (const l of pyr) {
+          dn.uniforms.uTexel.value.set(1 / sw, 1 / sh);
+          this._blit(dn, srcTex, l.down);
+          srcTex = l.down.texture; sw = l.w; sh = l.h;
+        }
+        // back up, tent-filtering and accumulating: reach sets how much light survives
+        // each climb, i.e. how far a glyph's energy carries before it fades
+        const up = this.fx.glowUp;
+        up.uniforms.uSpread.value = 0.45 + reach * 0.5;
+        let lower = null;
+        for (let i = pyr.length - 1; i >= 0; i--) {
+          const l = pyr[i];
+          if (!lower) this._blit(this.fx.copy, l.down.texture, l.up);
+          else {
+            up.uniforms.uTexel.value.set(1 / lower.w, 1 / lower.h);
+            up.uniforms.tAdd.value = l.down.texture;
+            this._blit(up, lower.up.texture, l.up);
+          }
+          lower = l;
+        }
+        const cmb = this.fx.glowMix;
+        cmb.uniforms.uAmount.value = amount;
+        cmb.uniforms.tBloom.value = pyr[0].up.texture;
+        this._blit(cmb, read.texture, write); swap();
       } else if (t === 'grade') {
         const hue = this._num(e.hue, 0), bri = this._num(e.brightness, 1), con = this._num(e.contrast, 1), sat = this._num(e.saturate, 1);
         if (hue === 0 && bri === 1 && con === 1 && sat === 1) continue;   // identity → skip
@@ -1571,6 +1610,18 @@ export class GLRenderer {
     rt.loop = { a: new THREE.WebGLRenderTarget(rt.w, rt.h, opt), b: new THREE.WebGLRenderTarget(rt.w, rt.h, opt), w: rt.w, h: rt.h };
     return rt.loop;
   }
+  // lazily allocate the glow bloom pyramid: half-res half-float levels down to ~8px.
+  // Half-float so accumulated light doesn't quantize; Linear filtering does the tenting.
+  _ensureGlowPyr(rt) {
+    const dims = [];
+    let w = Math.max(1, rt.w >> 1), h = Math.max(1, rt.h >> 1);
+    while (dims.length < 8 && w >= 8 && h >= 8) { dims.push({ w, h }); w >>= 1; h >>= 1; }
+    if (rt.glow && rt.glow.length === dims.length && rt.glow[0] && rt.glow[0].w === dims[0].w && rt.glow[0].h === dims[0].h) return rt.glow;
+    if (rt.glow) for (const l of rt.glow) { l.down.dispose(); l.up.dispose(); }
+    const opt = { depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType };
+    rt.glow = dims.map((d) => ({ w: d.w, h: d.h, down: new THREE.WebGLRenderTarget(d.w, d.h, opt), up: new THREE.WebGLRenderTarget(d.w, d.h, opt) }));
+    return rt.glow;
+  }
   // dispose a group rt and everything lazily attached to it (history, mip, loop scratch —
   // recursive, since a loop scratch can itself grow a mip/history/loop).
   _disposeRT(rt) {
@@ -1579,6 +1630,7 @@ export class GLRenderer {
     if (rt.mip) { rt.mip.dispose(); rt.mip = null; }
     if (rt.loop) { this._disposeRT(rt.loop); rt.loop = null; }
     if (rt.silh) { for (const k in rt.silh) rt.silh[k].tex.dispose(); rt.silh = null; }
+    if (rt.glow) { for (const l of rt.glow) { l.down.dispose(); l.up.dispose(); } rt.glow = null; }
   }
   // lazily allocate the mipmapped scratch the pixelate pass averages over
   _ensureMip(rt) {
