@@ -630,16 +630,28 @@ uniform vec3 uCols[12];    // rgb (unpremultiplied)
 uniform int uCount;
 uniform float uAmount;
 uniform float uAspect;
+uniform float uWarp;       // noise distortion of the distance field (0 = off)
+uniform float uSharp;      // falloff exponent: ~1 = blobby wash, higher = hard colour regions
+uniform float uTime;       // drifts the warp
 varying vec2 vUv;
+float mhash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float mnoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mhash(i), mhash(i + vec2(1.0, 0.0)), u.x),
+             mix(mhash(i + vec2(0.0, 1.0)), mhash(i + vec2(1.0, 1.0)), u.x), u.y); }
 void main() {
   vec4 base = texture2D(tMap, vUv);
+  // warp: evaluate the field at a noise-displaced position — the colour boundaries
+  // wobble like a membrane, drifting slowly over time
+  vec2 q = vUv;
+  if (uWarp > 0.0) q += (vec2(mnoise(vUv * 3.0 + uTime * 0.06),
+                              mnoise(vUv * 3.0 + 17.3 - uTime * 0.05)) - 0.5) * uWarp;
   vec3 acc = vec3(0.0); float wsum = 0.0;
   for (int i = 0; i < 12; i++) {
     if (i >= uCount) break;
-    vec2 d = (vUv - uPts[i].xy) * vec2(uAspect, 1.0);
-    // ~1/d^3 falloff: inverse-square flattens to the mean colour with many points;
-    // a sharper power keeps distinct colour REGIONS around each glyph (the mesh look)
-    float w = uPts[i].z / pow(dot(d, d) + 0.0015, 1.5);
+    vec2 d = (q - uPts[i].xy) * vec2(uAspect, 1.0);
+    // falloff exponent on d^2: inverse-square (1.0) flattens to the mean colour with
+    // many points; sharper powers keep distinct colour REGIONS around each glyph
+    float w = uPts[i].z / pow(dot(d, d) + 0.0015, uSharp);
     acc += uCols[i] * w; wsum += w;
   }
   vec3 field = wsum > 0.0 ? acc / wsum : vec3(0.0);
@@ -1066,7 +1078,8 @@ export class GLRenderer {
       meshfill: fsMat(MESHFILL_FRAG, { tMap: { value: null },
         uPts: { value: Array.from({ length: 12 }, () => new THREE.Vector3()) },
         uCols: { value: Array.from({ length: 12 }, () => new THREE.Vector3()) },
-        uCount: { value: 0 }, uAmount: { value: 0.5 }, uAspect: { value: 1 } }),
+        uCount: { value: 0 }, uAmount: { value: 0.5 }, uAspect: { value: 1 },
+        uWarp: { value: 0 }, uSharp: { value: 1.5 }, uTime: { value: 0 } }),
       radiance: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: RADIANCE_FRAG3,
         uniforms: { tMap: { value: null }, uReach: { value: 0.6 }, uAspect: { value: 1 }, uSceneH: { value: 1 } }, depthTest: false, depthWrite: false }),
       glowDown: fsMat(GLOW_DOWN_FRAG, { tMap: { value: null }, uTexel: { value: V2() } }),
@@ -1505,6 +1518,9 @@ export class GLRenderer {
         m.uniforms.uCount.value = n;
         m.uniforms.uAmount.value = Math.min(1, amount);
         m.uniforms.uAspect.value = rt.w / rt.h;
+        m.uniforms.uWarp.value = Math.max(0, this._num(e.warp, 0));
+        m.uniforms.uSharp.value = Math.max(0.5, Math.min(4, this._num(e.sharp, 1.5)));
+        m.uniforms.uTime.value = this._elapsed;
         this._blit(m, read.texture, write); swap();
       } else if (t === 'radiance') {
         const amount = this._num(e.amount, 0.7);

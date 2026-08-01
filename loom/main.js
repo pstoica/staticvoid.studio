@@ -1369,7 +1369,7 @@ stack(
     .y(osc(0.07, "perlin").spread(5).range(0.1, 0.9))
     .color(palette("sunset").at(saw.range(0, 1)))
     .size(0.02).decay(4)
-).meshfill(0.8, 7).glow(0.35, 0.3)`,
+).meshfill(0.8, 7, slider(0.2, 0, 0.5), slider(1.5, 0.75, 3)).glow(0.35, 0.3)`,
 
   // a five-turn spiral of dots over a slow pulsing ring (angle winds the ring)
   'spiral': `stack(

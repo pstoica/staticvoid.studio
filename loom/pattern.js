@@ -887,12 +887,15 @@ class Group {
   // the light carries (0 = tight halo, 1 = room-filling wash). Both patternable:
   // .glow(hit("0").range(0.2, 1.4)) flashes the room on a beat.
   glow(amount = 0.6, reach = 0.5) { return this._push({ type: 'glow', amount, reach }); }
-  // meshfill(amount, k): a live MESH GRADIENT under the glyphs — the empty canvas fills
-  // with a smooth colour field whose control points ARE up to k of the group's live
-  // glyphs (their positions, colours and fades). The background becomes a moving
-  // gradient that follows the composition; the glyphs stay crisp on top.
-  // amount = field opacity (0 = off); k ≤ 12 control points.
-  meshfill(amount = 0.5, k = 8) { return this._push({ type: 'meshfill', amount, k }); }
+  // meshfill(amount, k, warp, sharp): a live MESH GRADIENT under the glyphs — the empty
+  // canvas fills with a smooth colour field whose control points ARE up to k of the
+  // group's live glyphs (their positions, colours and fades — the renderer reads the
+  // OBJECTS, not the pixels). The background becomes a moving gradient that follows the
+  // composition; the glyphs stay crisp on top. amount = field opacity (0 = off);
+  // k ≤ 12 control points; warp = noise-wobble of the colour boundaries (the drifting
+  // membrane look, try 0.1..0.4); sharp = falloff exponent (1 = soft blobby wash,
+  // 1.5 default, 3 = hard-edged colour cells). All patternable per frame.
+  meshfill(amount = 0.5, k = 8, warp = 0, sharp = 1.5) { return this._push({ type: 'meshfill', amount, k, warp, sharp }); }
   // radiance(amount, reach): 2D GLOBAL ILLUMINATION with real occlusion — glyphs LIGHT
   // the space around them AND cast shadows: any glyph blocks light passing through it,
   // so a dark glyph is a pure occluder (a wall) and a bright one is a lamp. CONE-TRACED
