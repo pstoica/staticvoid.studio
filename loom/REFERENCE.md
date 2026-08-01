@@ -168,6 +168,32 @@ and off (the pass is skipped, not run as identity): `pixelate(≤1)`, `blur(0)`,
 at its identity (`hue 0`, the rest `1`). So `kaleido("<6 0>")` folds every other
 cycle, `mirror("1 0")` flips on and off, `blur(saw.range(0, 12))` swells in.
 
+**Invisible control points (a field behind a different scene).** `meshfill` reads the
+**objects** of its own group — never other groups' — and weighs each control point by its
+**envelope** (lifetime presence), *not* its display alpha. So `.alpha(0.01)` makes a glyph
+invisible while it still steers the field at full strength: put near-invisible control
+dots + `meshfill` in one group (the backdrop), and the scene you actually want to see in
+its own layer on top:
+
+```js
+stack(
+  group(                                       // the FIELD layer: invisible steering dots
+    bg("#050408"),
+    shape("dot*6")
+      .x(osc(0.05, "perlin").spread(3).range(0.1, 0.9))
+      .y(osc(0.07, "perlin").spread(5).range(0.1, 0.9))
+      .color(palette("sunset").at(saw.range(0, 1)))
+      .alpha(0.01).size(0.01).decay(3)         // ≈ invisible; the field reads them anyway
+  ).meshfill(0.85, 6, 0.2),
+  shape("ring*5").radius(saw.range(0.08, 0.42))   // the visible scene, untouched, on top
+    .color("#fff").weight(0.004).decay(1.5)
+)
+```
+
+Swap the dots' `x`/`y` for `fingerX(f)`/`fingerY(f)` (a gradient stretched between your
+fingertips) or `ballX("a")`/`ballY("b")`… (juggling balls as the gradient's anchors) — any
+signal works, because the control points are ordinary glyphs.
+
 **Embedded effects inside feedback.** `feedback`'s optional last arg is a builder
 whose chain runs **on the history each frame, inside the loop** — so those effects
 **compound** as the image recirculates (hue keeps rotating, blur keeps diffusing,

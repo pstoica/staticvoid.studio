@@ -889,8 +889,10 @@ class Group {
   glow(amount = 0.6, reach = 0.5) { return this._push({ type: 'glow', amount, reach }); }
   // meshfill(amount, k, warp, sharp): a live MESH GRADIENT under the glyphs — the empty
   // canvas fills with a smooth colour field whose control points ARE up to k of the
-  // group's live glyphs (their positions, colours and fades — the renderer reads the
-  // OBJECTS, not the pixels). The background becomes a moving gradient that follows the
+  // group's live glyphs (their positions, colours and ENVELOPES — the renderer reads the
+  // OBJECTS, not the pixels, and weight comes from the envelope rather than alpha, so
+  // .alpha(0.01) control dots are invisible yet steer the field at full strength — see
+  // REFERENCE "Invisible control points"). The background becomes a moving gradient that follows the
   // composition; the glyphs stay crisp on top. amount = field opacity (0 = off);
   // k ≤ 12 control points; warp = noise-wobble of the colour boundaries (the drifting
   // membrane look, try 0.1..0.4); sharp = falloff exponent (1 = soft blobby wash,

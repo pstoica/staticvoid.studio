@@ -1507,10 +1507,15 @@ export class GLRenderer {
         const out = this._scratch;
         let n = 0;
         for (let i = 0; i < parts.length && n < k; i += stride) {
-          this._resolve(parts[i], this._minDim, out);
-          if (out.alpha <= 0.02) continue;
+          const p = parts[i];
+          this._resolve(p, this._minDim, out);
+          // weight by the ENVELOPE (lifetime presence), not display alpha — so invisible
+          // control points (.alpha(0.01)) still steer the field at full strength, and
+          // dying glyphs release their pull smoothly as they fade
+          const w = p._env != null ? p._env : out.alpha;
+          if (w <= 0.02) continue;
           // glyph css position → this texture's uv (content row 0 = screen bottom)
-          m.uniforms.uPts.value[n].set(out.x / (this.W || 1), 1 - out.y / (this.H || 1), Math.max(0.05, out.alpha));
+          m.uniforms.uPts.value[n].set(out.x / (this.W || 1), 1 - out.y / (this.H || 1), Math.max(0.05, w));
           m.uniforms.uCols.value[n].set(out.rgb[0], out.rgb[1], out.rgb[2]);
           n++;
         }
