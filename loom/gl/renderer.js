@@ -469,6 +469,36 @@ void main(){
 // A single big triangle covering the screen; `vUv` is 0..1. Each FX is a fragment
 // shader sampling the previous pass's texture (tMap). Passes ping-pong between two
 // render targets per group, then a final composite blits the result to the screen.
+// ── emoji sprites: instanced textured quads (billboard + Z spin, pixel-space) ────
+const SPRITE_VERT = `
+precision highp float;
+uniform vec2 uResolution;
+attribute vec3 position;   // quad corner in -1..1
+attribute vec2 sPos;       // centre, css px
+attribute float sRadius;   // half-size, px
+attribute float sRot;      // z rotation, radians
+attribute vec4 sTint;      // rgb tint (white = natural) + alpha
+varying vec2 vUv;
+varying vec4 vTint;
+void main() {
+  vUv = vec2(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5);   // y-down screen ↔ flipY texture
+  vTint = sTint;
+  float c = cos(sRot), s = sin(sRot);
+  vec2 l = vec2(position.x * c - position.y * s, position.x * s + position.y * c) * sRadius;
+  vec2 P = sPos + l;
+  gl_Position = vec4(2.0 * P.x / uResolution.x - 1.0, 1.0 - 2.0 * P.y / uResolution.y, 0.0, 1.0);
+}`;
+const SPRITE_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+varying vec2 vUv;
+varying vec4 vTint;
+void main() {
+  vec4 t = texture2D(tMap, vUv);
+  float a = t.a * vTint.a;
+  gl_FragColor = vec4(t.rgb * vTint.rgb * a, a);   // premultiplied out
+}`;
+
 const FS_VERT = `
 precision highp float;
 attribute vec3 position;        // clip-space corner (z unused; 3-comp avoids NaN bounds)
@@ -625,8 +655,8 @@ void main() {
 const MESHFILL_FRAG = `
 precision highp float;
 uniform sampler2D tMap;
-uniform vec3 uPts[12];     // xy = position (uv), z = weight
-uniform vec3 uCols[12];    // rgb (unpremultiplied)
+uniform vec3 uPts[32];     // xy = position (uv), z = weight
+uniform vec3 uCols[32];    // rgb (unpremultiplied)
 uniform int uCount;
 uniform float uAmount;
 uniform float uAspect;
@@ -646,12 +676,16 @@ void main() {
   if (uWarp > 0.0) q += (vec2(mnoise(vUv * 3.0 + uTime * 0.06),
                               mnoise(vUv * 3.0 + 17.3 - uTime * 0.05)) - 0.5) * uWarp;
   vec3 acc = vec3(0.0); float wsum = 0.0;
-  for (int i = 0; i < 12; i++) {
+  for (int i = 0; i < 32; i++) {
     if (i >= uCount) break;
     vec2 d = (q - uPts[i].xy) * vec2(uAspect, 1.0);
     // falloff exponent on d^2: inverse-square (1.0) flattens to the mean colour with
-    // many points; sharper powers keep distinct colour REGIONS around each glyph
-    float w = uPts[i].z / pow(dot(d, d) + 0.0015, uSharp);
+    // many points; sharper powers keep distinct colour REGIONS around each glyph.
+    // The weight enters CUBED: full-strength points are unchanged, but a fading point's
+    // pull collapses steeply in place — near its own centre the 1/d^3 singularity would
+    // otherwise let it dominate right up until it's culled, popping the field on death.
+    float z = uPts[i].z;
+    float w = (z * z * z) / pow(dot(d, d) + 0.0015, uSharp);
     acc += uCols[i] * w; wsum += w;
   }
   vec3 field = wsum > 0.0 ? acc / wsum : vec3(0.0);
@@ -1076,8 +1110,8 @@ export class GLRenderer {
       tile: fsMat(TILE_FRAG, { tMap: { value: null }, uRepeat: { value: V2() } }),
       dots: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: HALFTONE_FRAG3, uniforms: { tMap: { value: null }, uTexel: { value: V2() }, uCell: { value: 8 }, uLod: { value: 0 } }, depthTest: false, depthWrite: false }),
       meshfill: fsMat(MESHFILL_FRAG, { tMap: { value: null },
-        uPts: { value: Array.from({ length: 12 }, () => new THREE.Vector3()) },
-        uCols: { value: Array.from({ length: 12 }, () => new THREE.Vector3()) },
+        uPts: { value: Array.from({ length: 32 }, () => new THREE.Vector3()) },
+        uCols: { value: Array.from({ length: 32 }, () => new THREE.Vector3()) },
         uCount: { value: 0 }, uAmount: { value: 0.5 }, uAspect: { value: 1 },
         uWarp: { value: 0 }, uSharp: { value: 1.5 }, uTime: { value: 0 } }),
       radiance: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: RADIANCE_FRAG3,
@@ -1286,7 +1320,7 @@ export class GLRenderer {
         const p = parts[i];
         if (blendKey(p.blend) !== key) continue;
         resolve(p, minDim, out);
-        if (out.shape >= 15) continue;          // imported meshes draw in _drawMeshes
+        if ((out.shape >= 15 && out.shape < 20) || out.shape >= 100) continue;   // meshes → _drawMeshes, sprites → _drawSprites
         const a = this.arrays;
         a.iPos[count * 2] = out.x; a.iPos[count * 2 + 1] = out.y;
         a.iRadius[count] = out.r;
@@ -1315,6 +1349,80 @@ export class GLRenderer {
       r.render(this.scene, this.camera);
     }
     this._drawMeshes(parts, target);
+    this._drawSprites(parts, target);
+    r.setRenderTarget(null);
+  }
+
+  // ── emoji sprites (ids ≥ 100): one rasterized texture per character, drawn as
+  // instanced textured quads. Rig built lazily on first use.
+  ensureSprite(id, str) {
+    if (!this.sprites) this.sprites = {};
+    if (this.sprites[id]) return;
+    const S = 128, c = document.createElement('canvas');
+    c.width = c.height = S;
+    const x = c.getContext('2d');
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = Math.round(S * 0.8) + 'px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+    x.fillText(str, S / 2, S / 2 + S * 0.04);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter;
+    this.sprites[id] = { tex };
+    this._ensureSpriteRig();
+  }
+  _ensureSpriteRig() {
+    if (this.spriteMesh) return;
+    const SPR_CAP = 4096;
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, 1, 0, -1, 1, 0]), 3));
+    this.sprArrays = { sPos: new Float32Array(SPR_CAP * 2), sRadius: new Float32Array(SPR_CAP), sRot: new Float32Array(SPR_CAP), sTint: new Float32Array(SPR_CAP * 4) };
+    geo.setAttribute('sPos', new THREE.InstancedBufferAttribute(this.sprArrays.sPos, 2));
+    geo.setAttribute('sRadius', new THREE.InstancedBufferAttribute(this.sprArrays.sRadius, 1));
+    geo.setAttribute('sRot', new THREE.InstancedBufferAttribute(this.sprArrays.sRot, 1));
+    geo.setAttribute('sTint', new THREE.InstancedBufferAttribute(this.sprArrays.sTint, 4));
+    const mat = new THREE.RawShaderMaterial({
+      vertexShader: SPRITE_VERT, fragmentShader: SPRITE_FRAG,
+      uniforms: { uResolution: this.uniforms.uResolution, tMap: { value: null } },
+      transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+    });
+    mat.blending = THREE.CustomBlending; mat.blendEquation = THREE.AddEquation;
+    mat.blendSrc = THREE.OneFactor; mat.blendDst = THREE.OneMinusSrcAlphaFactor;
+    this.spriteScene = new THREE.Scene();
+    this.spriteMesh = new THREE.Mesh(geo, mat);
+    this.spriteMesh.frustumCulled = false;
+    this.spriteScene.add(this.spriteMesh);
+    this._sprCap = SPR_CAP;
+  }
+  _drawSprites(parts, target) {
+    if (!this.spriteMesh || !this.sprites) return;
+    const buckets = new Map();                     // sprite id → particles
+    for (const p of parts) {
+      if (!p.sprite) continue;
+      let b = buckets.get(p.sprite); if (!b) buckets.set(p.sprite, b = []);
+      b.push(p);
+    }
+    if (!buckets.size) return;
+    const r = this.renderer, out = this._scratch, minDim = this._minDim, resolve = this._resolve;
+    const A = this.sprArrays, geo = this.spriteMesh.geometry, mat = this.spriteMesh.material;
+    r.setRenderTarget(target || null);
+    for (const [id, list] of buckets) {
+      const spr = this.sprites[id]; if (!spr) continue;
+      let n = 0;
+      for (const p of list) {
+        if (n >= this._sprCap) break;
+        resolve(p, minDim, out);
+        if (out.alpha <= 0.003) continue;
+        A.sPos[n * 2] = out.x; A.sPos[n * 2 + 1] = out.y;
+        A.sRadius[n] = out.r; A.sRot[n] = out.rot;
+        A.sTint[n * 4] = out.rgb[0]; A.sTint[n * 4 + 1] = out.rgb[1]; A.sTint[n * 4 + 2] = out.rgb[2]; A.sTint[n * 4 + 3] = out.alpha;
+        n++;
+      }
+      if (!n) continue;
+      for (const name of ['sPos', 'sRadius', 'sRot', 'sTint']) geo.getAttribute(name).needsUpdate = true;
+      geo.instanceCount = n;
+      mat.uniforms.tMap.value = spr.tex;
+      r.render(this.spriteScene, this.camera);
+    }
     r.setRenderTarget(null);
   }
 
@@ -1407,7 +1515,7 @@ export class GLRenderer {
       const part = parts[i];
       resolve(part, minDim, out);
       const entry = this.meshObjs[out.shape];
-      if (!entry) { if (out.shape >= 15) this._ensureMesh(out.shape); continue; }  // lazy-load on first use
+      if (!entry) { if (out.shape >= 15 && out.shape < 20) this._ensureMesh(out.shape); continue; }  // lazy-load on first use (15..19 = models)
       this._euler.set(out.rotX, out.rotY, out.rot, 'XYZ');
       this._m4.makeRotationFromEuler(this._euler);
       this._m4.scale(this._v3.set(out.r, out.r, out.r));
@@ -1502,20 +1610,31 @@ export class GLRenderer {
         const parts = this._chainParts;
         if (amount <= 0.0 || !parts || !parts.length || !this._resolve) continue;
         const m = this.fx.meshfill;
-        const k = Math.max(1, Math.min(12, Math.round(this._num(e.k, 8))));
-        const stride = Math.max(1, Math.floor(parts.length / k));
+        const k = Math.max(1, Math.min(32, Math.round(this._num(e.k, 8))));
         const out = this._scratch;
+        // STABLE selection: keep the same particles as control points for as long as they
+        // live (a churn-proof roster on the rt), refill vacancies oldest-first, and ramp
+        // each new arrival in over ~half a second. Departures already fade via their
+        // envelope, so the field never pops when the population turns over.
+        if (!rt.meshSel) rt.meshSel = [];
+        const sel = rt.meshSel;
+        const alive = new Set(parts);
+        for (let i = sel.length - 1; i >= 0; i--) if (!alive.has(sel[i].p)) sel.splice(i, 1);
+        if (sel.length > k) sel.length = k;
+        if (sel.length < k) {
+          const chosen = new Set(sel.map((s) => s.p));
+          for (let i = 0; i < parts.length && sel.length < k; i++)
+            if (!chosen.has(parts[i])) sel.push({ p: parts[i], born: this._elapsed });
+        }
         let n = 0;
-        for (let i = 0; i < parts.length && n < k; i += stride) {
-          const p = parts[i];
-          this._resolve(p, this._minDim, out);
-          // weight by the ENVELOPE (lifetime presence), not display alpha — so invisible
-          // control points (.alpha(0.01)) still steer the field at full strength, and
-          // dying glyphs release their pull smoothly as they fade
-          const w = p._env != null ? p._env : out.alpha;
-          if (w <= 0.02) continue;
+        for (const s of sel) {
+          this._resolve(s.p, this._minDim, out);
+          // weight = ENVELOPE (lifetime presence, not display alpha — invisible .alpha(0.01)
+          // control points steer at full strength) × the arrival ramp
+          const w = (s.p._env != null ? s.p._env : out.alpha) * Math.min(1, (this._elapsed - s.born) * 2);
+          if (w <= 0.002) continue;
           // glyph css position → this texture's uv (content row 0 = screen bottom)
-          m.uniforms.uPts.value[n].set(out.x / (this.W || 1), 1 - out.y / (this.H || 1), Math.max(0.05, w));
+          m.uniforms.uPts.value[n].set(out.x / (this.W || 1), 1 - out.y / (this.H || 1), w);
           m.uniforms.uCols.value[n].set(out.rgb[0], out.rgb[1], out.rgb[2]);
           n++;
         }
@@ -1770,6 +1889,7 @@ export class GLRenderer {
     if (rt.silh) { for (const k in rt.silh) rt.silh[k].tex.dispose(); rt.silh = null; }
     if (rt.glow) { for (const l of rt.glow) { l.down.dispose(); l.up.dispose(); } rt.glow = null; }
     if (rt.rad) { rt.rad.dispose(); rt.rad = null; }
+    rt.meshSel = null;
   }
   // lazily allocate the mipmapped scratch the pixelate pass averages over
   _ensureMip(rt) {

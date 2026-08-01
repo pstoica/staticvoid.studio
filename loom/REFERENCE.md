@@ -61,6 +61,12 @@ read as 3D (like a p5 `sphere`); `.shade(0)` flattens to an unlit silhouette,
 `.shade(1)` deepens the shading (no gloss). **`.fill(0).stroke().weight(w)`** draws
 them as a wireframe — edges for `cube`/`octa`, the grazing silhouette for `sphere`/`torus`.
 
+**Emoji are shapes**: `shape("🌸 🦋 ✨")` just works — any emoji becomes a textured
+glyph (rasterized once, drawn instanced), in its **natural colours** by default; an
+explicit `.color(...)` tints it. They spin, spawn, decay, hold, join `physics()` (round
+colliders), feed `meshfill`, and pattern like any shape: `shape("🌸*8")`,
+`shape("<🌸 🦋>")`. (`rotateX`/`rotateY` tilt doesn't apply — emoji are billboards.)
+
 **Imported meshes** (real FBX geometry from `models/`, instanced + depth-tested):
 `bong` · `knot` · `amongus` (alias `sus`) · `balloons` (alias `balloon`) · `chain`.
 Same controls as the 3D shapes — `size`, the rotations, `color`, and `.shade()`
@@ -118,7 +124,7 @@ Effects **chain in call order**, each is a shader pass over the layer's texture:
 | `.pixelate(block)` | block size (px) | mosaic / blocky downscale |
 | `.blur(radius)` | radius (px) | gaussian blur → soft glow |
 | `.glow(amount, reach?)` | strength (`0` = off), reach `0..1` | **light bleeds from the content**: glyphs illuminate the space around them in their own colour (bloom pyramid). reach `0` = tight halo, `1` = wide wash. Patternable: `.glow(hit("0").range(0.2, 1.4))` flashes the room on a beat |
-| `.meshfill(amount, k?, warp?, sharp?)` | field opacity (`0` = off), `k` ≤ 12 points, warp `0..~0.5`, sharp `0.5..4` | a live **mesh gradient under the glyphs**: the empty canvas fills with a smooth colour field whose control points ARE the group's glyphs (position + colour + fade — it reads the *objects*, not the pixels) — the background becomes a moving gradient that follows the composition. `warp` noise-wobbles the colour boundaries (a drifting membrane); `sharp` sets the falloff (1 = blobby wash, 3 = hard colour cells). All patternable |
+| `.meshfill(amount, k?, warp?, sharp?)` | field opacity (`0` = off), `k` ≤ 32 points, warp `0..~0.5`, sharp `0.5..4` | a live **mesh gradient under the glyphs**: the empty canvas fills with a smooth colour field whose control points ARE the group's glyphs (position + colour + fade — it reads the *objects*, not the pixels) — the background becomes a moving gradient that follows the composition. `warp` noise-wobbles the colour boundaries (a drifting membrane); `sharp` sets the falloff (1 = blobby wash, 3 = hard colour cells). All patternable |
 | `.radiance(amount, reach?)` | light strength (`0` = off), ray length `0..1` | **2D global illumination with occlusion**: glyphs light the space AND cast real shadows — any glyph blocks light, so a dark glyph is a wall and a bright one is a lamp (cone-traced against the mip pyramid at quarter res: flat cost at any reach, soft penumbras) |
 | `.feedback(fade, zoom, rot, loop?)` | fade `0..1`, zoom `~1`, rot turns, loop = `f => f.…` | trails / tunnel, composites over a warped copy of the previous frame. `loop` **embeds effects inside the feedback** (see below) |
 | `.trails(fade, loop?)` | fade `0..1` | feedback with no zoom / rotation |

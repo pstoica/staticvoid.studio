@@ -893,8 +893,10 @@ class Group {
   // OBJECTS, not the pixels, and weight comes from the envelope rather than alpha, so
   // .alpha(0.01) control dots are invisible yet steer the field at full strength — see
   // REFERENCE "Invisible control points"). The background becomes a moving gradient that follows the
-  // composition; the glyphs stay crisp on top. amount = field opacity (0 = off);
-  // k ≤ 12 control points; warp = noise-wobble of the colour boundaries (the drifting
+  // composition; the glyphs stay crisp on top. Selection is churn-proof: the same
+  // glyphs stay control points for life, arrivals ramp in, departures fade out with
+  // their envelope. amount = field opacity (0 = off);
+  // k ≤ 32 control points; warp = noise-wobble of the colour boundaries (the drifting
   // membrane look, try 0.1..0.4); sharp = falloff exponent (1 = soft blobby wash,
   // 1.5 default, 3 = hard-edged colour cells). All patternable per frame.
   meshfill(amount = 0.5, k = 8, warp = 0, sharp = 1.5) { return this._push({ type: 'meshfill', amount, k, warp, sharp }); }

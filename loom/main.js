@@ -346,7 +346,7 @@ function spawn(value, onset) {
     // 3D shading amount. 3D primitives (cube/sphere/torus/octa, id 11–14) default
     // to a matte shaded look so they read as 3D (like a p5 sphere); 2D shapes stay
     // flat (0). Override either way with .shade(n).
-    shade: sprInit.shade != null ? sprInit.shade : numAt(v.shade != null ? v.shade : (SHAPE_ID[v.shape] >= 11 ? 0.85 : 0), 0, phase),
+    shade: sprInit.shade != null ? sprInit.shade : numAt(v.shade != null ? v.shade : (SHAPE_ID[v.shape] >= 11 && SHAPE_ID[v.shape] <= 14 ? 0.85 : 0), 0, phase),
     cap: v.cap || 'square',
     join: v.join || 'miter',
     open: baseNum('open', 0),
@@ -376,7 +376,13 @@ function spawn(value, onset) {
     pid: v._pid || 0,          // physics() group id (0 = not a body); body created lazily in tick
     body: null,                // rapier rigid body handle once created
     physRot: 0,                // body rotation (rad), synced from the sim each frame
+    sprite: 0,                 // emoji sprite id (0 = not a sprite)
   };
+  // emoji shapes → rasterized sprites, natural colours unless .color() was set explicitly
+  if (SHAPE_ID[p.shape] == null && EMOJI_RE.test(p.shape)) {
+    p.sprite = spriteIdFor(p.shape);
+    if (v.color == null) p.color = '#ffffff';
+  }
   // torus family: the raymarched tube radius rides the outline control (a fraction of the
   // size, so it scales), and .weight() sets it absolutely — both already live-patternable.
   // When neither is given, default the tube by name: torus/donut = fat, hoop = hula hoop.
@@ -658,6 +664,24 @@ const SHAPE_ID = { dot: 0, circle: 0, ring: 1, arc: 2, square: 3, box: 3, tri: 4
   cube: 11, box3: 11, sphere: 12, ball: 12, torus: 13, donut: 13, hoop: 13, octa: 14, octahedron: 14,
   // imported FBX meshes (renderer maps id >= 15 to a model, lazy-loaded on first use)
   bong: 15, knot: 16, amongus: 17, sus: 17, balloons: 18, balloon: 18, chain: 19 };
+// ── emoji sprites: any emoji used as a shape becomes a textured glyph ─────────────
+// shape("🌸 🦋 ✨") just works: unknown shape strings that contain an emoji get a
+// dynamic sprite id (≥ 100); the GL renderer rasterizes the character once into a
+// texture and draws those glyphs as instanced textured quads. Natural emoji colours
+// by default; an explicit .color() tints.
+const SPRITE_BASE = 100;
+const spriteIds = new Map();                     // emoji string → sprite id
+const EMOJI_RE = /\p{Extended_Pictographic}/u;
+function spriteIdFor(str) {
+  let id = spriteIds.get(str);
+  if (id == null) {
+    id = SPRITE_BASE + spriteIds.size;
+    spriteIds.set(str, id);
+    if (glr) glr.ensureSprite(id, str);          // rasterize once, lazily
+  }
+  return id;
+}
+
 const OUTLINE_IDS = new Set([1, 2, 9, 10]);
 const CAP_ID = { round: 0, butt: 1, square: 2 };   // line/cross caps (spawn defaults cap to 'square')
 const JOIN_ID = { miter: 0, round: 1, bevel: 2 };  // polygon corners (default miter = sharp)
@@ -699,7 +723,7 @@ function glResolve(p, minDim, out) {
   out.weight = olw != null ? Math.max(0.75, olw * sizePx) : Math.max(0.75, weight * minDim);
   out.shade = shade;
   out.open = open;
-  const id = SHAPE_ID[p.shape] != null ? SHAPE_ID[p.shape] : 0;
+  const id = p.sprite || (SHAPE_ID[p.shape] != null ? SHAPE_ID[p.shape] : 0);
   out.shape = id;
   // mirror the 2D draw-mode logic: outline shapes (ring/arc/line/cross) stroke
   // unless they're vertex-only; other shapes honour fill/stroke directly.
@@ -925,6 +949,14 @@ function drawGlyph(g, p, minDim) {
   g.globalAlpha = Math.max(0, Math.min(1, alpha * p._env));
   g.fillStyle = color; g.strokeStyle = color;
   const zRot = rotTurns * TAU + p.spin * age + p.physRot;   // physRot = rigid-body tumble (0 for non-physics)
+  if (p.sprite) {                                           // emoji sprite (canvas fallback: draw the character)
+    g.rotate(zRot);
+    g.font = Math.round(sizePx * 2) + 'px system-ui';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(p.shape, 0, 0);
+    g.restore();
+    return;
+  }
   const lw = olw != null ? Math.max(0.75, olw * sizePx) : Math.max(0.75, weight * minDim);
   const outline = OUTLINE_SHAPES.has(p.shape);
   const stroke = outline ? (p.stroke || !p.vertex) : p.stroke;
