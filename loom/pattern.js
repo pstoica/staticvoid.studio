@@ -895,10 +895,11 @@ class Group {
   meshfill(amount = 0.5, k = 8) { return this._push({ type: 'meshfill', amount, k }); }
   // radiance(amount, reach): 2D GLOBAL ILLUMINATION with real occlusion — glyphs LIGHT
   // the space around them AND cast shadows: any glyph blocks light passing through it,
-  // so a dark glyph is a pure occluder (a wall) and a bright one is a lamp. Brute-force
-  // raymarch at quarter res — the honest tier of radiance cascades, same look, fewer
-  // smarts. amount = light strength (0 = off); reach = ray length (fraction of canvas).
-  // Heavier than glow — one group at a time is wise on laptops.
+  // so a dark glyph is a pure occluder (a wall) and a bright one is a lamp. CONE-TRACED
+  // against the scene's mip pyramid at quarter res: far samples read tiny blurred mips,
+  // so the cost is flat at any reach and distant light is soft penumbra, not
+  // interference rings. amount = light strength (0 = off); reach = ray length
+  // (fraction of canvas, default 0.6).
   radiance(amount = 0.7, reach = 0.6) { return this._push({ type: 'radiance', amount, reach }); }
   // feedback(fade, zoom, rot, loop?): trails/tunnel. The optional 4th arg EMBEDS effects
   // inside the loop — a builder fn whose chain runs on the HISTORY each frame before it's

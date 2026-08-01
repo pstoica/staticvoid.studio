@@ -1359,6 +1359,18 @@ stack(
 )
 .dots("[1 | 1 | 1 | 1 | 32]*4")`,
 
+  // a living MESH GRADIENT: slow-drifting dots are the control points of a smooth
+  // colour field that fills the whole canvas (meshfill), with a soft glow on top.
+  // osc().spread() gives each dot its own wander path, so the points stay scattered.
+  'mesh': `group(
+  bg("#050408"),
+  shape("dot*7")
+    .x(osc(0.05, "perlin").spread(3).range(0.1, 0.9))
+    .y(osc(0.07, "perlin").spread(5).range(0.1, 0.9))
+    .color(palette("sunset").at(saw.range(0, 1)))
+    .size(0.02).decay(4)
+).meshfill(0.8, 7).glow(0.35, 0.3)`,
+
   // a five-turn spiral of dots over a slow pulsing ring (angle winds the ring)
   'spiral': `stack(
   bg("#04060d"),

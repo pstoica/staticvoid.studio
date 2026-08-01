@@ -637,7 +637,9 @@ void main() {
   for (int i = 0; i < 12; i++) {
     if (i >= uCount) break;
     vec2 d = (vUv - uPts[i].xy) * vec2(uAspect, 1.0);
-    float w = uPts[i].z / (dot(d, d) + 0.004);
+    // ~1/d^3 falloff: inverse-square flattens to the mean colour with many points;
+    // a sharper power keeps distinct colour REGIONS around each glyph (the mesh look)
+    float w = uPts[i].z / pow(dot(d, d) + 0.0015, 1.5);
     acc += uCols[i] * w; wsum += w;
   }
   vec3 field = wsum > 0.0 ? acc / wsum : vec3(0.0);
@@ -645,37 +647,44 @@ void main() {
   gl_FragColor = clamp(vec4(base.rgb + field * fa, base.a + fa), 0.0, 1.0);
 }`;
 
-// radiance: brute-force 2D global illumination with OCCLUSION — for each (low-res) pixel,
-// march rays through the scene texture (rgb = emission, a = occupancy): emission is
-// gathered attenuated by the transmittance so far, so bright glyphs LIGHT the space and
-// any glyph (bright or dark) casts a real shadow behind itself. This is the honest
-// brute-force tier of radiance cascades — same inputs, same look, fewer smarts — run at
-// quarter res and composited through the same soft knee as glow.
-const RADIANCE_FRAG = `
+// radiance: CONE-TRACED 2D global illumination with occlusion. For each (quarter-res)
+// pixel, march cones through the scene's MIP PYRAMID (rgb = emission, a = occupancy):
+// each step samples the lod whose texel matches the cone's width at that distance, so
+// far samples read tiny cache-resident mips — flat cost at ANY reach (the full-res
+// version thrashed the texture cache the moment rays scattered) — and emitters are
+// footprint-averaged, which turns the thin-ray interference rings into soft penumbras.
+// Bright glyphs are lamps; any glyph absorbs light behind it (a dark glyph is a wall).
+// GLSL3 for textureLod.
+const RADIANCE_FRAG3 = `
 precision highp float;
 #define TAU 6.28318530718
-uniform sampler2D tMap;    // full-res scene: premultiplied emission + occupancy alpha
+uniform sampler2D tMap;    // mipmapped scene copy
 uniform float uReach;      // max ray length, fraction of the canvas
 uniform float uAspect;
-varying vec2 vUv;
+uniform float uSceneH;     // scene height, px (cone width → lod)
+in vec2 vUv;
+out vec4 fragColor;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 void main() {
   vec3 acc = vec3(0.0);
   float j = hash(vUv);                                  // per-pixel ray-set rotation (kills banding)
-  for (int d = 0; d < 24; d++) {
-    float ang = (float(d) + j) / 24.0 * TAU;
+  for (int d = 0; d < 16; d++) {
+    float ang = (float(d) + j) / 16.0 * TAU;
     vec2 dir = vec2(cos(ang) / uAspect, sin(ang));
-    float T = 1.0;                                      // transmittance along the ray
+    float T = 1.0;                                      // transmittance along the cone
     for (int s = 0; s < 24; s++) {
       float t = (float(s) + 0.5) / 24.0;
-      vec2 p = vUv + dir * (t * t) * uReach;            // quadratic spacing: dense near, sparse far
+      float r = t * t * uReach;                         // quadratic spacing: dense near, sparse far
+      vec2 p = vUv + dir * r;
       if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0) break;
-      vec4 smp = texture2D(tMap, p);
+      float cone = max(r * 0.35, 1.5 / uSceneH);        // cone half-width at this distance (uv)
+      vec4 smp = textureLod(tMap, p, clamp(log2(cone * uSceneH), 0.0, 8.0));
       acc += smp.rgb * T;                               // gather emission through the transmittance
       T *= 1.0 - clamp(smp.a, 0.0, 1.0) * 0.7;          // occupancy absorbs — the shadow
+      if (T < 0.02) break;                              // fully shadowed: stop marching
     }
   }
-  gl_FragColor = vec4(acc / 24.0 * 0.6, 1.0);           // artistic gain — the knee soft-clips busy scenes
+  fragColor = vec4(acc / 16.0 * 0.6, 1.0);              // artistic gain — the knee soft-clips busy scenes
 }`;
 
 // colour grade: hue (turns), saturate (0..), contrast (1=id), brightness (1=id).
@@ -1058,7 +1067,8 @@ export class GLRenderer {
         uPts: { value: Array.from({ length: 12 }, () => new THREE.Vector3()) },
         uCols: { value: Array.from({ length: 12 }, () => new THREE.Vector3()) },
         uCount: { value: 0 }, uAmount: { value: 0.5 }, uAspect: { value: 1 } }),
-      radiance: fsMat(RADIANCE_FRAG, { tMap: { value: null }, uReach: { value: 0.6 }, uAspect: { value: 1 } }),
+      radiance: new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: RADIANCE_FRAG3,
+        uniforms: { tMap: { value: null }, uReach: { value: 0.6 }, uAspect: { value: 1 }, uSceneH: { value: 1 } }, depthTest: false, depthWrite: false }),
       glowDown: fsMat(GLOW_DOWN_FRAG, { tMap: { value: null }, uTexel: { value: V2() } }),
       glowUp: fsMat(GLOW_UP_FRAG, { tMap: { value: null }, tAdd: { value: null }, uTexel: { value: V2() }, uSpread: { value: 0.7 } }),
       glowMix: fsMat(GLOW_MIX_FRAG, { tMap: { value: null }, tBloom: { value: null }, uAmount: { value: 0.6 } }),
@@ -1505,10 +1515,13 @@ export class GLRenderer {
             { depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType });
           rt.radW = rt.w; rt.radH = rt.h;
         }
+        this._ensureMip(rt);                           // cone tracing marches the mip pyramid
+        this._blit(this.fx.copy, read.texture, rt.mip);
         const m = this.fx.radiance;
         m.uniforms.uReach.value = Math.max(0.05, Math.min(1, this._num(e.reach, 0.6)));
         m.uniforms.uAspect.value = rt.w / rt.h;
-        this._blit(m, read.texture, rt.rad);           // gather the light field at quarter res
+        m.uniforms.uSceneH.value = rt.h;
+        this._blit(m, rt.mip.texture, rt.rad);         // gather the light field at quarter res
         const cmb = this.fx.glowMix;                   // same soft-knee composite as glow
         cmb.uniforms.uAmount.value = amount;
         cmb.uniforms.tBloom.value = rt.rad.texture;
