@@ -469,24 +469,35 @@ void main(){
 // A single big triangle covering the screen; `vUv` is 0..1. Each FX is a fragment
 // shader sampling the previous pass's texture (tMap). Passes ping-pong between two
 // render targets per group, then a final composite blits the result to the screen.
-// ── emoji sprites: instanced textured quads (billboard + Z spin, pixel-space) ────
+// ── emoji sprites: instanced textured quads with the SAME 3D tilt + pinhole as the
+// flat SDF glyphs (tilt X/Y in 3D, project through uPersp, spin Z in screen space) —
+// emitting the divide through gl_Position.w keeps the texture perspective-correct.
 const SPRITE_VERT = `
 precision highp float;
 uniform vec2 uResolution;
+uniform float uPersp;      // tilt camera distance, glyph radii; <= 0 = orthographic
 attribute vec3 position;   // quad corner in -1..1
 attribute vec2 sPos;       // centre, css px
 attribute float sRadius;   // half-size, px
 attribute float sRot;      // z rotation, radians
+attribute float sRotX;     // 3D tilt, radians
+attribute float sRotY;
 attribute vec4 sTint;      // rgb tint (white = natural) + alpha
 varying vec2 vUv;
 varying vec4 vTint;
 void main() {
   vUv = vec2(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5);   // y-down screen ↔ flipY texture
   vTint = sTint;
+  vec2 l = position.xy * sRadius;
+  float cx = cos(sRotX), sx = sin(sRotX), cy = cos(sRotY), sy = sin(sRotY);
+  float x = l.x, y = l.y * cx, z = l.y * sx;
+  float x2 = x * cy + z * sy; z = -x * sy + z * cy; x = x2;
+  float w = 1.0;
+  if (uPersp > 0.0) { float d = uPersp * max(1.0, sRadius); w = max((d - z) / d, 0.01); }
   float c = cos(sRot), s = sin(sRot);
-  vec2 l = vec2(position.x * c - position.y * s, position.x * s + position.y * c) * sRadius;
-  vec2 P = sPos + l;
-  gl_Position = vec4(2.0 * P.x / uResolution.x - 1.0, 1.0 - 2.0 * P.y / uResolution.y, 0.0, 1.0);
+  vec2 N = vec2(x * c - y * s, x * s + y * c);
+  vec2 P = N + sPos * w;
+  gl_Position = vec4(2.0 * P.x / uResolution.x - w, w - 2.0 * P.y / uResolution.y, 0.0, w);
 }`;
 const SPRITE_FRAG = `
 precision highp float;
@@ -1375,14 +1386,16 @@ export class GLRenderer {
     const SPR_CAP = 4096;
     const geo = new THREE.InstancedBufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, 1, 0, -1, 1, 0]), 3));
-    this.sprArrays = { sPos: new Float32Array(SPR_CAP * 2), sRadius: new Float32Array(SPR_CAP), sRot: new Float32Array(SPR_CAP), sTint: new Float32Array(SPR_CAP * 4) };
+    this.sprArrays = { sPos: new Float32Array(SPR_CAP * 2), sRadius: new Float32Array(SPR_CAP), sRot: new Float32Array(SPR_CAP), sRotX: new Float32Array(SPR_CAP), sRotY: new Float32Array(SPR_CAP), sTint: new Float32Array(SPR_CAP * 4) };
     geo.setAttribute('sPos', new THREE.InstancedBufferAttribute(this.sprArrays.sPos, 2));
     geo.setAttribute('sRadius', new THREE.InstancedBufferAttribute(this.sprArrays.sRadius, 1));
     geo.setAttribute('sRot', new THREE.InstancedBufferAttribute(this.sprArrays.sRot, 1));
+    geo.setAttribute('sRotX', new THREE.InstancedBufferAttribute(this.sprArrays.sRotX, 1));
+    geo.setAttribute('sRotY', new THREE.InstancedBufferAttribute(this.sprArrays.sRotY, 1));
     geo.setAttribute('sTint', new THREE.InstancedBufferAttribute(this.sprArrays.sTint, 4));
     const mat = new THREE.RawShaderMaterial({
       vertexShader: SPRITE_VERT, fragmentShader: SPRITE_FRAG,
-      uniforms: { uResolution: this.uniforms.uResolution, tMap: { value: null } },
+      uniforms: { uResolution: this.uniforms.uResolution, uPersp: this.uniforms.uPersp, tMap: { value: null } },
       transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
     });
     mat.blending = THREE.CustomBlending; mat.blendEquation = THREE.AddEquation;
@@ -1414,11 +1427,12 @@ export class GLRenderer {
         if (out.alpha <= 0.003) continue;
         A.sPos[n * 2] = out.x; A.sPos[n * 2 + 1] = out.y;
         A.sRadius[n] = out.r; A.sRot[n] = out.rot;
+        A.sRotX[n] = out.rotX; A.sRotY[n] = out.rotY;
         A.sTint[n * 4] = out.rgb[0]; A.sTint[n * 4 + 1] = out.rgb[1]; A.sTint[n * 4 + 2] = out.rgb[2]; A.sTint[n * 4 + 3] = out.alpha;
         n++;
       }
       if (!n) continue;
-      for (const name of ['sPos', 'sRadius', 'sRot', 'sTint']) geo.getAttribute(name).needsUpdate = true;
+      for (const name of ['sPos', 'sRadius', 'sRot', 'sRotX', 'sRotY', 'sTint']) geo.getAttribute(name).needsUpdate = true;
       geo.instanceCount = n;
       mat.uniforms.tMap.value = spr.tex;
       r.render(this.spriteScene, this.camera);

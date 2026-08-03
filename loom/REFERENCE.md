@@ -64,8 +64,9 @@ them as a wireframe — edges for `cube`/`octa`, the grazing silhouette for `sph
 **Emoji are shapes**: `shape("🌸 🦋 ✨")` just works — any emoji becomes a textured
 glyph (rasterized once, drawn instanced), in its **natural colours** by default; an
 explicit `.color(...)` tints it. They spin, spawn, decay, hold, join `physics()` (round
-colliders), feed `meshfill`, and pattern like any shape: `shape("🌸*8")`,
-`shape("<🌸 🦋>")`. (`rotateX`/`rotateY` tilt doesn't apply — emoji are billboards.)
+colliders), feed `meshfill`, tilt in 3D (`rotateX`/`rotateY`, same perspective as the
+flat shapes — a spinning card flip), and pattern like any shape: `shape("🌸*8")`,
+`shape("<🌸 🦋>")`.
 
 **Imported meshes** (real FBX geometry from `models/`, instanced + depth-tested):
 `bong` · `knot` · `amongus` (alias `sus`) · `balloons` (alias `balloon`) · `chain`.
