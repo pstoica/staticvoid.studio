@@ -27,7 +27,7 @@ const METHOD = new Set(['fast', 'slow', 'rev', 'every', 'iter', 'palindrome', 'j
   'rotateX', 'rotateY', 'spin', 'blend', 'alpha', 'opacity', 'pan', 'jitter', 'fill', 'stroke', 'weight',
   'outline', 'shade', 'pixelate', 'blur', 'glow', 'meshfill', 'radiance', 'feedback', 'trails', 'silhouette', 'hue', 'brightness', 'contrast', 'saturate',
   'negative', 'invert', 'displace', 'kaleido', 'mirror', 'cap', 'join', 'open', 'vertex', 'attack', 'decay',
-  'life', 'hold', 'id', 'set', 'spread', 'phase', 'rate', 'quantize', 'ease', 'segment', 'seg', 'sample', 'spring']);
+  'life', 'hold', 'id', 'n', 'stencil', 'set', 'spread', 'phase', 'rate', 'quantize', 'ease', 'segment', 'seg', 'sample', 'spring']);
 
 // one custom highlight tag per Loom token class
 const T = {

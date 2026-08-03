@@ -482,12 +482,15 @@ attribute float sRadius;   // half-size, px
 attribute float sRot;      // z rotation, radians
 attribute float sRotX;     // 3D tilt, radians
 attribute float sRotY;
+attribute float sMode;     // 0 = multiply the texture's colours · 1 = luminance stencil
 attribute vec4 sTint;      // rgb tint (white = natural) + alpha
 varying vec2 vUv;
 varying vec4 vTint;
+varying float vMode;
 void main() {
   vUv = vec2(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5);   // y-down screen ↔ flipY texture
   vTint = sTint;
+  vMode = sMode;
   vec2 l = position.xy * sRadius;
   float cx = cos(sRotX), sx = sin(sRotX), cy = cos(sRotY), sy = sin(sRotY);
   float x = l.x, y = l.y * cx, z = l.y * sx;
@@ -504,10 +507,15 @@ precision highp float;
 uniform sampler2D tMap;
 varying vec2 vUv;
 varying vec4 vTint;
+varying float vMode;
 void main() {
   vec4 t = texture2D(tMap, vUv);
+  // stencil mode: use the texture's LUMINANCE × the tint (a recolourable monochrome
+  // stamp) instead of multiplying its own colours (which shifts hues on coloured art)
+  float lum = dot(t.rgb, vec3(0.299, 0.587, 0.114));
+  vec3 col = mix(t.rgb, vec3(lum), clamp(vMode, 0.0, 1.0)) * vTint.rgb;
   float a = t.a * vTint.a;
-  gl_FragColor = vec4(t.rgb * vTint.rgb * a, a);   // premultiplied out
+  gl_FragColor = vec4(col * a, a);   // premultiplied out
 }`;
 
 const FS_VERT = `
@@ -1381,17 +1389,37 @@ export class GLRenderer {
     this.sprites[id] = { tex };
     this._ensureSpriteRig();
   }
+  // drawn-pack frames: image-url sprites. NEAREST magnification keeps the Animal-
+  // Crossing pixels chunky when scaled up; mipmaps smooth them when small.
+  ensureSpriteImage(id, url) {
+    if (!this.sprites) this.sprites = {};
+    const cur = this.sprites[id];
+    if (cur && cur.src === url) return;
+    const img = new Image();
+    img.onload = () => {
+      const tex = new THREE.Texture(img);
+      tex.needsUpdate = true;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      if (this.sprites[id] && this.sprites[id].tex) this.sprites[id].tex.dispose();
+      this.sprites[id] = { tex, src: url };
+      this._ensureSpriteRig();
+    };
+    img.src = url;
+  }
   _ensureSpriteRig() {
     if (this.spriteMesh) return;
     const SPR_CAP = 4096;
     const geo = new THREE.InstancedBufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, 1, 0, -1, 1, 0]), 3));
-    this.sprArrays = { sPos: new Float32Array(SPR_CAP * 2), sRadius: new Float32Array(SPR_CAP), sRot: new Float32Array(SPR_CAP), sRotX: new Float32Array(SPR_CAP), sRotY: new Float32Array(SPR_CAP), sTint: new Float32Array(SPR_CAP * 4) };
+    this.sprArrays = { sPos: new Float32Array(SPR_CAP * 2), sRadius: new Float32Array(SPR_CAP), sRot: new Float32Array(SPR_CAP), sRotX: new Float32Array(SPR_CAP), sRotY: new Float32Array(SPR_CAP), sMode: new Float32Array(SPR_CAP), sTint: new Float32Array(SPR_CAP * 4) };
     geo.setAttribute('sPos', new THREE.InstancedBufferAttribute(this.sprArrays.sPos, 2));
     geo.setAttribute('sRadius', new THREE.InstancedBufferAttribute(this.sprArrays.sRadius, 1));
     geo.setAttribute('sRot', new THREE.InstancedBufferAttribute(this.sprArrays.sRot, 1));
     geo.setAttribute('sRotX', new THREE.InstancedBufferAttribute(this.sprArrays.sRotX, 1));
     geo.setAttribute('sRotY', new THREE.InstancedBufferAttribute(this.sprArrays.sRotY, 1));
+    geo.setAttribute('sMode', new THREE.InstancedBufferAttribute(this.sprArrays.sMode, 1));
     geo.setAttribute('sTint', new THREE.InstancedBufferAttribute(this.sprArrays.sTint, 4));
     const mat = new THREE.RawShaderMaterial({
       vertexShader: SPRITE_VERT, fragmentShader: SPRITE_FRAG,
@@ -1428,11 +1456,12 @@ export class GLRenderer {
         A.sPos[n * 2] = out.x; A.sPos[n * 2 + 1] = out.y;
         A.sRadius[n] = out.r; A.sRot[n] = out.rot;
         A.sRotX[n] = out.rotX; A.sRotY[n] = out.rotY;
+        A.sMode[n] = out.stencil || 0;
         A.sTint[n * 4] = out.rgb[0]; A.sTint[n * 4 + 1] = out.rgb[1]; A.sTint[n * 4 + 2] = out.rgb[2]; A.sTint[n * 4 + 3] = out.alpha;
         n++;
       }
       if (!n) continue;
-      for (const name of ['sPos', 'sRadius', 'sRot', 'sRotX', 'sRotY', 'sTint']) geo.getAttribute(name).needsUpdate = true;
+      for (const name of ['sPos', 'sRadius', 'sRot', 'sRotX', 'sRotY', 'sMode', 'sTint']) geo.getAttribute(name).needsUpdate = true;
       geo.instanceCount = n;
       mat.uniforms.tMap.value = spr.tex;
       r.render(this.spriteScene, this.camera);
@@ -1622,7 +1651,7 @@ export class GLRenderer {
       } else if (t === 'meshfill') {
         const amount = this._num(e.amount, 0.5);
         const parts = this._chainParts;
-        if (amount <= 0.0 || !parts || !parts.length || !this._resolve) continue;
+        if (amount <= 0.0 || !parts || !this._resolve) continue;
         const m = this.fx.meshfill;
         const k = Math.max(1, Math.min(32, Math.round(this._num(e.k, 8))));
         const out = this._scratch;
@@ -1631,9 +1660,19 @@ export class GLRenderer {
         // each new arrival in over ~half a second. Departures already fade via their
         // envelope, so the field never pops when the population turns over.
         if (!rt.meshSel) rt.meshSel = [];
-        const sel = rt.meshSel;
+        if (!rt.meshGhosts) rt.meshGhosts = [];
+        const sel = rt.meshSel, ghosts = rt.meshGhosts;
         const alive = new Set(parts);
-        for (let i = sel.length - 1; i >= 0; i--) if (!alive.has(sel[i].p)) sel.splice(i, 1);
+        for (let i = sel.length - 1; i >= 0; i--) {
+          const s = sel[i];
+          if (!alive.has(s.p)) {
+            // the point died: leave a GHOST that keeps fading (~1.2 s) so the field
+            // lingers through churn gaps instead of snapping when its glyphs vanish
+            if (s.lw > 0.02) ghosts.push({ x: s.lx, y: s.ly, r: s.lr, g: s.lg, b: s.lb, w: s.lw, t: this._elapsed });
+            sel.splice(i, 1);
+          }
+        }
+        if (ghosts.length > 32) ghosts.splice(0, ghosts.length - 32);
         if (sel.length > k) sel.length = k;
         if (sel.length < k) {
           const chosen = new Set(sel.map((s) => s.p));
@@ -1648,8 +1687,19 @@ export class GLRenderer {
           const w = (s.p._env != null ? s.p._env : out.alpha) * Math.min(1, (this._elapsed - s.born) * 2);
           if (w <= 0.002) continue;
           // glyph css position → this texture's uv (content row 0 = screen bottom)
-          m.uniforms.uPts.value[n].set(out.x / (this.W || 1), 1 - out.y / (this.H || 1), w);
+          const px = out.x / (this.W || 1), py = 1 - out.y / (this.H || 1);
+          m.uniforms.uPts.value[n].set(px, py, w);
           m.uniforms.uCols.value[n].set(out.rgb[0], out.rgb[1], out.rgb[2]);
+          s.lx = px; s.ly = py; s.lw = w; s.lr = out.rgb[0]; s.lg = out.rgb[1]; s.lb = out.rgb[2];
+          n++;
+        }
+        // ghosts fill the remaining slots, decaying — the "hold the last frame" sustain
+        for (let i = ghosts.length - 1; i >= 0 && n < 32; i--) {
+          const gh = ghosts[i];
+          const w = gh.w * Math.exp(-(this._elapsed - gh.t) * 0.9);
+          if (w <= 0.01) { ghosts.splice(i, 1); continue; }
+          m.uniforms.uPts.value[n].set(gh.x, gh.y, w);
+          m.uniforms.uCols.value[n].set(gh.r, gh.g, gh.b);
           n++;
         }
         if (!n) continue;
@@ -1903,7 +1953,7 @@ export class GLRenderer {
     if (rt.silh) { for (const k in rt.silh) rt.silh[k].tex.dispose(); rt.silh = null; }
     if (rt.glow) { for (const l of rt.glow) { l.down.dispose(); l.up.dispose(); } rt.glow = null; }
     if (rt.rad) { rt.rad.dispose(); rt.rad = null; }
-    rt.meshSel = null;
+    rt.meshSel = null; rt.meshGhosts = null;
   }
   // lazily allocate the mipmapped scratch the pixelate pass averages over
   _ensureMip(rt) {

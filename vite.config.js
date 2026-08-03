@@ -34,6 +34,7 @@ export default defineConfig({
         omnichord: entry('./omnichord/index.html'),
         tictactoe: entry('./tictactoe/index.html'),
         loom: entry('./loom/index.html'),
+        loomdraw: entry('./loom/draw/index.html'),
       },
     },
   },

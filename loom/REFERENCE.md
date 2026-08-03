@@ -68,6 +68,16 @@ colliders), feed `meshfill`, tilt in 3D (`rotateX`/`rotateY`, same perspective a
 flat shapes — a spinning card flip), and pattern like any shape: `shape("🌸*8")`,
 `shape("<🌸 🦋>")`.
 
+**Draw your own shapes** at [`/loom/draw/`](./draw/) — an Animal-Crossing-style pixel
+editor. Drawings save as named **packs** of frames (in this browser), and any pack name
+is a shape: `shape("doodles")`. **`.n(i)`** picks the frame and is patternable —
+`shape("doodles").n("0 1 2 3")` plays your frames as a flipbook, `.n(irand(4))` picks
+randomly. Colour has two modes: by default your drawing keeps its own colours and
+`.color()` **multiplies** (like emoji); **`.stencil(1)`** treats it as a luminance
+stencil instead — its brightness × your colour — so one monochrome drawing recolours
+cleanly (`.stencil(0.5)` blends the modes). Edits in the draw tab update a running Loom
+tab **live**. Everything else applies: tilt, physics, `meshfill`, `hold`, `id`.
+
 **Imported meshes** (real FBX geometry from `models/`, instanced + depth-tested):
 `bong` · `knot` · `amongus` (alias `sus`) · `balloons` (alias `balloon`) · `chain`.
 Same controls as the 3D shapes — `size`, the rotations, `color`, and `.shade()`

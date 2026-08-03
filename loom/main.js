@@ -376,12 +376,20 @@ function spawn(value, onset) {
     pid: v._pid || 0,          // physics() group id (0 = not a body); body created lazily in tick
     body: null,                // rapier rigid body handle once created
     physRot: 0,                // body rotation (rad), synced from the sim each frame
-    sprite: 0,                 // emoji sprite id (0 = not a sprite)
+    sprite: 0,                 // sprite id (0 = not a sprite): emoji or a drawn-pack frame
+    stencil: numAt(v.stencil != null ? v.stencil : 0, 0, phase),   // 0 = multiply tint · 1 = luma stencil
   };
-  // emoji shapes → rasterized sprites, natural colours unless .color() was set explicitly
-  if (SHAPE_ID[p.shape] == null && EMOJI_RE.test(p.shape)) {
-    p.sprite = spriteIdFor(p.shape);
-    if (v.color == null) p.color = '#ffffff';
+  // textured shapes → sprites, natural colours unless .color() was set explicitly:
+  // a drawn pack name (frame picked by .n(), wrapped) — else any emoji
+  if (SHAPE_ID[p.shape] == null) {
+    const pack = SHAPE_PACKS[p.shape];
+    if (pack && pack.length) {
+      const fi = ((Math.floor(numAt(v.n != null ? v.n : 0, 0, phase)) % pack.length) + pack.length) % pack.length;
+      p.sprite = pack[fi];
+    } else if (EMOJI_RE.test(p.shape)) {
+      p.sprite = spriteIdFor(p.shape);
+    }
+    if (p.sprite && v.color == null) p.color = '#ffffff';
   }
   // torus family: the raymarched tube radius rides the outline control (a fraction of the
   // size, so it scales), and .weight() sets it absolutely — both already live-patternable.
@@ -682,6 +690,33 @@ function spriteIdFor(str) {
   return id;
 }
 
+// ── drawn shape packs (the /loom/draw/ editor) ────────────────────────────────────
+// The pixel editor saves named packs of frames to localStorage (key loom.shapepacks,
+// { v, packs: { name: { frames: [dataURL…] } } }). Any pack name works as a shape —
+// shape("mypack") — and .n(i) picks the frame (patternable: a flipbook). Frames become
+// image sprites through the same instanced-quad path as emoji. The 'storage' event
+// fires when the editor (another tab) saves, so packs live-reload mid-performance.
+const SHAPE_PACKS = {};                          // pack name → [sprite ids, frame order]
+function loadPacks() {
+  let data;
+  try { data = JSON.parse(localStorage.getItem('loom.shapepacks') || 'null'); } catch { return; }
+  for (const k in SHAPE_PACKS) delete SHAPE_PACKS[k];
+  if (!data || !data.packs) return;
+  for (const [name, pack] of Object.entries(data.packs)) {
+    const frames = (pack && pack.frames) || [];
+    if (!frames.length) continue;
+    SHAPE_PACKS[name] = frames.map((url, i) => {
+      const key = 'pack:' + name + ':' + i;
+      let id = spriteIds.get(key);
+      if (id == null) { id = SPRITE_BASE + spriteIds.size; spriteIds.set(key, id); }
+      if (glr) glr.ensureSpriteImage(id, url);   // idempotent per (id, url); re-upload on change
+      return id;
+    });
+  }
+}
+window.addEventListener('storage', (e) => { if (e.key === 'loom.shapepacks') loadPacks(); });
+loadPacks();
+
 const OUTLINE_IDS = new Set([1, 2, 9, 10]);
 const CAP_ID = { round: 0, butt: 1, square: 2 };   // line/cross caps (spawn defaults cap to 'square')
 const JOIN_ID = { miter: 0, round: 1, bevel: 2 };  // polygon corners (default miter = sharp)
@@ -734,6 +769,7 @@ function glResolve(p, minDim, out) {
   out.cap = CAP_ID[p.cap] != null ? CAP_ID[p.cap] : 2;   // default square, matching spawn
   out.join = JOIN_ID[p.join] != null ? JOIN_ID[p.join] : 0;   // default miter (sharp corners)
   out.blend = p.blend;
+  out.stencil = p.stencil || 0;                          // sprite tint mode (multiply ↔ luma)
 }
 
 // resolve an FX parameter against GLOBAL time, FX run per-layer-per-frame, not
@@ -1269,6 +1305,8 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   ensurePhysics: () => ensureRapier(), physReady: () => !!rapierReady(),
   get bodies() { return particles.filter((p) => p.body).length; }, get pointer() { return pointerState; },
   get objects() { return [...objects.keys()]; },   // live .id() object keys
+  get shapePacks() { return Object.fromEntries(Object.entries(SHAPE_PACKS).map(([k, v]) => [k, v.length])); },   // pack → frame count
+  reloadShapePacks: loadPacks,                     // manual refresh (the storage event covers cross-tab)
   run: (code) => { if (code != null) editor.setCode(String(code)); run(); },   // set code + re-eval (tooling — a scripted ⌘↵)
   midi: (status, d1, d2, dev) => DSL._midiInput(status, d1, d2, dev),   // inject a MIDI message (for tooling/testing; `dev` = optional device name for dev() scope)
   jug: (m) => DSL._jugInput(m),   // inject a juggling-feed message (for tooling/testing)

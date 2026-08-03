@@ -270,6 +270,13 @@ class Pattern {
   }
   color(a) { return this.set('color', a); }
   size(a)  { return this.set('size', a); }
+  // n(i): pick the i-th FRAME of a drawn shape pack (see /loom/draw/) — patternable, so
+  // shape("mypack").n("0 1 2 3") flips through frames like an Animal-Crossing flipbook.
+  n(a)     { return this.set('n', a); }
+  // stencil(v): how a textured shape (emoji / drawn pack) takes .color() — 0 (default)
+  // multiplies the texture's own colours; 1 treats it as a LUMINANCE stencil (its
+  // brightness × your colour — the tintable-monochrome mode). Fractional blends.
+  stencil(v = 1) { return this.set('stencil', v); }
   x(a)     { return this.set('x', a); }
   y(a)     { return this.set('y', a); }
   radius(a){ return this.set('radius', a); }
@@ -330,7 +337,7 @@ class Pattern {
   }
 }
 
-const NUMERIC = new Set(['size','x','y','radius','angle','gridX','gridY','rotate','rotateX','rotateY','spin','alpha','pan','jitter','weight','attack','decay','fill','stroke','vertex','open']);
+const NUMERIC = new Set(['size','x','y','radius','angle','gridX','gridY','rotate','rotateX','rotateY','spin','alpha','pan','jitter','weight','attack','decay','fill','stroke','vertex','open','n','stencil']);
 
 // ── primitives ────────────────────────────────────────────────────────────────
 const silence = new Pattern(() => []);

@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Loom · draw — shape packs</title>
+<style>
+  :root { --bg:#0a0a0c; --panel:#111118; --ink:#e9e9ea; --dim:#8b8b95; --edge:#26262e; --acc:#56b6ff; }
+  * { box-sizing:border-box; margin:0; }
+  html, body { height:100%; }
+  body { background:var(--bg); color:var(--ink); font:14px/1.45 "SF Mono", ui-monospace, Menlo, monospace;
+    display:flex; flex-direction:column; align-items:center; gap:14px; padding:18px; }
+  header { width:min(560px, 100%); display:flex; align-items:baseline; gap:10px; }
+  header h1 { font-size:18px; letter-spacing:0.02em; }
+  header h1 a { color:var(--ink); text-decoration:none; }
+  header h1 span { color:var(--acc); }
+  header p { color:var(--dim); font-size:12px; }
+  .row { width:min(560px, 100%); display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  input[type="text"] { background:var(--panel); color:var(--ink); border:1px solid var(--edge);
+    border-radius:6px; padding:6px 10px; font:inherit; width:11em; }
+  button { background:var(--panel); color:var(--ink); border:1px solid var(--edge); border-radius:6px;
+    padding:6px 12px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  button.on { background:var(--acc); color:#06070a; border-color:var(--acc); font-weight:600; }
+  select { background:var(--panel); color:var(--ink); border:1px solid var(--edge); border-radius:6px; padding:6px 8px; font:inherit; }
+  #board { width:min(560px, 92vw); aspect-ratio:1; image-rendering:pixelated; touch-action:none;
+    border:1px solid var(--edge); border-radius:8px; cursor:crosshair;
+    background: repeating-conic-gradient(#15151c 0% 25%, #101016 0% 50%) 0 0 / 12.5% 12.5%; }
+  #pal { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .sw { width:26px; height:26px; border-radius:6px; border:2px solid transparent; cursor:pointer; padding:0; }
+  .sw.on { border-color:#fff; }
+  .sw.eraser { background: repeating-conic-gradient(#333 0% 25%, #191919 0% 50%) 0 0 / 50% 50%; }
+  input[type="color"] { width:26px; height:26px; border:none; padding:0; background:none; cursor:pointer; }
+  #frames { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  #frames canvas { width:56px; height:56px; image-rendering:pixelated; border:2px solid var(--edge);
+    border-radius:6px; cursor:pointer; background: repeating-conic-gradient(#15151c 0% 25%, #101016 0% 50%) 0 0 / 25% 25%; }
+  #frames canvas.on { border-color:var(--acc); }
+  footer { width:min(560px, 100%); color:var(--dim); font-size:12px; }
+  footer code { color:var(--ink); background:var(--panel); padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="../">Loom</a> <span>· draw</span></h1>
+  <p>pixel shape packs — paint here, pattern there</p>
+</header>
+
+<div class="row">
+  <select id="packSel"></select>
+  <input type="text" id="packName" placeholder="new pack name" spellcheck="false" />
+  <button id="newPack">new pack</button>
+  <button id="delPack" title="delete this pack">delete</button>
+</div>
+
+<canvas id="board" width="32" height="32"></canvas>
+
+<div class="row" id="pal"></div>
+
+<div class="row">
+  <button id="addFrame">+ frame</button>
+  <button id="dupFrame">duplicate</button>
+  <button id="delFrame">delete frame</button>
+  <button id="clearFrame">clear</button>
+</div>
+<div class="row" id="frames"></div>
+
+<footer>
+  saves as you draw. in Loom (same browser): <code>shape("packname")</code> — pick frames with
+  <code>.n("0 1 2")</code>, recolour with <code>.color(...).stencil(1)</code>. edits here update
+  Loom live in another tab.
+</footer>
+
+<script type="module">
+const KEY = 'loom.shapepacks';
+const S = 32;                                      // grid size (Animal-Crossing-ish)
+const PALETTE = ['#f4f6fb', '#0a0a0a', '#ff5d73', '#ff9d5c', '#ffd166', '#6df0c2', '#56e0ff',
+  '#56b6ff', '#b58cff', '#ff8ad1', '#b5179e', '#3a0ca3', '#1b4332', '#6a040f'];
+
+const $ = (s) => document.querySelector(s);
+const board = $('#board'), bctx = board.getContext('2d');
+bctx.imageSmoothingEnabled = false;
+
+// ── storage ────────────────────────────────────────────────────────────────────
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || { v: 1, packs: {} }; } catch { return { v: 1, packs: {} }; } };
+let db = load();
+if (!db.packs) db = { v: 1, packs: {} };
+let packName = Object.keys(db.packs)[0] || 'doodles';
+if (!db.packs[packName]) db.packs[packName] = { frames: [blankFrame()] };
+let frameIdx = 0;
+function blankFrame() { const c = document.createElement('canvas'); c.width = c.height = S; return c.toDataURL(); }
+function save() { localStorage.setItem(KEY, JSON.stringify(db)); }
+
+// ── the working frame lives in an offscreen canvas ─────────────────────────────
+const work = document.createElement('canvas'); work.width = work.height = S;
+const wctx = work.getContext('2d', { willReadFrequently: true });
+function loadFrame(i) {
+  frameIdx = Math.max(0, Math.min(i, db.packs[packName].frames.length - 1));
+  const img = new Image();
+  img.onload = () => { wctx.clearRect(0, 0, S, S); wctx.drawImage(img, 0, 0); paint(); renderFrames(); };
+  img.src = db.packs[packName].frames[frameIdx];
+}
+function commit() { db.packs[packName].frames[frameIdx] = work.toDataURL(); save(); renderFrames(); }
+
+// ── painting ───────────────────────────────────────────────────────────────────
+let color = PALETTE[0], eraser = false, down = false, last = null;
+function px(e) {
+  const r = board.getBoundingClientRect();
+  return [Math.floor((e.clientX - r.left) / r.width * S), Math.floor((e.clientY - r.top) / r.height * S)];
+}
+function plot(x, y) {
+  if (x < 0 || y < 0 || x >= S || y >= S) return;
+  if (eraser) wctx.clearRect(x, y, 1, 1);
+  else { wctx.fillStyle = color; wctx.fillRect(x, y, 1, 1); }
+}
+// Bresenham between pointer samples, so fast strokes stay connected
+function line(a, b) {
+  let [x0, y0] = a, [x1, y1] = b;
+  const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  for (;;) {
+    plot(x0, y0);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx; }
+    if (e2 <= dx) { err += dx; y0 += sy; }
+  }
+}
+function paint() { bctx.clearRect(0, 0, S, S); bctx.drawImage(work, 0, 0); }
+board.addEventListener('pointerdown', (e) => { down = true; board.setPointerCapture(e.pointerId);
+  last = px(e); plot(...last); paint(); });
+board.addEventListener('pointermove', (e) => { if (!down) return;
+  const p = px(e); line(last, p); last = p; paint(); });
+const up = () => { if (down) { down = false; commit(); } };
+board.addEventListener('pointerup', up);
+board.addEventListener('pointercancel', up);
+
+// ── palette ────────────────────────────────────────────────────────────────────
+const pal = $('#pal');
+function renderPal() {
+  pal.innerHTML = '';
+  for (const c of PALETTE) {
+    const b = document.createElement('button');
+    b.className = 'sw' + (!eraser && c === color ? ' on' : '');
+    b.style.background = c;
+    b.addEventListener('click', () => { color = c; eraser = false; renderPal(); });
+    pal.appendChild(b);
+  }
+  const custom = document.createElement('input');
+  custom.type = 'color'; custom.value = /^#([0-9a-f]{6})$/i.test(color) ? color : '#ffffff';
+  custom.addEventListener('input', () => { color = custom.value; eraser = false; renderPal(); });
+  pal.appendChild(custom);
+  const er = document.createElement('button');
+  er.className = 'sw eraser' + (eraser ? ' on' : ''); er.title = 'eraser';
+  er.addEventListener('click', () => { eraser = !eraser; renderPal(); });
+  pal.appendChild(er);
+}
+
+// ── frames strip ───────────────────────────────────────────────────────────────
+const framesEl = $('#frames');
+function renderFrames() {
+  framesEl.innerHTML = '';
+  db.packs[packName].frames.forEach((url, i) => {
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    c.className = i === frameIdx ? 'on' : '';
+    c.title = 'frame ' + i;
+    const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
+    const img = new Image(); img.onload = () => x.drawImage(img, 0, 0); img.src = url;
+    c.addEventListener('click', () => loadFrame(i));
+    framesEl.appendChild(c);
+  });
+}
+$('#addFrame').addEventListener('click', () => { db.packs[packName].frames.push(blankFrame()); save(); loadFrame(db.packs[packName].frames.length - 1); });
+$('#dupFrame').addEventListener('click', () => { const f = db.packs[packName].frames; f.splice(frameIdx + 1, 0, f[frameIdx]); save(); loadFrame(frameIdx + 1); });
+$('#delFrame').addEventListener('click', () => { const f = db.packs[packName].frames;
+  if (f.length <= 1) return; f.splice(frameIdx, 1); save(); loadFrame(Math.min(frameIdx, f.length - 1)); });
+$('#clearFrame').addEventListener('click', () => { wctx.clearRect(0, 0, S, S); paint(); commit(); });
+
+// ── packs ──────────────────────────────────────────────────────────────────────
+const packSel = $('#packSel');
+function renderPacks() {
+  packSel.innerHTML = '';
+  for (const name of Object.keys(db.packs)) {
+    const o = document.createElement('option');
+    o.value = o.textContent = name; o.selected = name === packName;
+    packSel.appendChild(o);
+  }
+}
+packSel.addEventListener('change', () => { packName = packSel.value; loadFrame(0); renderPacks(); });
+$('#newPack').addEventListener('click', () => {
+  const name = ($('#packName').value || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  if (!name || db.packs[name]) return;
+  db.packs[name] = { frames: [blankFrame()] };
+  packName = name; $('#packName').value = ''; save(); renderPacks(); loadFrame(0);
+});
+$('#delPack').addEventListener('click', () => {
+  if (Object.keys(db.packs).length <= 1) return;
+  if (!confirm('Delete pack "' + packName + '"?')) return;
+  delete db.packs[packName]; packName = Object.keys(db.packs)[0]; save(); renderPacks(); loadFrame(0);
+});
+
+save();          // ensure the default pack exists on first visit
+renderPal(); renderPacks(); renderFrames(); loadFrame(0);
+</script>
+</body>
+</html>
