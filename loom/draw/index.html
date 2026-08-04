@@ -54,6 +54,22 @@
 
 <canvas id="board" width="32" height="32"></canvas>
 
+<div class="row">
+  <label style="color:var(--dim)">stroke</label>
+  <select id="strokeSel">
+    <option value="line">line — straight connect (Bresenham)</option>
+    <option value="curve">curve — smooth connect (Catmull-Rom)</option>
+    <option value="dots">dots — no connect</option>
+  </select>
+  <label style="color:var(--dim)">mirror</label>
+  <select id="mirrorSel">
+    <option value="off">off</option>
+    <option value="x">x — left/right</option>
+    <option value="xy">xy — quadrants</option>
+    <option value="radial">radial — 4-fold turns</option>
+  </select>
+</div>
+
 <div class="row" id="pal"></div>
 
 <div class="row">
@@ -103,14 +119,25 @@ function commit() { db.packs[packName].frames[frameIdx] = work.toDataURL(); save
 
 // ── painting ───────────────────────────────────────────────────────────────────
 let color = PALETTE[0], eraser = false, down = false, last = null;
+let stroke = 'line', mirror = 'off', pts = [];
+$('#strokeSel').addEventListener('change', (e) => { stroke = e.target.value; });
+$('#mirrorSel').addEventListener('change', (e) => { mirror = e.target.value; });
 function px(e) {
   const r = board.getBoundingClientRect();
   return [Math.floor((e.clientX - r.left) / r.width * S), Math.floor((e.clientY - r.top) / r.height * S)];
 }
-function plot(x, y) {
+function plotRaw(x, y) {
   if (x < 0 || y < 0 || x >= S || y >= S) return;
   if (eraser) wctx.clearRect(x, y, 1, 1);
   else { wctx.fillStyle = color; wctx.fillRect(x, y, 1, 1); }
+}
+// every plotted pixel goes through the mirror: x reflects, xy quadruples, radial turns
+function plot(x, y) {
+  const M = S - 1;
+  plotRaw(x, y);
+  if (mirror === 'x') plotRaw(M - x, y);
+  else if (mirror === 'xy') { plotRaw(M - x, y); plotRaw(x, M - y); plotRaw(M - x, M - y); }
+  else if (mirror === 'radial') { plotRaw(M - y, x); plotRaw(M - x, M - y); plotRaw(y, M - x); }
 }
 // Bresenham between pointer samples, so fast strokes stay connected
 function line(a, b) {
@@ -126,12 +153,38 @@ function line(a, b) {
     if (e2 <= dx) { err += dx; y0 += sy; }
   }
 }
+// Catmull-Rom segment p1→p2 (p0/p3 shape it), rasterized as short Bresenham runs
+function curveSeg(p0, p1, p2, p3) {
+  const steps = Math.max(2, (Math.abs(p2[0] - p1[0]) + Math.abs(p2[1] - p1[1])) * 2 + 2);
+  let prev = p1;
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps, t2 = t * t, t3 = t2 * t;
+    const q = [0, 1].map((k) => Math.round(0.5 * ((2 * p1[k]) + (-p0[k] + p2[k]) * t
+      + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2
+      + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3)));
+    line(prev, q); prev = q;
+  }
+}
 function paint() { bctx.clearRect(0, 0, S, S); bctx.drawImage(work, 0, 0); }
 board.addEventListener('pointerdown', (e) => { down = true; board.setPointerCapture(e.pointerId);
-  last = px(e); plot(...last); paint(); });
+  last = px(e); pts = [last]; plot(...last); paint(); });
 board.addEventListener('pointermove', (e) => { if (!down) return;
-  const p = px(e); line(last, p); last = p; paint(); });
-const up = () => { if (down) { down = false; commit(); } };
+  const p = px(e);
+  if (p[0] === last[0] && p[1] === last[1]) return;      // same cell — nothing new
+  if (stroke === 'dots') plot(...p);
+  else if (stroke === 'line') line(last, p);
+  else {                                                  // curve: draw one segment behind
+    pts.push(p); const n = pts.length;
+    if (n >= 3) curveSeg(pts[n - 4] || pts[n - 3], pts[n - 3], pts[n - 2], pts[n - 1]);
+  }
+  last = p; paint(); });
+const up = () => { if (!down) return; down = false;
+  if (stroke === 'curve' && pts.length >= 2) {            // flush the trailing segment
+    const n = pts.length;
+    curveSeg(pts[n - 3] || pts[n - 2], pts[n - 2], pts[n - 1], pts[n - 1]);
+    paint();
+  }
+  commit(); };
 board.addEventListener('pointerup', up);
 board.addEventListener('pointercancel', up);
 
