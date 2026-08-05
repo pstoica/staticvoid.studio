@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { renderPackFrame } from '../packrender.js';
 
 // ── imported 3D meshes (real geometry, instanced + depth-tested; flat-shaded to
 // match the SDF 3D shapes). name → file url, resolved via Vite asset handling. ──
@@ -1389,21 +1390,21 @@ export class GLRenderer {
     this.sprites[id] = { tex };
     this._ensureSpriteRig();
   }
-  // drawn-pack frames: image-url sprites. NEAREST magnification keeps the Animal-
-  // Crossing pixels chunky when scaled up; mipmaps smooth them when small.
-  ensureSpriteImage(id, url) {
+  // drawn-pack frames: the grid is rasterized through the pack's CONNECTOR mode
+  // (pixels / rounded / metaball — see packrender.js, shared with the draw editor's
+  // preview). NEAREST magnification only for raw pixels; the smooth modes want linear.
+  ensureSpritePack(id, url, mode, ver) {
     if (!this.sprites) this.sprites = {};
     const cur = this.sprites[id];
-    if (cur && cur.src === url) return;
+    if (cur && cur.ver === ver) return;
     const img = new Image();
     img.onload = () => {
-      const tex = new THREE.Texture(img);
-      tex.needsUpdate = true;
+      const tex = new THREE.CanvasTexture(renderPackFrame(img, mode));
       tex.colorSpace = THREE.SRGBColorSpace;
-      tex.magFilter = THREE.NearestFilter;
+      tex.magFilter = (!mode || mode === 'pixels') ? THREE.NearestFilter : THREE.LinearFilter;
       tex.minFilter = THREE.LinearMipmapLinearFilter;
       if (this.sprites[id] && this.sprites[id].tex) this.sprites[id].tex.dispose();
-      this.sprites[id] = { tex, src: url };
+      this.sprites[id] = { tex, ver };
       this._ensureSpriteRig();
     };
     img.src = url;

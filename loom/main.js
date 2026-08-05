@@ -705,11 +705,13 @@ function loadPacks() {
   for (const [name, pack] of Object.entries(data.packs)) {
     const frames = (pack && pack.frames) || [];
     if (!frames.length) continue;
+    const mode = pack.mode || 'pixels';          // how the cells CONNECT: pixels|rounded|metaball
     SHAPE_PACKS[name] = frames.map((url, i) => {
       const key = 'pack:' + name + ':' + i;
       let id = spriteIds.get(key);
       if (id == null) { id = SPRITE_BASE + spriteIds.size; spriteIds.set(key, id); }
-      if (glr) glr.ensureSpriteImage(id, url);   // idempotent per (id, url); re-upload on change
+      // re-rasterize only when the art or the connector mode actually changed
+      if (glr) glr.ensureSpritePack(id, url, mode, mode + ':' + url.length + ':' + url.slice(-40));
       return id;
     });
   }

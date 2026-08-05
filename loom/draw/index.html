@@ -23,9 +23,14 @@
   button:hover { border-color:var(--acc); }
   button.on { background:var(--acc); color:#06070a; border-color:var(--acc); font-weight:600; }
   select { background:var(--panel); color:var(--ink); border:1px solid var(--edge); border-radius:6px; padding:6px 8px; font:inherit; }
-  #board { width:min(560px, 92vw); aspect-ratio:1; image-rendering:pixelated; touch-action:none;
+  .stage { width:min(560px, 92vw); display:flex; gap:12px; align-items:flex-start; }
+  #board { flex:1 1 auto; aspect-ratio:1; image-rendering:pixelated; touch-action:none;
     border:1px solid var(--edge); border-radius:8px; cursor:crosshair;
     background: repeating-conic-gradient(#15151c 0% 25%, #101016 0% 50%) 0 0 / 12.5% 12.5%; }
+  #preview { width:132px; height:132px; flex:0 0 auto; border:1px solid var(--edge); border-radius:8px;
+    background: repeating-conic-gradient(#15151c 0% 25%, #101016 0% 50%) 0 0 / 25% 25%; }
+  .pvlabel { color:var(--dim); font-size:11px; text-align:center; margin-top:4px; }
+  @media (max-width:640px) { #preview { width:92px; height:92px; } }
   #pal { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
   .sw { width:26px; height:26px; border-radius:6px; border:2px solid transparent; cursor:pointer; padding:0; }
   .sw.on { border-color:#fff; }
@@ -52,7 +57,13 @@
   <button id="delPack" title="delete this pack">delete</button>
 </div>
 
-<canvas id="board" width="32" height="32"></canvas>
+<div class="stage">
+  <canvas id="board" width="32" height="32"></canvas>
+  <div>
+    <canvas id="preview" width="256" height="256"></canvas>
+    <div class="pvlabel">as Loom draws it</div>
+  </div>
+</div>
 
 <div class="row">
   <label style="color:var(--dim)">stroke</label>
@@ -68,6 +79,16 @@
     <option value="xy">xy — quadrants</option>
     <option value="radial">radial — 4-fold turns</option>
   </select>
+</div>
+
+<div class="row">
+  <label style="color:var(--dim)">connect</label>
+  <select id="connectSel">
+    <option value="pixels">pixels — raw grid</option>
+    <option value="rounded">rounded — discs + bridges</option>
+    <option value="metaball">metaball — cells fuse into blobs</option>
+  </select>
+  <span style="color:var(--dim); font-size:12px">how the cells render in Loom (per pack)</span>
 </div>
 
 <div class="row" id="pal"></div>
@@ -87,6 +108,7 @@
 </footer>
 
 <script type="module">
+import { renderPackFrame } from '../packrender.js';
 const KEY = 'loom.shapepacks';
 const S = 32;                                      // grid size (Animal-Crossing-ish)
 const PALETTE = ['#f4f6fb', '#0a0a0a', '#ff5d73', '#ff9d5c', '#ffd166', '#6df0c2', '#56e0ff',
@@ -112,10 +134,26 @@ const wctx = work.getContext('2d', { willReadFrequently: true });
 function loadFrame(i) {
   frameIdx = Math.max(0, Math.min(i, db.packs[packName].frames.length - 1));
   const img = new Image();
-  img.onload = () => { wctx.clearRect(0, 0, S, S); wctx.drawImage(img, 0, 0); paint(); renderFrames(); };
+  img.onload = () => { wctx.clearRect(0, 0, S, S); wctx.drawImage(img, 0, 0); paint(); renderFrames();
+    connectSel.value = packMode(); renderPreview(); };
   img.src = db.packs[packName].frames[frameIdx];
 }
-function commit() { db.packs[packName].frames[frameIdx] = work.toDataURL(); save(); renderFrames(); }
+function commit() { db.packs[packName].frames[frameIdx] = work.toDataURL(); save(); renderFrames(); renderPreview(); }
+
+// ── preview: the working frame through the pack's CONNECTOR mode — the same
+// rasterizer Loom uses, so this is literally what the shape will look like ──────
+const pv = $('#preview'), pvctx = pv.getContext('2d');
+const connectSel = $('#connectSel');
+const packMode = () => db.packs[packName].mode || 'pixels';
+function renderPreview() {
+  const out = renderPackFrame(work, packMode());
+  pvctx.clearRect(0, 0, pv.width, pv.height);
+  pvctx.imageSmoothingEnabled = packMode() !== 'pixels';
+  pvctx.drawImage(out, 0, 0, pv.width, pv.height);
+}
+connectSel.addEventListener('change', () => {
+  db.packs[packName].mode = connectSel.value; save(); renderPreview();
+});
 
 // ── painting ───────────────────────────────────────────────────────────────────
 let color = PALETTE[0], eraser = false, down = false, last = null;
