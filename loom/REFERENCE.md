@@ -78,6 +78,21 @@ stencil instead — its brightness × your colour — so one monochrome drawing 
 cleanly (`.stencil(0.5)` blends the modes). Edits in the draw tab update a running Loom
 tab **live**. Everything else applies: tilt, physics, `meshfill`, `hold`, `id`.
 
+Each pack picks how its cells **connect** when rendered (the editor's *connect* control,
+with a live "as Loom draws it" preview):
+
+| mode | look |
+| --- | --- |
+| `pixels` | the raw chunky grid — Animal-Crossing / QR |
+| `rounded` | a disc per cell + bridges between neighbours — soft QR |
+| `metaball` | cells **fuse into blobs** (diagonals too), so a jagged scribble renders as one organic stroke |
+
+**Rooms** (optional): the editor can join a room — everyone who types the same code
+shares packs live, so a table of people can draw into one performance. It needs the tiny
+`loom-room` Cloudflare Worker deployed (`cd loom-room && npx wrangler deploy`); paste its
+URL into the editor's *room server* field once. Received packs land in the same storage
+as your own, so a running Loom tab picks them up with no extra wiring.
+
 **Imported meshes** (real FBX geometry from `models/`, instanced + depth-tested):
 `bong` · `knot` · `amongus` (alias `sus`) · `balloons` (alias `balloon`) · `chain`.
 Same controls as the 3D shapes — `size`, the rotations, `color`, and `.shade()`

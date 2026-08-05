@@ -57,6 +57,13 @@
   <button id="delPack" title="delete this pack">delete</button>
 </div>
 
+<div class="row">
+  <button id="roomBtn">join room</button>
+  <input type="text" id="roomCode" placeholder="room code" spellcheck="false" style="width:8em" />
+  <input type="text" id="roomHost" placeholder="wss://loom-room.…workers.dev" spellcheck="false" style="width:15em" />
+  <span id="roomStat" style="color:var(--dim); font-size:12px">off</span>
+</div>
+
 <div class="stage">
   <canvas id="board" width="32" height="32"></canvas>
   <div>
@@ -126,7 +133,11 @@ let packName = Object.keys(db.packs)[0] || 'doodles';
 if (!db.packs[packName]) db.packs[packName] = { frames: [blankFrame()] };
 let frameIdx = 0;
 function blankFrame() { const c = document.createElement('canvas'); c.width = c.height = S; return c.toDataURL(); }
-function save() { localStorage.setItem(KEY, JSON.stringify(db)); }
+let applyingRemote = false;      // guard: don't echo a pack we just received back out
+function save() {
+  localStorage.setItem(KEY, JSON.stringify(db));
+  if (!applyingRemote) roomPublish(packName);
+}
 
 // ── the working frame lives in an offscreen canvas ─────────────────────────────
 const work = document.createElement('canvas'); work.width = work.height = S;
@@ -289,6 +300,62 @@ $('#delPack').addEventListener('click', () => {
   if (Object.keys(db.packs).length <= 1) return;
   if (!confirm('Delete pack "' + packName + '"?')) return;
   delete db.packs[packName]; packName = Object.keys(db.packs)[0]; save(); renderPacks(); loadFrame(0);
+});
+
+// ── rooms ──────────────────────────────────────────────────────────────────────
+// Everyone who joins the same room code shares packs live (see /loom-room). Remote
+// packs are written into the SAME localStorage the solo editor uses, so a running
+// Loom tab picks them up through its existing storage-event path — no Loom changes.
+const HOST_KEY = 'loom.roomHost', CODE_KEY = 'loom.roomCode';
+const roomBtn = $('#roomBtn'), roomCodeIn = $('#roomCode'), roomHostIn = $('#roomHost'), roomStat = $('#roomStat');
+roomHostIn.value = localStorage.getItem(HOST_KEY) || '';
+roomCodeIn.value = localStorage.getItem(CODE_KEY) || '';
+let ws = null, peers = 0;
+const setStat = (s) => { roomStat.textContent = s; };
+function roomPublish(name) {
+  if (!ws || ws.readyState !== 1) return;
+  const pack = db.packs[name];
+  if (pack) ws.send(JSON.stringify({ t: 'pack', name, pack }));
+}
+function applyRemotePack(name, pack) {
+  applyingRemote = true;
+  db.packs[name] = pack;
+  localStorage.setItem(KEY, JSON.stringify(db));
+  applyingRemote = false;
+  renderPacks();
+  if (name === packName) loadFrame(frameIdx); else renderFrames();
+}
+function roomJoin() {
+  const host = (roomHostIn.value || '').trim().replace(/\/+$/, '');
+  const code = (roomCodeIn.value || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  if (!host || !code) { setStat('need a server + code'); return; }
+  localStorage.setItem(HOST_KEY, host); localStorage.setItem(CODE_KEY, code);
+  const url = host.replace(/^http/, 'ws') + '/r/' + code;
+  setStat('connecting…');
+  try { ws = new WebSocket(url); } catch { setStat('bad server url'); ws = null; return; }
+  ws.onopen = () => {
+    setStat('in room "' + code + '"');
+    roomBtn.textContent = 'leave room'; roomBtn.classList.add('on');
+    for (const name of Object.keys(db.packs)) roomPublish(name);   // share what we have
+  };
+  ws.onmessage = (e) => {
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    if (m.t === 'state') { for (const [name, pack] of Object.entries(m.packs || {})) applyRemotePack(name, pack); }
+    else if (m.t === 'pack') applyRemotePack(m.name, m.pack);
+    else if (m.t === 'drop') { applyingRemote = true; delete db.packs[m.name];
+      if (!Object.keys(db.packs).length) db.packs[packName] = { frames: [blankFrame()] };
+      localStorage.setItem(KEY, JSON.stringify(db)); applyingRemote = false;
+      if (m.name === packName) { packName = Object.keys(db.packs)[0]; loadFrame(0); }
+      renderPacks(); }
+    else if (m.t === 'peers') { peers = m.n; setStat('in room "' + code + '" · ' + peers + ' here'); }
+  };
+  ws.onclose = () => { ws = null; setStat('disconnected'); roomBtn.textContent = 'join room'; roomBtn.classList.remove('on'); };
+  ws.onerror = () => setStat('connection failed');
+}
+roomBtn.addEventListener('click', () => {
+  if (ws) { try { ws.close(); } catch {} ws = null; setStat('off');
+    roomBtn.textContent = 'join room'; roomBtn.classList.remove('on'); return; }
+  roomJoin();
 });
 
 save();          // ensure the default pack exists on first visit
