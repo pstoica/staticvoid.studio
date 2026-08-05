@@ -24,6 +24,7 @@
     "@mediapipe/tasks-vision": "^1.0.0",
     "@web-kits/audio": "^0.1.0",
     "animejs": "^4.4.1",
+    "qrcode-generator": "^2.0.4",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "three": "^0.184.0"
