@@ -26,17 +26,13 @@
   /* ── stage: canvas owns the leftover space, never reflows ─────────────────── */
   .stage { flex:1 1 auto; min-height:0; position:relative; display:grid; place-items:center;
     padding:8px; container-type:size; }
+  /* the board IS the render: it draws through the pack's connector algorithm, so what
+     you paint on is what Loom will show (a faint grid keeps cells targetable) */
   #board { width:min(100cqw, 100cqh); height:min(100cqw, 100cqh); aspect-ratio:1;
-    image-rendering:pixelated; touch-action:none; cursor:crosshair;
+    touch-action:none; cursor:crosshair;
     border:1px solid var(--edge); border-radius:10px;
     background: repeating-conic-gradient(#15151c 0% 25%, #101016 0% 50%) 0 0 / 12.5% 12.5%; }
-  /* live "as Loom draws it" — updates DURING the stroke, floats so it can't push layout */
-  .pv { position:absolute; top:12px; right:12px; text-align:center; pointer-events:none; }
-  #preview { width:78px; height:78px; border:1px solid var(--edge); border-radius:8px;
-    background:rgba(10,10,14,.72); backdrop-filter:blur(3px); }
-  .pv span { display:block; color:var(--dim); font-size:10px; margin-top:2px; white-space:nowrap; }
-  @media (max-width:520px) { #preview { width:60px; height:60px; } .pv { top:9px; right:9px; }
-    .pv span { display:none; } }
+  #board.pixels { image-rendering:pixelated; }
 
   /* ── controls: ALL inline, always visible, fixed height (no drawer) ───────── */
   .panel { flex:0 0 auto; border-top:1px solid var(--edge); background:var(--panel);
@@ -102,8 +98,7 @@
 </header>
 
 <main class="stage">
-  <canvas id="board" width="32" height="32"></canvas>
-  <div class="pv"><canvas id="preview" width="256" height="256"></canvas><span>as Loom draws it</span></div>
+  <canvas id="board" width="256" height="256"></canvas>
 </main>
 
 <div class="panel">
@@ -123,6 +118,10 @@
     <span class="lbl">connect</span>
     <div class="seg" id="connectSeg">
       <button data-v="pixels" class="on">pixels</button><button data-v="rounded">rounded</button><button data-v="metaball">metaball</button>
+    </div>
+    <span class="lbl">grid</span>
+    <div class="seg" id="gridSeg">
+      <button data-v="16">16</button><button data-v="32" class="on">32</button><button data-v="64">64</button>
     </div>
   </div>
 
@@ -156,13 +155,15 @@ import { renderPackFrame } from '../packrender.js';
 import qrcode from 'qrcode-generator';
 
 const KEY = 'loom.shapepacks';
-const S = 32;
+// FIDELITY is per frame and inferred from the frame image itself, so one pack can mix a
+// chunky 16² key-frame with a detailed 64² one — packrender/Loom read the size the same way.
+let S = 32;
+const SC = 8;                                  // board pixels per cell (render scale)
 const PALETTE = ['#f4f6fb', '#0a0a0a', '#ff5d73', '#ff9d5c', '#ffd166', '#6df0c2', '#56e0ff',
   '#56b6ff', '#b58cff', '#ff8ad1', '#b5179e', '#3a0ca3', '#1b4332', '#6a040f'];
 
 const $ = (s) => document.querySelector(s);
 const board = $('#board'), bctx = board.getContext('2d');
-bctx.imageSmoothingEnabled = false;
 
 // ── storage ────────────────────────────────────────────────────────────────────
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || { v: 1, packs: {} }; } catch { return { v: 1, packs: {} }; } };
@@ -171,7 +172,7 @@ if (!db.packs) db = { v: 1, packs: {} };
 let packName = Object.keys(db.packs)[0] || 'doodles';
 if (!db.packs[packName]) db.packs[packName] = { frames: [blankFrame()] };
 let frameIdx = 0;
-function blankFrame() { const c = document.createElement('canvas'); c.width = c.height = S; return c.toDataURL(); }
+function blankFrame(size) { const c = document.createElement('canvas'); c.width = c.height = size || S; return c.toDataURL(); }
 let applyingRemote = false;
 function save() {
   localStorage.setItem(KEY, JSON.stringify(db));
@@ -184,28 +185,54 @@ const wctx = work.getContext('2d', { willReadFrequently: true });
 function loadFrame(i) {
   frameIdx = Math.max(0, Math.min(i, db.packs[packName].frames.length - 1));
   const img = new Image();
-  img.onload = () => { wctx.clearRect(0, 0, S, S); wctx.drawImage(img, 0, 0); paint(); renderFrames();
-    syncSeg(connectSeg, packMode()); renderPreview(); };
+  img.onload = () => {
+    S = img.width || 32;                       // the frame's own fidelity
+    work.width = work.height = S;
+    wctx.clearRect(0, 0, S, S); wctx.drawImage(img, 0, 0);
+    syncSeg(connectSeg, packMode()); syncSeg(gridSeg, String(S));
+    paint(); renderFrames();
+  };
   img.src = db.packs[packName].frames[frameIdx];
 }
-function commit() { db.packs[packName].frames[frameIdx] = work.toDataURL(); save(); renderFrames(); renderPreview(); }
+function commit() { db.packs[packName].frames[frameIdx] = work.toDataURL(); save(); renderFrames(); }
 
-// ── preview: the same rasterizer Loom uses, updated DURING the stroke ──────────
-// A full-scale metaball pass is ~65k pixels; while a stroke is live we run it at half
-// scale on a rAF tick (never more than one per frame), then do a full pass on release.
-const pv = $('#preview'), pvctx = pv.getContext('2d');
+// ── the BOARD is the render ────────────────────────────────────────────────────
+// It draws through the pack's connector algorithm (the same packrender.js Loom uses), so
+// you paint directly on what the shape will look like. A metaball pass is ~65k pixels, so
+// while a stroke is live we compute at half scale and upscale; full pass on release.
 const packMode = () => db.packs[packName].mode || 'pixels';
-let pvPending = false;
-function renderPreview(quick) {
-  const out = renderPackFrame(work, packMode(), quick ? 4 : 8);
-  pvctx.clearRect(0, 0, pv.width, pv.height);
-  pvctx.imageSmoothingEnabled = packMode() !== 'pixels';
-  pvctx.drawImage(out, 0, 0, pv.width, pv.height);
+let paintPending = false;
+function paint(quick) {
+  const mode = packMode(), W = S * SC;
+  if (board.width !== W) { board.width = board.height = W; }
+  const out = renderPackFrame(work, mode, quick ? SC / 2 : SC);
+  bctx.clearRect(0, 0, W, W);
+  bctx.imageSmoothingEnabled = mode !== 'pixels';
+  bctx.drawImage(out, 0, 0, W, W);
+  board.classList.toggle('pixels', mode === 'pixels');
+  // faint cell grid so you can still aim at individual pixels through the blobs
+  bctx.save();
+  bctx.strokeStyle = 'rgba(255,255,255,0.055)'; bctx.lineWidth = 1;
+  bctx.beginPath();
+  for (let i = 1; i < S; i++) { const p = Math.round(i * SC) + 0.5;
+    bctx.moveTo(p, 0); bctx.lineTo(p, W); bctx.moveTo(0, p); bctx.lineTo(W, p); }
+  bctx.stroke(); bctx.restore();
 }
-function previewSoon() {                       // coalesce to one render per animation frame
-  if (pvPending) return;
-  pvPending = true;
-  requestAnimationFrame(() => { pvPending = false; renderPreview(true); });
+function paintSoon() {                         // coalesce to one render per animation frame
+  if (paintPending) return;
+  paintPending = true;
+  requestAnimationFrame(() => { paintPending = false; paint(true); });
+}
+// resample the current frame to a new fidelity (nearest — keeps the pixel look)
+const gridSeg = $('#gridSeg');
+function setFidelity(n) {
+  if (n === S) return;
+  const tmp = document.createElement('canvas'); tmp.width = tmp.height = n;
+  const tx = tmp.getContext('2d'); tx.imageSmoothingEnabled = false;
+  tx.drawImage(work, 0, 0, n, n);
+  S = n; work.width = work.height = n;
+  wctx.clearRect(0, 0, n, n); wctx.drawImage(tmp, 0, 0);
+  paint(); commit();
 }
 
 // ── segmented controls (inline, tappable, state visible at a glance) ──────────
@@ -220,7 +247,8 @@ function onSeg(seg, fn) {
 let stroke = 'line', mirror = 'off';
 onSeg(strokeSeg, (v) => { stroke = v; });
 onSeg(mirrorSeg, (v) => { mirror = v; });
-onSeg(connectSeg, (v) => { db.packs[packName].mode = v; save(); renderPreview(); });
+onSeg(gridSeg, (v) => setFidelity(+v));
+onSeg(connectSeg, (v) => { db.packs[packName].mode = v; save(); paint(); });
 
 // ── opacity: 10 discrete steps ─────────────────────────────────────────────────
 let alpha = 1;
@@ -287,9 +315,8 @@ function curveSeg(p0, p1, p2, p3) {
     line(prev, q); prev = q;
   }
 }
-function paint() { bctx.clearRect(0, 0, S, S); bctx.drawImage(work, 0, 0); }
 board.addEventListener('pointerdown', (e) => { e.preventDefault(); down = true; board.setPointerCapture(e.pointerId);
-  last = px(e); pts = [last]; plot(...last); paint(); previewSoon(); });
+  last = px(e); pts = [last]; plot(...last); paintSoon(); });
 board.addEventListener('pointermove', (e) => { if (!down) return;
   e.preventDefault();
   const p = px(e);
@@ -298,7 +325,7 @@ board.addEventListener('pointermove', (e) => { if (!down) return;
   else if (stroke === 'line') line(last, p);
   else { pts.push(p); const n = pts.length;
     if (n >= 3) curveSeg(pts[n - 4] || pts[n - 3], pts[n - 3], pts[n - 2], pts[n - 1]); }
-  last = p; paint(); previewSoon(); });
+  last = p; paintSoon(); });
 const up = () => { if (!down) return; down = false;
   if (stroke === 'curve' && pts.length >= 2) {
     const n = pts.length;
@@ -336,11 +363,13 @@ function renderFrames() {
   framesEl.innerHTML = '';
   db.packs[packName].frames.forEach((url, i) => {
     const c = document.createElement('canvas');
-    c.width = c.height = S;
     c.className = i === frameIdx ? 'on' : '';
-    c.title = 'frame ' + i;
-    const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
-    const img = new Image(); img.onload = () => x.drawImage(img, 0, 0); img.src = url;
+    const x = c.getContext('2d');
+    // each frame carries its own fidelity, so size the thumb from the image itself
+    const img = new Image();
+    img.onload = () => { c.width = c.height = img.width; c.title = 'frame ' + i + ' · ' + img.width + '²';
+      x.imageSmoothingEnabled = false; x.drawImage(img, 0, 0); };
+    img.src = url;
     c.addEventListener('click', () => loadFrame(i));
     framesEl.appendChild(c);
   });

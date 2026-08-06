@@ -10,6 +10,7 @@ import { GLRenderer } from './gl/renderer.js';
 import { ensureRapier, rapierReady, PhysWorld } from './physics.js';
 import { ensureTracking, trackingReady, trackingVideo, trackingState, trackTick, setTrackingFlip, getTrackingFlip } from './hands.js';
 import { createEditor } from './editor.js';
+import { renderPackFrame } from './packrender.js';
 import REFERENCE from './REFERENCE.md?raw';   // full cheatsheet text, for the "copy for LLM" button
 
 const $ = (sel) => document.querySelector(sel);
@@ -711,6 +712,9 @@ function spriteIdFor(str) {
 // image sprites through the same instanced-quad path as emoji. The 'storage' event
 // fires when the editor (another tab) saves, so packs live-reload mid-performance.
 const SHAPE_PACKS = {};                          // pack name → [sprite ids, frame order]
+// CPU-side rendered frames, so the Canvas2D renderer can draw packs too (it has no GL
+// sprite textures — without these it fell back to painting the pack NAME as text)
+const spriteCanvases = {}, spriteSmooth = {}, spriteVers = {};
 function loadPacks() {
   let data;
   try { data = JSON.parse(localStorage.getItem('loom.shapepacks') || 'null'); } catch { return; }
@@ -725,7 +729,14 @@ function loadPacks() {
       let id = spriteIds.get(key);
       if (id == null) { id = SPRITE_BASE + spriteIds.size; spriteIds.set(key, id); }
       // re-rasterize only when the art or the connector mode actually changed
-      if (glr) glr.ensureSpritePack(id, url, mode, mode + ':' + url.length + ':' + url.slice(-40));
+      const ver = mode + ':' + url.length + ':' + url.slice(-40);
+      if (glr) glr.ensureSpritePack(id, url, mode, ver);
+      if (spriteVers[id] !== ver) {                // …and keep a CPU copy for the 2D path
+        spriteVers[id] = ver;
+        const im = new Image();
+        im.onload = () => { spriteCanvases[id] = renderPackFrame(im, mode); spriteSmooth[id] = mode !== 'pixels'; };
+        im.src = url;
+      }
       return id;
     });
   }
@@ -1001,11 +1012,17 @@ function drawGlyph(g, p, minDim) {
   g.globalAlpha = Math.max(0, Math.min(1, alpha * p._env));
   g.fillStyle = color; g.strokeStyle = color;
   const zRot = rotTurns * TAU + p.spin * age + p.physRot;   // physRot = rigid-body tumble (0 for non-physics)
-  if (p.sprite) {                                           // emoji sprite (canvas fallback: draw the character)
+  if (p.sprite) {                                           // textured glyph, Canvas2D path
     g.rotate(zRot);
-    g.font = Math.round(sizePx * 2) + 'px system-ui';
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(p.shape, 0, 0);
+    const img = spriteCanvases[p.sprite];
+    if (img) {                                              // drawn pack frame → blit the rendered art
+      g.imageSmoothingEnabled = spriteSmooth[p.sprite] !== false;
+      g.drawImage(img, -sizePx, -sizePx, sizePx * 2, sizePx * 2);
+    } else if (EMOJI_RE.test(p.shape)) {                    // emoji → the character itself
+      g.font = Math.round(sizePx * 2) + 'px system-ui';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(p.shape, 0, 0);
+    }
     g.restore();
     return;
   }

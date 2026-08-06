@@ -735,6 +735,28 @@ function iff(cond, then_, otherwise = silence) {
   return reify(cond).fmap((v) => (+v > 0.5 ? reify(then_) : reify(otherwise))).innerJoin();
 }
 
+// ── patterning helpers: tiling values by WHERE an event falls in the cycle ───────
+// Both are ordinary signals, so they route into any control and compose with
+// pick()/iff()/range() — the point is that a sequence of events (`"dot*64"`) gets an
+// alternating value per event rather than per cycle.
+//   stripes(n)          0/1 alternating n times per cycle — bands
+//   checker(cols, rows) 0/1 in a checkerboard over the SAME cell layout .grid(cols, rows)
+//                       lays out, so .grid(8,8) + checker(8,8) tiles a real chessboard
+// e.g. .color(pick(checker(8,8), ["#111", "#eee"])) · .gate(stripes(6)) · .size(stripes(4).range(.02,.06))
+// (Both read the event's onset phase. `.burst(n)` copies share one onset, so use them
+// with a sequence — "dot*64" — rather than a burst.)
+function stripes(n = 2) {
+  return signal((t) => (Math.floor((((t % 1) + 1) % 1) * n) % 2 === 0 ? 1 : 0));
+}
+function checker(cols = 8, rows = cols) {
+  const c = Math.max(1, Math.round(cols)), r = Math.max(1, Math.round(rows));
+  return signal((t) => {
+    const ph = ((t % 1) + 1) % 1;
+    const cell = Math.min(c * r - 1, Math.floor(ph * c * r + 1e-6));
+    return ((cell % c) + Math.floor(cell / c)) % 2 === 0 ? 1 : 0;
+  });
+}
+
 // random discrete choice, fresh per onset: choose("#fff", "#000") or choose(0, 3, 7)
 function choose(...xs) { return signal((t) => xs[Math.min(xs.length - 1, Math.floor(timeRand(t) * xs.length))]); }
 // random integer in 0..n-1
@@ -1277,7 +1299,7 @@ export const DSL = {
   fast, slow, rev, run, range, mini, euclid,
   shape, s, n, polygon, polyline, choose, irand, pick, iff, osc, env, palette, bg, persp, group, echo, spring, physics, slider, _setBgSink, _setPerspSink,
   $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg, _resetIds, _getIdKeys,
-  sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white,
+  sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white, stripes, checker,
   mouseX, mouseY, mouseDown, _setPointer,
   cc, gate, vel, note, pc, bend, onNote, dev, _midiInput, _midiFrame,
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, flight, gyro, _jug, _jugInput, _jugDecay,
