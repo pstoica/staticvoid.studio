@@ -202,19 +202,29 @@ function commit() { db.packs[packName].frames[frameIdx] = work.toDataURL(); save
 // while a stroke is live we compute at half scale and upscale; full pass on release.
 const packMode = () => db.packs[packName].mode || 'pixels';
 let paintPending = false;
+// `pixels` and `smooth` are LATTICE art (Scale2x output is meant to be shown
+// nearest-neighbour), so they stay razor sharp at a modest scale. `rounded`/`blob` are
+// continuous shapes, so they're rasterized at the board's real device resolution —
+// rendering them small and letting the browser stretch them was the blur.
 function paint() {
-  const mode = packMode(), W = S * SC;
+  const mode = packMode(), lattice = (mode === 'pixels' || mode === 'smooth');
+  const cssW = Math.max(320, board.getBoundingClientRect().width || 480);   // survive a collapsed/hidden layout
+  const devW = Math.round(cssW * (window.devicePixelRatio || 1));
+  // blob is the expensive rasterizer, so it gets a lower ceiling than rounded
+  const target = Math.min(mode === 'metaball' ? 768 : 1100, devW);
+  const sc = lattice ? SC : Math.max(SC, Math.round(target / S));
+  const W = S * sc;
   if (board.width !== W) { board.width = board.height = W; }
-  const out = renderPackFrame(work, mode, SC);
+  const out = renderPackFrame(work, mode, sc);
   bctx.clearRect(0, 0, W, W);
-  bctx.imageSmoothingEnabled = mode !== 'pixels';
+  bctx.imageSmoothingEnabled = !lattice;
   bctx.drawImage(out, 0, 0, W, W);
-  board.classList.toggle('pixels', mode === 'pixels');
+  board.classList.toggle('pixels', lattice);
   // faint cell grid so you can still aim at individual pixels through the blobs
   bctx.save();
   bctx.strokeStyle = 'rgba(255,255,255,0.055)'; bctx.lineWidth = 1;
   bctx.beginPath();
-  for (let i = 1; i < S; i++) { const p = Math.round(i * SC) + 0.5;
+  for (let i = 1; i < S; i++) { const p = Math.round(i * sc) + 0.5;
     bctx.moveTo(p, 0); bctx.lineTo(p, W); bctx.moveTo(0, p); bctx.lineTo(W, p); }
   bctx.stroke(); bctx.restore();
 }

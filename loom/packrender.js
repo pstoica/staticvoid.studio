@@ -95,7 +95,10 @@ export function renderPackFrame(img, mode, scale = 8) {
   // SPLAT, don't scan: each lit cell adds its kernel to the pixels inside its radius,
   // so cost tracks the drawing (lit cells × kernel area) instead of the canvas area —
   // that's what makes a full-resolution pass affordable on every frame.
-  const R = 1.25, RPX = R * SC, T = 0.42, AA = 0.14;
+  // Tight and hard-edged: a lone cell stays about cell-sized (R barely over 1) and the
+  // threshold band is narrow, so blobs hug the art instead of ballooning into soft goo —
+  // diagonals still fuse (their midpoint field ≈0.77 clears T) but only just.
+  const R = 1.15, RPX = R * SC, T = 0.5, AA = 0.05;
   const gsum = new Float32Array(O * O), asum = new Float32Array(O * O);
   const rs = new Float32Array(O * O), gs = new Float32Array(O * O), bs = new Float32Array(O * O);
   for (let cy = 0; cy < S; cy++) for (let cx = 0; cx < S; cx++) {
