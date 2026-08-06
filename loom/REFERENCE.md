@@ -84,8 +84,12 @@ with a live "as Loom draws it" preview):
 | mode | look |
 | --- | --- |
 | `pixels` | the raw chunky grid — Animal-Crossing / QR |
+| `smooth` | **Scale2x/EPX** cascaded — the classic pixel-art upscaler: staircases become clean diagonals, every cell keeps its exact colour (no blur, nothing invented). The one to reach for |
 | `rounded` | a disc per cell + bridges between neighbours — soft QR |
-| `metaball` | cells **fuse into blobs** (diagonals too), so a jagged scribble renders as one organic stroke |
+| `blob` | metaball field: cells **fuse** (diagonals too) into one organic mass |
+
+Frames also carry their own **fidelity** — 8 / 16 / 32 / 64 — so one pack can mix a chunky
+8² glyph with a detailed 64² one.
 
 **Rooms** (optional): the editor can join a room — everyone who types the same code
 shares packs live, so a table of people can draw into one performance. It needs the tiny

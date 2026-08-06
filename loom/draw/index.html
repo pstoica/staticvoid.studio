@@ -106,7 +106,7 @@
   <div class="row">
     <span class="lbl">stroke</span>
     <div class="seg" id="strokeSeg">
-      <button data-v="line" class="on">line</button><button data-v="curve">curve</button><button data-v="dots">dots</button>
+      <button data-v="line" class="on">join</button><button data-v="curve">smooth</button><button data-v="dots">stamp</button>
     </div>
     <span class="lbl">mirror</span>
     <div class="seg" id="mirrorSeg">
@@ -117,11 +117,11 @@
   <div class="row">
     <span class="lbl">connect</span>
     <div class="seg" id="connectSeg">
-      <button data-v="pixels" class="on">pixels</button><button data-v="rounded">rounded</button><button data-v="metaball">metaball</button>
+      <button data-v="pixels" class="on">pixels</button><button data-v="smooth">smooth</button><button data-v="rounded">rounded</button><button data-v="metaball">blob</button>
     </div>
     <span class="lbl">grid</span>
     <div class="seg" id="gridSeg">
-      <button data-v="16">16</button><button data-v="32" class="on">32</button><button data-v="64">64</button>
+      <button data-v="8">8</button><button data-v="16">16</button><button data-v="32" class="on">32</button><button data-v="64">64</button>
     </div>
   </div>
 
@@ -202,10 +202,10 @@ function commit() { db.packs[packName].frames[frameIdx] = work.toDataURL(); save
 // while a stroke is live we compute at half scale and upscale; full pass on release.
 const packMode = () => db.packs[packName].mode || 'pixels';
 let paintPending = false;
-function paint(quick) {
+function paint() {
   const mode = packMode(), W = S * SC;
   if (board.width !== W) { board.width = board.height = W; }
-  const out = renderPackFrame(work, mode, quick ? SC / 2 : SC);
+  const out = renderPackFrame(work, mode, SC);
   bctx.clearRect(0, 0, W, W);
   bctx.imageSmoothingEnabled = mode !== 'pixels';
   bctx.drawImage(out, 0, 0, W, W);
@@ -221,7 +221,7 @@ function paint(quick) {
 function paintSoon() {                         // coalesce to one render per animation frame
   if (paintPending) return;
   paintPending = true;
-  requestAnimationFrame(() => { paintPending = false; paint(true); });
+  requestAnimationFrame(() => { paintPending = false; paint(); });
 }
 // resample the current frame to a new fidelity (nearest — keeps the pixel look)
 const gridSeg = $('#gridSeg');
@@ -323,15 +323,25 @@ board.addEventListener('pointermove', (e) => { if (!down) return;
   if (p[0] === last[0] && p[1] === last[1]) return;
   if (stroke === 'dots') plot(...p);
   else if (stroke === 'line') line(last, p);
-  else { pts.push(p); const n = pts.length;
-    if (n >= 3) curveSeg(pts[n - 4] || pts[n - 3], pts[n - 3], pts[n - 2], pts[n - 1]); }
+  else {
+    // smooth: only take an anchor every few cells, then curve THROUGH them — sampling
+    // every pixel would just reproduce the raw path (which is why this looked identical
+    // to `join` before). Decimating is what actually rounds a wobbly hand stroke.
+    const a = pts[pts.length - 1];
+    if (Math.abs(p[0] - a[0]) + Math.abs(p[1] - a[1]) < 3) return;
+    pts.push(p); const n = pts.length;
+    if (n >= 3) curveSeg(pts[n - 4] || pts[n - 3], pts[n - 3], pts[n - 2], pts[n - 1]);
+  }
   last = p; paintSoon(); });
 const up = () => { if (!down) return; down = false;
   if (stroke === 'curve' && pts.length >= 2) {
+    // finish at the pointer, not at the last decimated anchor
+    const tail = pts[pts.length - 1];
+    if (last && (last[0] !== tail[0] || last[1] !== tail[1])) pts.push(last);
     const n = pts.length;
     curveSeg(pts[n - 3] || pts[n - 2], pts[n - 2], pts[n - 1], pts[n - 1]);
-    paint();
   }
+  paint();
   commit(); };
 board.addEventListener('pointerup', up);
 board.addEventListener('pointercancel', up);
