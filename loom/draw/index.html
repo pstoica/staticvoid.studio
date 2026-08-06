@@ -34,52 +34,71 @@
     background: repeating-conic-gradient(#15151c 0% 25%, #101016 0% 50%) 0 0 / 12.5% 12.5%; }
   #board.pixels { image-rendering:pixelated; }
 
-  /* ── controls: ALL inline, always visible, fixed height (no drawer) ───────── */
+  /* ── controls: ALL inline, always visible, compact enough to fit a phone ───── */
   .panel { flex:0 0 auto; border-top:1px solid var(--edge); background:var(--panel);
-    padding:7px 0 calc(7px + var(--safe-b)); display:flex; flex-direction:column; gap:7px; }
-  .row { display:flex; gap:7px; align-items:center; padding:0 10px; overflow-x:auto;
-    overflow-y:hidden; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
-  .row::-webkit-scrollbar { display:none; }
-  .row > .lbl { flex:0 0 auto; color:var(--dim); font-size:10.5px; text-transform:uppercase;
-    letter-spacing:.06em; width:3.6em; }
-  .seg { flex:0 0 auto; display:inline-flex; border:1px solid var(--edge); border-radius:9px; overflow:hidden; }
-  .seg button { min-height:36px; padding:0 11px; border:0; border-right:1px solid var(--edge);
-    background:transparent; color:var(--dim); font:inherit; border-radius:0; cursor:pointer; }
-  .seg button:last-child { border-right:0; }
+    padding:8px 10px calc(8px + var(--safe-b)); display:flex; flex-direction:column;
+    align-items:center; gap:8px; }
+  /* on a wide screen the controls sit in a column instead of stretching to the window */
+  .panel > * { width:100%; max-width:720px; }
+  .row { display:flex; gap:6px; align-items:center; }
+  .row.wrap { flex-wrap:wrap; }
+  .row.scroll { overflow-x:auto; overflow-y:hidden; scrollbar-width:none;
+    -webkit-overflow-scrolling:touch; margin:0 -10px; padding:0 10px; }
+  .row.scroll::-webkit-scrollbar { display:none; }
+  .grow { flex:1 1 auto; min-width:0; }
+
+  /* segmented groups fill the width evenly instead of overflowing off-screen */
+  .seg { display:flex; flex:1 1 auto; min-width:0; background:#0c0c12;
+    border:1px solid var(--edge); border-radius:10px; padding:2px; gap:2px; }
+  .seg.tight { flex:0 0 auto; }
+  .seg.tight button { flex:0 0 auto; min-width:34px; padding:0 9px; }
+  .seg button { flex:1 1 0; min-width:0; height:32px; padding:0 6px; border:0; border-radius:8px;
+    background:transparent; color:var(--dim); font:inherit; font-size:11.5px; cursor:pointer;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .seg button.on { background:var(--acc); color:#06070a; font-weight:600; }
 
-  .sw { flex:0 0 auto; width:var(--tap); height:var(--tap); border-radius:10px;
-    border:2px solid transparent; padding:0; cursor:pointer; }
+  /* palette: circles that wrap to a tidy block — every colour visible, nothing cut off */
+  #pal { display:grid; grid-template-columns:repeat(auto-fit, minmax(34px, 1fr)); gap:6px;
+    justify-items:center; }
+  .sw { width:34px; height:34px; border-radius:50%; border:2px solid transparent;
+    padding:0; cursor:pointer; box-shadow:0 0 0 1px rgba(255,255,255,.08) inset; }
   .sw.on { border-color:#fff; }
-  .sw.eraser { background: repeating-conic-gradient(#333 0% 25%, #191919 0% 50%) 0 0 / 50% 50%; }
-  input[type="color"] { flex:0 0 auto; width:var(--tap); height:var(--tap); border:none; padding:0;
-    background:none; cursor:pointer; }
+  .sw.eraser { background: repeating-conic-gradient(#3a3a44 0% 25%, #17171d 0% 50%) 0 0 / 50% 50%; }
+  input[type="color"] { width:34px; height:34px; border:none; padding:0;
+    background:none; cursor:pointer; border-radius:50%; }
 
-  /* opacity: 10 discrete steps you can hit with a thumb */
-  .ops { flex:0 0 auto; display:inline-flex; gap:3px; }
-  .ops button { width:26px; height:34px; padding:0; border:1px solid var(--edge); border-radius:6px;
-    background:#0c0c12; cursor:pointer; position:relative; overflow:hidden; }
+  /* alpha: 10 steps, sized to span the row exactly */
+  .ops { display:flex; flex:1 1 auto; gap:3px; }
+  .ops button { flex:1 1 0; min-width:0; height:24px; padding:0; border:1px solid var(--edge);
+    border-radius:6px; cursor:pointer; position:relative; overflow:hidden;
+    background: repeating-conic-gradient(#2a2a33 0% 25%, #16161c 0% 50%) 0 0 / 8px 8px; }
   .ops button i { position:absolute; inset:0; background:var(--ink); display:block; }
   .ops button.on { border-color:var(--acc); box-shadow:0 0 0 1px var(--acc) inset; }
 
-  #frames canvas { flex:0 0 auto; width:44px; height:44px; image-rendering:pixelated;
+  #frames { display:flex; gap:6px; align-items:center; }
+  #frames canvas { flex:0 0 auto; width:38px; height:38px; image-rendering:pixelated;
     border:2px solid var(--edge); border-radius:8px; cursor:pointer;
     background: repeating-conic-gradient(#15151c 0% 25%, #101016 0% 50%) 0 0 / 25% 25%; }
   #frames canvas.on { border-color:var(--acc); }
 
   button, select, input[type="text"] { font:inherit; color:var(--ink); background:var(--panel);
-    border:1px solid var(--edge); border-radius:8px; }
-  .btn { flex:0 0 auto; min-height:36px; padding:0 11px; cursor:pointer; touch-action:manipulation; }
+    border:1px solid var(--edge); border-radius:9px; }
+  .btn { flex:0 0 auto; height:34px; padding:0 10px; font-size:11.5px; cursor:pointer;
+    touch-action:manipulation; }
   .btn:active, .btn.on { border-color:var(--acc); }
   .btn.on { background:var(--acc); color:#06070a; font-weight:600; }
-  select { min-height:34px; padding:0 8px; }
-  input[type="text"] { min-height:36px; padding:0 10px; }
+  .btn.icon { width:34px; padding:0; font-size:14px; }
+  select { height:34px; padding:0 6px; font-size:12px; max-width:40vw; }
+  input[type="text"] { height:34px; padding:0 10px; font-size:12px; }
 
   /* room setup — rare, so it's a compact inline strip you toggle, not a drawer of brushes */
-  .room { display:none; }
-  .room.open { display:flex; flex-wrap:wrap; }
-  #qr { width:120px; height:120px; image-rendering:pixelated; border-radius:8px;
-    background:#fff; padding:6px; flex:0 0 auto; }
+  .room { display:none; flex-direction:column; gap:6px; border-top:1px solid var(--edge);
+    padding-top:8px; margin-top:1px; }
+  .room.open { display:flex; }
+  .qrrow { display:none; align-items:center; gap:10px; }
+  .qrrow.on { display:flex; }
+  #qr { width:96px; height:96px; image-rendering:pixelated; border-radius:8px;
+    background:#fff; padding:5px; flex:0 0 auto; }
   .dot { width:8px; height:8px; border-radius:50%; background:#444; flex:0 0 auto; }
   .dot.on { background:#6df0c2; }
   .hint { color:var(--dim); font-size:11px; }
@@ -102,51 +121,54 @@
 </main>
 
 <div class="panel">
-  <!-- brush: every control you touch mid-drawing is right here -->
+  <!-- brush: every control you touch mid-drawing, sized to fit the screen -->
   <div class="row">
-    <span class="lbl">stroke</span>
     <div class="seg" id="strokeSeg">
       <button data-v="line" class="on">join</button><button data-v="curve">smooth</button><button data-v="dots">stamp</button>
     </div>
-    <span class="lbl">mirror</span>
-    <div class="seg" id="mirrorSeg">
-      <button data-v="off" class="on">off</button><button data-v="x">x</button><button data-v="xy">xy</button><button data-v="radial">✳</button>
+    <div class="seg tight" id="mirrorSeg">
+      <button data-v="off" class="on" title="no mirror">◻</button><button data-v="x" title="mirror left/right">◧</button><button data-v="xy" title="mirror quadrants">⊞</button><button data-v="radial" title="4-fold radial">✳</button>
     </div>
   </div>
 
   <div class="row">
-    <span class="lbl">connect</span>
     <div class="seg" id="connectSeg">
-      <button data-v="pixels" class="on">pixels</button><button data-v="smooth">smooth</button><button data-v="rounded">rounded</button><button data-v="metaball">blob</button>
+      <button data-v="pixels" class="on">pixels</button><button data-v="smooth">smooth</button><button data-v="rounded">round</button><button data-v="metaball">blob</button>
     </div>
-    <span class="lbl">grid</span>
-    <div class="seg" id="gridSeg">
+  </div>
+
+  <div class="row">
+    <div class="seg tight" id="gridSeg">
       <button data-v="8">8</button><button data-v="16">16</button><button data-v="32" class="on">32</button><button data-v="64">64</button>
     </div>
+    <div class="ops" id="ops" title="brush opacity"></div>
   </div>
 
-  <div class="row">
-    <span class="lbl">alpha</span>
-    <div class="ops" id="ops"></div>
-  </div>
+  <div id="pal"></div>
 
-  <div class="row" id="pal"></div>
-  <div class="row" id="frames"></div>
-
-  <div class="row">
-    <button class="btn" id="dupFrame">dup</button>
-    <button class="btn" id="delFrame">del frame</button>
+  <div class="row scroll">
+    <div id="frames"></div>
+    <span class="grow"></span>
+    <button class="btn icon" id="dupFrame" title="duplicate frame">⧉</button>
+    <button class="btn icon" id="delFrame" title="delete this frame">⊖</button>
     <button class="btn" id="clearFrame">clear</button>
     <button class="btn" id="delPack">del pack</button>
-    <span class="hint">in Loom: <code id="nameHint">shape("pack")</code></span>
   </div>
 
-  <div class="row room" id="roomRow">
-    <input type="text" id="roomCode" placeholder="room code" spellcheck="false" autocapitalize="off" style="width:8.5em" />
-    <button class="btn" id="roomBtn">join</button>
-    <input type="text" id="roomHost" placeholder="wss://loom-room.…workers.dev" spellcheck="false" autocapitalize="off" style="flex:1 1 12em; min-width:9em" />
-    <span class="hint" id="roomStat">off</span>
-    <canvas id="qr" width="120" height="120"></canvas>
+  <div class="room" id="roomRow">
+    <div class="row">
+      <input type="text" id="roomCode" class="grow" placeholder="room code" spellcheck="false" autocapitalize="off" />
+      <button class="btn" id="roomBtn">join</button>
+      <span class="hint" id="roomStat">off</span>
+    </div>
+    <div class="row">
+      <input type="text" id="roomHost" class="grow" placeholder="wss://loom-room.…workers.dev" spellcheck="false" autocapitalize="off" />
+    </div>
+    <div class="qrrow" id="qrRow">
+      <canvas id="qr" width="96" height="96"></canvas>
+      <span class="hint">scan to join this room from another phone</span>
+    </div>
+    <div class="row"><span class="hint">in Loom: <code id="nameHint">shape("pack")</code></span></div>
   </div>
 </div>
 
@@ -270,12 +292,26 @@ function renderOps() {
     const b = document.createElement('button');
     b.title = Math.round(a * 100) + '%';
     b.className = Math.abs(a - alpha) < 0.001 ? 'on' : '';
-    const bar = document.createElement('i'); bar.style.opacity = String(a);
+    const bar = document.createElement('i');
+    bar.style.background = eraser ? '#8b8b95' : color;      // the brush colour, at this opacity
+    bar.style.opacity = String(a);
     b.appendChild(bar);
     b.addEventListener('click', () => { alpha = a; renderOps(); });
     opsEl.appendChild(b);
   }
 }
+// scrub: press and slide along the strip instead of hunting for one narrow step
+let opsDown = false;
+const opsPick = (e) => {
+  const r = opsEl.getBoundingClientRect();
+  const i = Math.round(((e.clientX - r.left) / r.width) * 10 + 0.5);
+  const a = Math.max(1, Math.min(10, i)) / 10;
+  if (a !== alpha) { alpha = a; renderOps(); }
+};
+opsEl.addEventListener('pointerdown', (e) => { opsDown = true; opsEl.setPointerCapture(e.pointerId); opsPick(e); });
+opsEl.addEventListener('pointermove', (e) => { if (opsDown) opsPick(e); });
+opsEl.addEventListener('pointerup', () => { opsDown = false; });
+opsEl.addEventListener('pointercancel', () => { opsDown = false; });
 
 // ── painting ───────────────────────────────────────────────────────────────────
 let color = PALETTE[0], eraser = false, down = false, last = null, pts = [];
@@ -364,7 +400,7 @@ function renderPal() {
     const b = document.createElement('button');
     b.className = 'sw' + (!eraser && c === color ? ' on' : '');
     b.style.background = c;
-    b.addEventListener('click', () => { color = c; eraser = false; renderPal(); });
+    b.addEventListener('click', () => { color = c; eraser = false; renderPal(); renderOps(); });
     pal.appendChild(b);
   }
   const custom = document.createElement('input');
@@ -373,7 +409,7 @@ function renderPal() {
   pal.appendChild(custom);
   const er = document.createElement('button');
   er.className = 'sw eraser' + (eraser ? ' on' : ''); er.title = 'eraser';
-  er.addEventListener('click', () => { eraser = !eraser; renderPal(); });
+  er.addEventListener('click', () => { eraser = !eraser; renderPal(); renderOps(); });
   pal.appendChild(er);
 }
 
@@ -413,7 +449,7 @@ function renderPacks() {
     o.value = o.textContent = name; o.selected = name === packName;
     packSel.appendChild(o);
   }
-  nameHint.textContent = 'shape("' + packName + '")';
+  if (nameHint) nameHint.textContent = 'shape("' + packName + '")';
 }
 packSel.addEventListener('change', () => { packName = packSel.value; loadFrame(0); renderPacks(); });
 $('#newPack').addEventListener('click', () => {
@@ -498,8 +534,9 @@ function renderQR() {
   const host = (roomHostIn.value || '').trim(), code = (roomCodeIn.value || '').trim();
   const x = qrCanvas.getContext('2d');
   x.clearRect(0, 0, qrCanvas.width, qrCanvas.height);
-  if (!host || !code) { qrCanvas.style.opacity = '0.25'; return; }
-  qrCanvas.style.opacity = '1';
+  const qrRow = $('#qrRow');
+  if (!host || !code) { qrRow.classList.remove('on'); return; }
+  qrRow.classList.add('on');
   const link = location.origin + location.pathname + '?room=' + encodeURIComponent(code)
     + '&host=' + encodeURIComponent(host);
   const qr = qrcode(0, 'L'); qr.addData(link); qr.make();
