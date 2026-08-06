@@ -7,91 +7,87 @@
 <title>Loom · draw — shape packs</title>
 <style>
   :root { --bg:#0a0a0c; --panel:#111118; --ink:#e9e9ea; --dim:#8b8b95; --edge:#26262e; --acc:#56b6ff;
-    --tap:44px;                                  /* minimum touch target */
-    --safe-b: env(safe-area-inset-bottom, 0px); }
+    --tap:42px; --safe-b: env(safe-area-inset-bottom, 0px); }
   * { box-sizing:border-box; margin:0; -webkit-tap-highlight-color:transparent; }
   html, body { height:100%; overscroll-behavior:none; }
-  body { background:var(--bg); color:var(--ink); font:14px/1.4 "SF Mono", ui-monospace, Menlo, monospace;
+  body { background:var(--bg); color:var(--ink); font:13px/1.35 "SF Mono", ui-monospace, Menlo, monospace;
     display:flex; flex-direction:column; height:100dvh; overflow:hidden;
     -webkit-user-select:none; user-select:none; touch-action:manipulation; }
 
-  /* ── header: compact, never moves ─────────────────────────────────────────── */
-  header { flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:8px 10px;
-    padding-top:calc(8px + env(safe-area-inset-top, 0px)); border-bottom:1px solid var(--edge); }
-  header h1 { font-size:15px; letter-spacing:0.02em; white-space:nowrap; }
+  /* ── header ───────────────────────────────────────────────────────────────── */
+  header { flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:7px 10px;
+    padding-top:calc(7px + env(safe-area-inset-top, 0px)); border-bottom:1px solid var(--edge); }
+  header h1 { font-size:14px; white-space:nowrap; }
   header h1 a { color:var(--ink); text-decoration:none; }
   header h1 span { color:var(--acc); }
   header .spacer { flex:1 1 auto; }
-  #packSel { max-width:38vw; }
+  #packSel { max-width:34vw; }
 
-  /* ── stage: the canvas owns the space and NEVER reflows ───────────────────── */
-  .stage { flex:1 1 auto; min-height:0; position:relative; display:grid; place-items:center; padding:10px;
-    container-type:size; }
-  /* the largest square that fits the stage, in EITHER orientation (container units know
-     both axes — height:100% + max-width would clamp one side and un-square the board) */
+  /* ── stage: canvas owns the leftover space, never reflows ─────────────────── */
+  .stage { flex:1 1 auto; min-height:0; position:relative; display:grid; place-items:center;
+    padding:8px; container-type:size; }
   #board { width:min(100cqw, 100cqh); height:min(100cqw, 100cqh); aspect-ratio:1;
     image-rendering:pixelated; touch-action:none; cursor:crosshair;
     border:1px solid var(--edge); border-radius:10px;
     background: repeating-conic-gradient(#15151c 0% 25%, #101016 0% 50%) 0 0 / 12.5% 12.5%; }
-  /* live "as Loom draws it" thumb — floats over the stage so it can't push layout */
-  .pv { position:absolute; top:14px; right:14px; text-align:center; pointer-events:none; opacity:0.95; }
-  #preview { width:76px; height:76px; border:1px solid var(--edge); border-radius:8px;
+  /* live "as Loom draws it" — updates DURING the stroke, floats so it can't push layout */
+  .pv { position:absolute; top:12px; right:12px; text-align:center; pointer-events:none; }
+  #preview { width:78px; height:78px; border:1px solid var(--edge); border-radius:8px;
     background:rgba(10,10,14,.72); backdrop-filter:blur(3px); }
   .pv span { display:block; color:var(--dim); font-size:10px; margin-top:2px; white-space:nowrap; }
-  /* fade the thumb while a stroke is in progress so it never hides what you're drawing */
-  body.drawing .pv { opacity:0.25; transition:opacity .12s; }
-  @media (max-width:520px) { #preview { width:56px; height:56px; } .pv { top:10px; right:10px; }
+  @media (max-width:520px) { #preview { width:60px; height:60px; } .pv { top:9px; right:9px; }
     .pv span { display:none; } }
 
-  /* ── dock: palette + frames, always in thumb reach, fixed height ──────────── */
-  .dock { flex:0 0 auto; border-top:1px solid var(--edge); background:var(--panel);
-    padding:8px 0 calc(8px + var(--safe-b)); display:flex; flex-direction:column; gap:8px; }
-  .strip { display:flex; gap:8px; align-items:center; overflow-x:auto; overflow-y:hidden;
-    padding:0 10px; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
-  .strip::-webkit-scrollbar { display:none; }
-  .sw { flex:0 0 auto; width:var(--tap); height:var(--tap); border-radius:10px; border:2px solid transparent;
-    padding:0; cursor:pointer; }
+  /* ── controls: ALL inline, always visible, fixed height (no drawer) ───────── */
+  .panel { flex:0 0 auto; border-top:1px solid var(--edge); background:var(--panel);
+    padding:7px 0 calc(7px + var(--safe-b)); display:flex; flex-direction:column; gap:7px; }
+  .row { display:flex; gap:7px; align-items:center; padding:0 10px; overflow-x:auto;
+    overflow-y:hidden; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+  .row::-webkit-scrollbar { display:none; }
+  .row > .lbl { flex:0 0 auto; color:var(--dim); font-size:10.5px; text-transform:uppercase;
+    letter-spacing:.06em; width:3.6em; }
+  .seg { flex:0 0 auto; display:inline-flex; border:1px solid var(--edge); border-radius:9px; overflow:hidden; }
+  .seg button { min-height:36px; padding:0 11px; border:0; border-right:1px solid var(--edge);
+    background:transparent; color:var(--dim); font:inherit; border-radius:0; cursor:pointer; }
+  .seg button:last-child { border-right:0; }
+  .seg button.on { background:var(--acc); color:#06070a; font-weight:600; }
+
+  .sw { flex:0 0 auto; width:var(--tap); height:var(--tap); border-radius:10px;
+    border:2px solid transparent; padding:0; cursor:pointer; }
   .sw.on { border-color:#fff; }
   .sw.eraser { background: repeating-conic-gradient(#333 0% 25%, #191919 0% 50%) 0 0 / 50% 50%; }
   input[type="color"] { flex:0 0 auto; width:var(--tap); height:var(--tap); border:none; padding:0;
     background:none; cursor:pointer; }
-  #frames canvas { flex:0 0 auto; width:46px; height:46px; image-rendering:pixelated;
+
+  /* opacity: 10 discrete steps you can hit with a thumb */
+  .ops { flex:0 0 auto; display:inline-flex; gap:3px; }
+  .ops button { width:26px; height:34px; padding:0; border:1px solid var(--edge); border-radius:6px;
+    background:#0c0c12; cursor:pointer; position:relative; overflow:hidden; }
+  .ops button i { position:absolute; inset:0; background:var(--ink); display:block; }
+  .ops button.on { border-color:var(--acc); box-shadow:0 0 0 1px var(--acc) inset; }
+
+  #frames canvas { flex:0 0 auto; width:44px; height:44px; image-rendering:pixelated;
     border:2px solid var(--edge); border-radius:8px; cursor:pointer;
     background: repeating-conic-gradient(#15151c 0% 25%, #101016 0% 50%) 0 0 / 25% 25%; }
   #frames canvas.on { border-color:var(--acc); }
 
-  /* ── controls ─────────────────────────────────────────────────────────────── */
   button, select, input[type="text"] { font:inherit; color:var(--ink); background:var(--panel);
     border:1px solid var(--edge); border-radius:8px; }
-  button { min-height:var(--tap); padding:0 14px; cursor:pointer; touch-action:manipulation; }
-  button.slim { min-height:34px; padding:0 10px; }
-  button:active { border-color:var(--acc); }
-  button.on { background:var(--acc); color:#06070a; border-color:var(--acc); font-weight:600; }
-  select { min-height:var(--tap); padding:0 8px; }
-  input[type="text"] { min-height:var(--tap); padding:0 10px; }
+  .btn { flex:0 0 auto; min-height:36px; padding:0 11px; cursor:pointer; touch-action:manipulation; }
+  .btn:active, .btn.on { border-color:var(--acc); }
+  .btn.on { background:var(--acc); color:#06070a; font-weight:600; }
+  select { min-height:34px; padding:0 8px; }
+  input[type="text"] { min-height:36px; padding:0 10px; }
 
-  /* ── sheet: everything secondary, slides over — never resizes the canvas ──── */
-  .scrim { position:fixed; inset:0; background:rgba(0,0,0,.5); opacity:0; pointer-events:none;
-    transition:opacity .18s ease; z-index:5; }
-  .scrim.open { opacity:1; pointer-events:auto; }
-  .sheet { position:fixed; left:0; right:0; bottom:0; z-index:6; background:var(--panel);
-    border-top:1px solid var(--edge); border-radius:14px 14px 0 0;
-    padding:10px 14px calc(16px + var(--safe-b)); max-height:78dvh; overflow-y:auto;
-    transform:translateY(101%); transition:transform .22s cubic-bezier(.2,.7,.3,1); }
-  .sheet.open { transform:none; }
-  .grab { width:40px; height:4px; border-radius:2px; background:var(--edge); margin:2px auto 10px; }
-  .sheet h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim);
-    margin:14px 0 6px; font-weight:600; }
-  .sheet h2:first-of-type { margin-top:0; }
-  .field { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
-  .field label { color:var(--dim); font-size:12px; min-width:4.2em; }
-  .field select, .field input[type="text"] { flex:1 1 10em; min-width:0; }
-  .note { color:var(--dim); font-size:11.5px; line-height:1.5; }
-  .note code { color:var(--ink); background:#0c0c12; padding:1px 5px; border-radius:4px; }
-  #qr { display:block; margin:8px auto 0; width:172px; height:172px; image-rendering:pixelated;
-    border-radius:8px; background:#fff; padding:8px; }
+  /* room setup — rare, so it's a compact inline strip you toggle, not a drawer of brushes */
+  .room { display:none; }
+  .room.open { display:flex; flex-wrap:wrap; }
+  #qr { width:120px; height:120px; image-rendering:pixelated; border-radius:8px;
+    background:#fff; padding:6px; flex:0 0 auto; }
   .dot { width:8px; height:8px; border-radius:50%; background:#444; flex:0 0 auto; }
   .dot.on { background:#6df0c2; }
+  .hint { color:var(--dim); font-size:11px; }
+  .hint code { color:var(--ink); background:#0c0c12; padding:1px 4px; border-radius:4px; }
 </style>
 </head>
 <body>
@@ -99,9 +95,10 @@
 <header>
   <h1><a href="../">Loom</a><span>·draw</span></h1>
   <select id="packSel" aria-label="pack"></select>
+  <button class="btn" id="newPack" title="new pack">+pack</button>
   <span class="spacer"></span>
-  <span class="dot" id="roomDot" title="room"></span>
-  <button class="slim" id="toolsBtn">tools</button>
+  <span class="dot" id="roomDot"></span>
+  <button class="btn" id="roomToggle">room</button>
 </header>
 
 <main class="stage">
@@ -109,79 +106,57 @@
   <div class="pv"><canvas id="preview" width="256" height="256"></canvas><span>as Loom draws it</span></div>
 </main>
 
-<div class="dock">
-  <div class="strip" id="pal"></div>
-  <div class="strip" id="frames"></div>
+<div class="panel">
+  <!-- brush: every control you touch mid-drawing is right here -->
+  <div class="row">
+    <span class="lbl">stroke</span>
+    <div class="seg" id="strokeSeg">
+      <button data-v="line" class="on">line</button><button data-v="curve">curve</button><button data-v="dots">dots</button>
+    </div>
+    <span class="lbl">mirror</span>
+    <div class="seg" id="mirrorSeg">
+      <button data-v="off" class="on">off</button><button data-v="x">x</button><button data-v="xy">xy</button><button data-v="radial">✳</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <span class="lbl">connect</span>
+    <div class="seg" id="connectSeg">
+      <button data-v="pixels" class="on">pixels</button><button data-v="rounded">rounded</button><button data-v="metaball">metaball</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <span class="lbl">alpha</span>
+    <div class="ops" id="ops"></div>
+  </div>
+
+  <div class="row" id="pal"></div>
+  <div class="row" id="frames"></div>
+
+  <div class="row">
+    <button class="btn" id="dupFrame">dup</button>
+    <button class="btn" id="delFrame">del frame</button>
+    <button class="btn" id="clearFrame">clear</button>
+    <button class="btn" id="delPack">del pack</button>
+    <span class="hint">in Loom: <code id="nameHint">shape("pack")</code></span>
+  </div>
+
+  <div class="row room" id="roomRow">
+    <input type="text" id="roomCode" placeholder="room code" spellcheck="false" autocapitalize="off" style="width:8.5em" />
+    <button class="btn" id="roomBtn">join</button>
+    <input type="text" id="roomHost" placeholder="wss://loom-room.…workers.dev" spellcheck="false" autocapitalize="off" style="flex:1 1 12em; min-width:9em" />
+    <span class="hint" id="roomStat">off</span>
+    <canvas id="qr" width="120" height="120"></canvas>
+  </div>
 </div>
-
-<div class="scrim" id="scrim"></div>
-<section class="sheet" id="sheet" aria-label="tools">
-  <div class="grab"></div>
-
-  <h2>brush</h2>
-  <div class="field">
-    <label for="strokeSel">stroke</label>
-    <select id="strokeSel">
-      <option value="line">line — straight connect</option>
-      <option value="curve">curve — smooth connect</option>
-      <option value="dots">dots — no connect</option>
-    </select>
-  </div>
-  <div class="field">
-    <label for="mirrorSel">mirror</label>
-    <select id="mirrorSel">
-      <option value="off">off</option>
-      <option value="x">x — left / right</option>
-      <option value="xy">xy — quadrants</option>
-      <option value="radial">radial — 4-fold</option>
-    </select>
-  </div>
-  <div class="field">
-    <label for="connectSel">connect</label>
-    <select id="connectSel">
-      <option value="pixels">pixels — raw grid</option>
-      <option value="rounded">rounded — discs + bridges</option>
-      <option value="metaball">metaball — cells fuse</option>
-    </select>
-  </div>
-  <div class="note">how this pack's cells render in Loom — the thumbnail shows it live.</div>
-
-  <h2>frames</h2>
-  <div class="field">
-    <button id="addFrame">+ frame</button>
-    <button id="dupFrame">duplicate</button>
-    <button id="delFrame">delete</button>
-    <button id="clearFrame">clear</button>
-  </div>
-
-  <h2>packs</h2>
-  <div class="field">
-    <input type="text" id="packName" placeholder="new pack name" spellcheck="false" autocapitalize="off" />
-    <button id="newPack">create</button>
-    <button id="delPack">delete pack</button>
-  </div>
-  <div class="note">in Loom: <code>shape("<span id="nameHint">pack</span>")</code> — frames with
-    <code>.n("0 1 2")</code>, recolour with <code>.color(…).stencil(1)</code>. saves as you draw.</div>
-
-  <h2>room <span id="roomStat" style="text-transform:none;letter-spacing:0">off</span></h2>
-  <div class="field">
-    <input type="text" id="roomCode" placeholder="room code" spellcheck="false" autocapitalize="off" />
-    <button id="roomBtn">join</button>
-  </div>
-  <div class="field">
-    <label for="roomHost">server</label>
-    <input type="text" id="roomHost" placeholder="wss://loom-room.…workers.dev" spellcheck="false" autocapitalize="off" />
-  </div>
-  <div class="note">everyone in a room shares packs live. scan to join from a phone:</div>
-  <canvas id="qr" width="172" height="172"></canvas>
-</section>
 
 <script type="module">
 import { renderPackFrame } from '../packrender.js';
 import qrcode from 'qrcode-generator';
 
 const KEY = 'loom.shapepacks';
-const S = 32;                                      // grid size (Animal-Crossing-ish)
+const S = 32;
 const PALETTE = ['#f4f6fb', '#0a0a0a', '#ff5d73', '#ff9d5c', '#ffd166', '#6df0c2', '#56e0ff',
   '#56b6ff', '#b58cff', '#ff8ad1', '#b5179e', '#3a0ca3', '#1b4332', '#6a040f'];
 
@@ -197,7 +172,7 @@ let packName = Object.keys(db.packs)[0] || 'doodles';
 if (!db.packs[packName]) db.packs[packName] = { frames: [blankFrame()] };
 let frameIdx = 0;
 function blankFrame() { const c = document.createElement('canvas'); c.width = c.height = S; return c.toDataURL(); }
-let applyingRemote = false;      // guard: don't echo a pack we just received back out
+let applyingRemote = false;
 function save() {
   localStorage.setItem(KEY, JSON.stringify(db));
   if (!applyingRemote) roomPublish(packName);
@@ -210,41 +185,77 @@ function loadFrame(i) {
   frameIdx = Math.max(0, Math.min(i, db.packs[packName].frames.length - 1));
   const img = new Image();
   img.onload = () => { wctx.clearRect(0, 0, S, S); wctx.drawImage(img, 0, 0); paint(); renderFrames();
-    connectSel.value = packMode(); renderPreview(); };
+    syncSeg(connectSeg, packMode()); renderPreview(); };
   img.src = db.packs[packName].frames[frameIdx];
 }
 function commit() { db.packs[packName].frames[frameIdx] = work.toDataURL(); save(); renderFrames(); renderPreview(); }
 
-// ── preview: the working frame through the pack's CONNECTOR mode — the same
-// rasterizer Loom uses, so this is literally what the shape will look like ──────
+// ── preview: the same rasterizer Loom uses, updated DURING the stroke ──────────
+// A full-scale metaball pass is ~65k pixels; while a stroke is live we run it at half
+// scale on a rAF tick (never more than one per frame), then do a full pass on release.
 const pv = $('#preview'), pvctx = pv.getContext('2d');
-const connectSel = $('#connectSel');
 const packMode = () => db.packs[packName].mode || 'pixels';
-function renderPreview() {
-  const out = renderPackFrame(work, packMode());
+let pvPending = false;
+function renderPreview(quick) {
+  const out = renderPackFrame(work, packMode(), quick ? 4 : 8);
   pvctx.clearRect(0, 0, pv.width, pv.height);
   pvctx.imageSmoothingEnabled = packMode() !== 'pixels';
   pvctx.drawImage(out, 0, 0, pv.width, pv.height);
 }
-connectSel.addEventListener('change', () => {
-  db.packs[packName].mode = connectSel.value; save(); renderPreview();
-});
+function previewSoon() {                       // coalesce to one render per animation frame
+  if (pvPending) return;
+  pvPending = true;
+  requestAnimationFrame(() => { pvPending = false; renderPreview(true); });
+}
+
+// ── segmented controls (inline, tappable, state visible at a glance) ──────────
+const strokeSeg = $('#strokeSeg'), mirrorSeg = $('#mirrorSeg'), connectSeg = $('#connectSeg');
+function syncSeg(seg, v) { for (const b of seg.children) b.classList.toggle('on', b.dataset.v === v); }
+function onSeg(seg, fn) {
+  seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    syncSeg(seg, b.dataset.v); fn(b.dataset.v);
+  });
+}
+let stroke = 'line', mirror = 'off';
+onSeg(strokeSeg, (v) => { stroke = v; });
+onSeg(mirrorSeg, (v) => { mirror = v; });
+onSeg(connectSeg, (v) => { db.packs[packName].mode = v; save(); renderPreview(); });
+
+// ── opacity: 10 discrete steps ─────────────────────────────────────────────────
+let alpha = 1;
+const opsEl = $('#ops');
+function renderOps() {
+  opsEl.innerHTML = '';
+  for (let i = 1; i <= 10; i++) {
+    const a = i / 10;
+    const b = document.createElement('button');
+    b.title = Math.round(a * 100) + '%';
+    b.className = Math.abs(a - alpha) < 0.001 ? 'on' : '';
+    const bar = document.createElement('i'); bar.style.opacity = String(a);
+    b.appendChild(bar);
+    b.addEventListener('click', () => { alpha = a; renderOps(); });
+    opsEl.appendChild(b);
+  }
+}
 
 // ── painting ───────────────────────────────────────────────────────────────────
-let color = PALETTE[0], eraser = false, down = false, last = null;
-let stroke = 'line', mirror = 'off', pts = [];
-$('#strokeSel').addEventListener('change', (e) => { stroke = e.target.value; });
-$('#mirrorSel').addEventListener('change', (e) => { mirror = e.target.value; });
+let color = PALETTE[0], eraser = false, down = false, last = null, pts = [];
 function px(e) {
   const r = board.getBoundingClientRect();
   return [Math.floor((e.clientX - r.left) / r.width * S), Math.floor((e.clientY - r.top) / r.height * S)];
 }
+// a cell is REPLACED, never accumulated: clear then paint at the chosen alpha, so
+// painting 40% twice still reads 40% (predictable, unlike additive brushing)
 function plotRaw(x, y) {
   if (x < 0 || y < 0 || x >= S || y >= S) return;
-  if (eraser) wctx.clearRect(x, y, 1, 1);
-  else { wctx.fillStyle = color; wctx.fillRect(x, y, 1, 1); }
+  wctx.clearRect(x, y, 1, 1);
+  if (eraser) return;
+  wctx.globalAlpha = alpha;
+  wctx.fillStyle = color;
+  wctx.fillRect(x, y, 1, 1);
+  wctx.globalAlpha = 1;
 }
-// every plotted pixel goes through the mirror: x reflects, xy quadruples, radial turns
 function plot(x, y) {
   const M = S - 1;
   plotRaw(x, y);
@@ -252,7 +263,6 @@ function plot(x, y) {
   else if (mirror === 'xy') { plotRaw(M - x, y); plotRaw(x, M - y); plotRaw(M - x, M - y); }
   else if (mirror === 'radial') { plotRaw(M - y, x); plotRaw(M - x, M - y); plotRaw(y, M - x); }
 }
-// Bresenham between pointer samples, so fast strokes stay connected
 function line(a, b) {
   let [x0, y0] = a, [x1, y1] = b;
   const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
@@ -266,7 +276,6 @@ function line(a, b) {
     if (e2 <= dx) { err += dx; y0 += sy; }
   }
 }
-// Catmull-Rom segment p1→p2 (p0/p3 shape it), rasterized as short Bresenham runs
 function curveSeg(p0, p1, p2, p3) {
   const steps = Math.max(2, (Math.abs(p2[0] - p1[0]) + Math.abs(p2[1] - p1[1])) * 2 + 2);
   let prev = p1;
@@ -280,22 +289,18 @@ function curveSeg(p0, p1, p2, p3) {
 }
 function paint() { bctx.clearRect(0, 0, S, S); bctx.drawImage(work, 0, 0); }
 board.addEventListener('pointerdown', (e) => { e.preventDefault(); down = true; board.setPointerCapture(e.pointerId);
-  document.body.classList.add('drawing');
-  last = px(e); pts = [last]; plot(...last); paint(); });
+  last = px(e); pts = [last]; plot(...last); paint(); previewSoon(); });
 board.addEventListener('pointermove', (e) => { if (!down) return;
   e.preventDefault();
   const p = px(e);
-  if (p[0] === last[0] && p[1] === last[1]) return;      // same cell — nothing new
+  if (p[0] === last[0] && p[1] === last[1]) return;
   if (stroke === 'dots') plot(...p);
   else if (stroke === 'line') line(last, p);
-  else {                                                  // curve: draw one segment behind
-    pts.push(p); const n = pts.length;
-    if (n >= 3) curveSeg(pts[n - 4] || pts[n - 3], pts[n - 3], pts[n - 2], pts[n - 1]);
-  }
-  last = p; paint(); });
+  else { pts.push(p); const n = pts.length;
+    if (n >= 3) curveSeg(pts[n - 4] || pts[n - 3], pts[n - 3], pts[n - 2], pts[n - 1]); }
+  last = p; paint(); previewSoon(); });
 const up = () => { if (!down) return; down = false;
-  document.body.classList.remove('drawing');
-  if (stroke === 'curve' && pts.length >= 2) {            // flush the trailing segment
+  if (stroke === 'curve' && pts.length >= 2) {
     const n = pts.length;
     curveSeg(pts[n - 3] || pts[n - 2], pts[n - 2], pts[n - 1], pts[n - 1]);
     paint();
@@ -325,7 +330,7 @@ function renderPal() {
   pal.appendChild(er);
 }
 
-// ── frames strip (in the dock: tap to switch, "+" at the end) ──────────────────
+// ── frames ─────────────────────────────────────────────────────────────────────
 const framesEl = $('#frames');
 function renderFrames() {
   framesEl.innerHTML = '';
@@ -340,12 +345,11 @@ function renderFrames() {
     framesEl.appendChild(c);
   });
   const add = document.createElement('button');
-  add.className = 'slim'; add.textContent = '+'; add.title = 'add frame';
-  add.addEventListener('click', () => addFrame());
+  add.className = 'btn'; add.textContent = '+ frame';
+  add.addEventListener('click', addFrame);
   framesEl.appendChild(add);
 }
 function addFrame() { db.packs[packName].frames.push(blankFrame()); save(); loadFrame(db.packs[packName].frames.length - 1); }
-$('#addFrame').addEventListener('click', addFrame);
 $('#dupFrame').addEventListener('click', () => { const f = db.packs[packName].frames; f.splice(frameIdx + 1, 0, f[frameIdx]); save(); loadFrame(frameIdx + 1); });
 $('#delFrame').addEventListener('click', () => { const f = db.packs[packName].frames;
   if (f.length <= 1) return; f.splice(frameIdx, 1); save(); loadFrame(Math.min(frameIdx, f.length - 1)); });
@@ -360,14 +364,15 @@ function renderPacks() {
     o.value = o.textContent = name; o.selected = name === packName;
     packSel.appendChild(o);
   }
-  nameHint.textContent = packName;
+  nameHint.textContent = 'shape("' + packName + '")';
 }
 packSel.addEventListener('change', () => { packName = packSel.value; loadFrame(0); renderPacks(); });
 $('#newPack').addEventListener('click', () => {
-  const name = ($('#packName').value || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const raw = prompt('New pack name:', '');
+  const name = (raw || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
   if (!name || db.packs[name]) return;
   db.packs[name] = { frames: [blankFrame()] };
-  packName = name; $('#packName').value = ''; save(); renderPacks(); loadFrame(0);
+  packName = name; save(); renderPacks(); loadFrame(0);
 });
 $('#delPack').addEventListener('click', () => {
   if (Object.keys(db.packs).length <= 1) return;
@@ -379,25 +384,20 @@ $('#delPack').addEventListener('click', () => {
   renderPacks(); loadFrame(0);
 });
 
-// ── tools sheet ────────────────────────────────────────────────────────────────
-const sheet = $('#sheet'), scrim = $('#scrim');
-const openSheet = (on) => { sheet.classList.toggle('open', on); scrim.classList.toggle('open', on);
-  $('#toolsBtn').classList.toggle('on', on); if (on) renderQR(); };
-$('#toolsBtn').addEventListener('click', () => openSheet(!sheet.classList.contains('open')));
-scrim.addEventListener('click', () => openSheet(false));
-
-// ── rooms ──────────────────────────────────────────────────────────────────────
-// Everyone who joins the same room code shares packs live (see /loom-room). Remote
-// packs are written into the SAME localStorage the solo editor uses, so a running
-// Loom tab picks them up through its existing storage-event path — no Loom changes.
+// ── rooms (setup, so it's a toggled strip — the brush controls stay put) ───────
 const HOST_KEY = 'loom.roomHost', CODE_KEY = 'loom.roomCode';
-const roomBtn = $('#roomBtn'), roomCodeIn = $('#roomCode'), roomHostIn = $('#roomHost'),
-  roomStat = $('#roomStat'), roomDot = $('#roomDot'), qrCanvas = $('#qr');
+const roomRow = $('#roomRow'), roomBtn = $('#roomBtn'), roomCodeIn = $('#roomCode'),
+  roomHostIn = $('#roomHost'), roomStat = $('#roomStat'), roomDot = $('#roomDot'), qrCanvas = $('#qr');
 const params = new URLSearchParams(location.search);
 roomHostIn.value = params.get('host') || localStorage.getItem(HOST_KEY) || '';
 roomCodeIn.value = params.get('room') || localStorage.getItem(CODE_KEY) || '';
 let ws = null;
 const setStat = (s, live) => { roomStat.textContent = s; roomDot.classList.toggle('on', !!live); };
+$('#roomToggle').addEventListener('click', () => {
+  const open = roomRow.classList.toggle('open');
+  $('#roomToggle').classList.toggle('on', open);
+  if (open) renderQR();
+});
 function roomPublish(name) {
   if (!ws || ws.readyState !== 1) return;
   const pack = db.packs[name];
@@ -416,13 +416,13 @@ function roomJoin() {
   const code = (roomCodeIn.value || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
   if (!host || !code) { setStat('needs a server + code'); return; }
   localStorage.setItem(HOST_KEY, host); localStorage.setItem(CODE_KEY, code);
-  const url = host.replace(/^http/, 'ws') + '/r/' + code;
   setStat('connecting…');
-  try { ws = new WebSocket(url); } catch { setStat('bad server url'); ws = null; return; }
+  try { ws = new WebSocket(host.replace(/^http/, 'ws') + '/r/' + code); }
+  catch { setStat('bad server url'); ws = null; return; }
   ws.onopen = () => {
     setStat('in "' + code + '"', true);
     roomBtn.textContent = 'leave'; roomBtn.classList.add('on');
-    for (const name of Object.keys(db.packs)) roomPublish(name);   // share what we have
+    for (const name of Object.keys(db.packs)) roomPublish(name);
     renderQR();
   };
   ws.onmessage = (e) => {
@@ -444,7 +444,6 @@ roomBtn.addEventListener('click', () => {
     roomBtn.textContent = 'join'; roomBtn.classList.remove('on'); return; }
   roomJoin();
 });
-
 // QR of the join link — scan from a phone to land in the same room, server and all
 function renderQR() {
   const host = (roomHostIn.value || '').trim(), code = (roomCodeIn.value || '').trim();
@@ -464,10 +463,10 @@ function renderQR() {
 roomCodeIn.addEventListener('input', renderQR);
 roomHostIn.addEventListener('input', renderQR);
 
-save();          // ensure the default pack exists on first visit
-renderPal(); renderPacks(); renderFrames(); loadFrame(0);
+save();
+renderPal(); renderOps(); renderPacks(); renderFrames(); loadFrame(0);
 setStat('off');
-if (params.get('room') && roomHostIn.value) roomJoin();   // scanned a QR → straight in
+if (params.get('room') && roomHostIn.value) { roomRow.classList.add('open'); $('#roomToggle').classList.add('on'); roomJoin(); }
 </script>
 </body>
 </html>

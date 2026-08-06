@@ -50,18 +50,24 @@ export function renderPackFrame(img, mode, scale = 8) {
     for (let ox = 0; ox < O; ox++) {
       const gx = (ox + 0.5) / SC;
       const x0 = Math.max(0, Math.floor(gx - R - 0.5)), x1 = Math.min(S - 1, Math.ceil(gx + R + 0.5));
-      let field = 0, br = 0, bg = 0, bb = 0, bw = 0;
+      // Two sums: a GEOMETRIC field (cell presence only) and an alpha-weighted one.
+      // Thresholding the geometric field keeps the blob's SHAPE independent of how
+      // transparent you painted; the average source alpha then scales the result, so a
+      // 40% stroke reads 40% instead of being flattened to solid by the threshold.
+      let gsum = 0, asum = 0, br = 0, bg = 0, bb = 0, bw = 0;
       for (let cy = y0; cy <= y1; cy++) for (let cxi = x0; cxi <= x1; cxi++) {
         const i = on(cxi, cy); if (i < 0) continue;
         const dx = gx - (cxi + 0.5), dy = gy - (cy + 0.5);
         const q = (dx * dx + dy * dy) / R2;
         if (q >= 1) continue;
-        const w = (1 - q) * (1 - q) * (d[i + 3] / 255);    // smooth, compact-support kernel
-        field += w; br += d[i] * w; bg += d[i + 1] * w; bb += d[i + 2] * w; bw += w;
+        const g = (1 - q) * (1 - q);                       // smooth, compact-support kernel
+        const w = g * (d[i + 3] / 255);
+        gsum += g; asum += w; br += d[i] * w; bg += d[i + 1] * w; bb += d[i + 2] * w; bw += w;
       }
       if (bw <= 0) continue;
-      const a = Math.max(0, Math.min(1, (field - T) / AA));
-      if (a <= 0) continue;
+      const cov = Math.max(0, Math.min(1, (gsum - T) / AA));     // blob coverage
+      const a = cov * (asum / gsum);                             // × the average source alpha
+      if (a <= 0.002) continue;
       const o = (oy * O + ox) * 4;
       out.data[o] = br / bw; out.data[o + 1] = bg / bw; out.data[o + 2] = bb / bw;
       out.data[o + 3] = a * 255;
