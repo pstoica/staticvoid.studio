@@ -21,12 +21,26 @@ const ctx = canvas.getContext('2d');
 // The WebGL renderer (on #glstage) is the default; the legacy Canvas2D path is
 // kept as an escape hatch via ?gl=0 (it lacks the shader FX chain (blur,
 // feedback, kaleido, etc.) and renders only pixelate on groups).
-const USE_GL = new URLSearchParams(location.search).get('gl') !== '0';
+// WebGL can be unavailable for reasons that have nothing to do with the patch: a dead
+// GPU process, hardware acceleration off, aggressive fingerprint blocking, or simply too
+// many live WebGL contexts across tabs. Rather than throwing at boot (which killed the
+// whole app — blank page, no editor), fall back to the Canvas2D path and say so.
+let USE_GL = new URLSearchParams(location.search).get('gl') !== '0';
 const glCanvas = $('#glstage');
-const glr = USE_GL ? new GLRenderer(glCanvas) : null;
+let glr = null, glFailed = null;
+if (USE_GL) {
+  try { glr = new GLRenderer(glCanvas); }
+  catch (e) { USE_GL = false; glFailed = e; console.warn('Loom: WebGL unavailable, falling back to Canvas2D', e); }
+}
 if (USE_GL) { canvas.hidden = true; glCanvas.hidden = false; }
+else { canvas.hidden = false; glCanvas.hidden = true; }
 const activeCanvas = USE_GL ? glCanvas : canvas;   // the visible canvas drives sizing
 const errBar = $('#err');
+if (glFailed) {   // tell the user WHY it looks plain — this isn't their patch's fault
+  errBar.textContent = 'WebGL unavailable — running the plain Canvas2D renderer (no shader FX). '
+    + 'Usually a stalled GPU process or too many open WebGL tabs: reload, or restart the browser.';
+  errBar.classList.add('show');
+}
 const cpsLabel = $('#cpsval');
 const cpsRange = $('#cpsrange');       // speed/decay are inline range sliders; setCps/setDecay keep the thumb in sync
 const decayRange = $('#decayrange');
