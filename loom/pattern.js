@@ -624,8 +624,8 @@ function shaken(id)   { return signal(() => _jval(id, 'shake', 0)); }
 // rule: `.x(fingerX(1))` per-glyph freezes at onset (a trail), live as FX/physics params.
 const _handState = { hands: [] };
 const _poseState = { seen: 0, x: [], y: [] };
-let _trackWant = { hands: false, pose: false, cam: false, seg: false };
-function _resetTracking() { _trackWant = { hands: false, pose: false, cam: false, seg: false }; }
+let _trackWant = { hands: false, pose: false, cam: false, seg: false, face: false, mic: false };
+function _resetTracking() { _trackWant = { hands: false, pose: false, cam: false, seg: false, face: false, mic: false }; }
 function _getTracking() { return _trackWant; }
 function _handInput(st) { _handState.hands = (st && st.hands) || []; }
 function _poseInput(st) { _poseState.seen = st && st.seen ? 1 : 0; _poseState.x = (st && st.x) || []; _poseState.y = (st && st.y) || []; }
@@ -659,6 +659,47 @@ const _joint = (j) => (typeof j === 'number' ? j : (POSE_JOINT[String(j).toLower
 function poseX(j = 'nose') { _trackWant.pose = true; const i = _joint(j); return signal(() => (_poseState.x[i] != null ? _poseState.x[i] : 0.5)); }
 function poseY(j = 'nose') { _trackWant.pose = true; const i = _joint(j); return signal(() => (_poseState.y[i] != null ? _poseState.y[i] : 0.5)); }
 function poseSeen() { _trackWant.pose = true; return signal(() => _poseState.seen); }
+
+// ── face (MediaPipe FaceLandmarker blendshapes) ─────────────────────────────────
+//   mouthOpen()  how far your jaw is open, 0..1 — the singing/talking signal
+//   smile()      grin amount 0..1      browRaise()  eyebrows up 0..1
+//   mouthX/Y()   the mouth's position — emit particles from where you're actually singing
+//   faceX/Y()    nose position         faceSeen()   1 while a face is tracked
+// Lazy like the other trackers: using one loads the model + camera, nothing else does.
+const _faceState = { seen: 0, open: 0, smile: 0, brow: 0, mx: 0.5, my: 0.5, fx: 0.5, fy: 0.5 };
+function _faceInput(st) { Object.assign(_faceState, st || {}); }
+const _faceSig = (f, def) => { _trackWant.face = true; return signal(() => (_faceState.seen ? _faceState[f] : def)); };
+function mouthOpen() { return _faceSig('open', 0); }
+function smile() { return _faceSig('smile', 0); }
+function browRaise() { return _faceSig('brow', 0); }
+function mouthX() { return _faceSig('mx', 0.5); }
+function mouthY() { return _faceSig('my', 0.5); }
+function faceX() { return _faceSig('fx', 0.5); }
+function faceY() { return _faceSig('fy', 0.5); }
+function faceSeen() { _trackWant.face = true; return signal(() => _faceState.seen); }
+
+// ── microphone (Web Audio) ───────────────────────────────────────────────────────
+// The short path to audio-reactive visuals — no bridge, no Ableton, just the mic in
+// this browser. Using any of these asks for the microphone on the next run.
+//   mic()                 loudness (RMS), 0..1
+//   micLow/Mid/High()     coarse thirds of the spectrum
+//   micBand(n)            the n-th of 24 FFT bands, 0..1
+//   micHit()              a transient (a sung note, a clap) as a decaying 0..1 pulse
+// (level()/band()/hit() are the OTHER audio path: per-track stems over the Link Audio
+// WebSocket bridge. This one needs nothing but permission.)
+const _micState = { level: 0, low: 0, mid: 0, high: 0, hit: 0, bands: [] };
+function _micInput(st) { Object.assign(_micState, st || {}); }
+const _micSig = (f) => { _trackWant.mic = true; return signal(() => _micState[f] || 0); };
+function mic() { return _micSig('level'); }
+function micLow() { return _micSig('low'); }
+function micMid() { return _micSig('mid'); }
+function micHigh() { return _micSig('high'); }
+function micHit() { return _micSig('hit'); }
+function micBand(n = 0) {
+  _trackWant.mic = true;
+  return signal(() => { const b = _micState.bands; if (!b || !b.length) return 0;
+    return b[Math.max(0, Math.min(b.length - 1, n | 0))] || 0; });
+}
 
 // cam(opacity?): show the WEBCAM behind the glyphs — the patch-declared backdrop, like
 // bg() but a live camera. Sits in a stack(...) (returns silence); opacity is patternable
@@ -1304,7 +1345,9 @@ export const DSL = {
   cc, gate, vel, note, pc, bend, onNote, dev, _midiInput, _midiFrame,
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, flight, gyro, _jug, _jugInput, _jugDecay,
   fingerX, fingerY, fingerZ, fingerUp, fingersUp, pinch, palmX, palmY, handSeen, handNear, poseX, poseY, poseSeen,
-  cam, _setCamSink, _handInput, _poseInput, _resetTracking, _getTracking,
+  cam, _setCamSink, _handInput, _poseInput, _faceInput, _micInput, _resetTracking, _getTracking,
+  mouthOpen, smile, browRaise, mouthX, mouthY, faceX, faceY, faceSeen,
+  mic, micLow, micMid, micHigh, micBand, micHit,
   level, band, low, mid, high, hit, _audio, _audioInput, _audioDecay,
   hasOnset, span, isOsc, isSpring, ease, EASE,
   _groupFx, _resetGroups, _echoGroups, PALETTES,

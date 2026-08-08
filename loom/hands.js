@@ -17,12 +17,14 @@ const WASM_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VER
 const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
 const SEG_MODEL = 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite';
+const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 
 let _mp = null, _mpLoading = null;          // the tasks-vision module + FilesetResolver result
 let _video = null, _videoLoading = null;    // shared webcam element (one stream for both models)
 let _hand = null, _handLoading = null;      // HandLandmarker
 let _pose = null, _poseLoading = null;      // PoseLandmarker
 let _seg = null, _segLoading = null;        // ImageSegmenter (person silhouette)
+let _face = null, _faceLoading = null;      // FaceLandmarker (mouth / expression blendshapes)
 let _failed = false;                        // any hard failure → stay silent forever after
 let _lastTs = -1;                           // detectForVideo timestamps must strictly increase
 let _flipX = true;                          // selfie mirror (default on: move right → drawing moves right)
@@ -77,6 +79,15 @@ export function ensureTracking(want) {
       }).then((p) => (_pose = p))
     ).catch((e) => _warn('pose unavailable (camera or model)', e));
   }
+  if (want.face && !_face && !_faceLoading) {
+    _faceLoading = Promise.all([ensureVision(), ensureCamera()]).then(([v]) =>
+      v.m.FaceLandmarker.createFromOptions(v.fileset, {
+        baseOptions: { modelAssetPath: FACE_MODEL, delegate: 'GPU' },
+        runningMode: 'VIDEO', numFaces: 1,
+        outputFaceBlendshapes: true,        // jawOpen / smile / brows come from these
+      }).then((f) => (_face = f))
+    ).catch((e) => _warn('face tracking unavailable (camera or model)', e));
+  }
   if (want.seg && !_seg && !_segLoading) {
     _segLoading = Promise.all([ensureVision(), ensureCamera()]).then(([v]) =>
       v.m.ImageSegmenter.createFromOptions(v.fileset, {
@@ -87,7 +98,7 @@ export function ensureTracking(want) {
   }
 }
 
-export const trackingReady = () => !!(_video && (_hand || _pose || _seg));
+export const trackingReady = () => !!(_video && (_hand || _pose || _seg || _face));
 export const trackingVideo = () => _video;                 // for the GL camera overlay
 export const trackingState = () => _state;                 // 'off' | 'starting' | 'live' | 'blocked'
 export function setTrackingFlip(v) { _flipX = !!v; }
@@ -130,6 +141,27 @@ function processHands(res, sx, sy) {
   }
   return { hands: out };
 }
+// Face: the blendshapes are the useful part — jawOpen is a clean 0..1 "mouth open",
+// which is the signal for singing/talking-driven visuals. Positions come from the lip
+// landmarks so particles can pour out of the actual mouth.
+const BS = (res, name) => {
+  const cats = res.faceBlendshapes && res.faceBlendshapes[0] && res.faceBlendshapes[0].categories;
+  if (!cats) return 0;
+  for (const c of cats) if (c.categoryName === name) return c.score;
+  return 0;
+};
+function processFace(res, sx, sy) {
+  const lm = (res.faceLandmarks && res.faceLandmarks[0]) || null;
+  if (!lm) return { seen: 0, open: 0, smile: 0, mx: 0.5, my: 0.5, fx: 0.5, fy: 0.5, brow: 0 };
+  const X = (p) => 0.5 + ((_flipX ? 1 - lm[p].x : lm[p].x) - 0.5) * sx;
+  const Y = (p) => 0.5 + (lm[p].y - 0.5) * sy;
+  // 13 = inner upper lip, 14 = inner lower lip, 1 = nose tip
+  const open = BS(res, 'jawOpen');
+  const smile = (BS(res, 'mouthSmileLeft') + BS(res, 'mouthSmileRight')) / 2;
+  const brow = (BS(res, 'browInnerUp') + BS(res, 'browOuterUpLeft') + BS(res, 'browOuterUpRight')) / 3;
+  return { seen: 1, open, smile, brow,
+    mx: (X(13) + X(14)) / 2, my: (Y(13) + Y(14)) / 2, fx: X(1), fy: Y(1) };
+}
 function processPose(res, sx, sy) {
   const lm = (res.landmarks && res.landmarks[0]) || null;
   if (!lm) return { seen: 0, x: [], y: [] };
@@ -157,6 +189,7 @@ export function trackTick(nowMs, cw, ch) {
   try {
     if (_hand) out.hands = processHands(_hand.detectForVideo(_video, ts), sx, sy);
     if (_pose) out.pose = processPose(_pose.detectForVideo(_video, ts), sx, sy);
+    if (_face) out.face = processFace(_face.detectForVideo(_video, ts), sx, sy);
     if (_seg) {
       // callback form: the MPMask is only valid inside — getAsFloat32Array copies it out.
       // Selfie segmenter emits person confidence; some builds emit [background, person].
@@ -168,5 +201,5 @@ export function trackTick(nowMs, cw, ch) {
       });
     }
   } catch (e) { _warn('detection failed', e); return null; }
-  return (out.hands || out.pose || out.mask) ? out : null;
+  return (out.hands || out.pose || out.mask || out.face) ? out : null;
 }

@@ -230,6 +230,40 @@ Swap the dots' `x`/`y` for `fingerX(f)`/`fingerY(f)` (a gradient stretched betwe
 fingertips) or `ballX("a")`/`ballY("b")`… (juggling balls as the gradient's anchors) — any
 signal works, because the control points are ordinary glyphs.
 
+### Microphone (`mic` / `micLow` / `micHit` …)
+
+The short path to audio-reactive visuals — **no bridge, no Ableton**, just the mic in this
+browser. Using any of these asks for the microphone on the next run (and degrades to `0`
+if it's denied).
+
+| Signal | Meaning | Range |
+| --- | --- | --- |
+| `mic()` | loudness (RMS) | `0..1` |
+| `micLow()` `micMid()` `micHigh()` | coarse thirds of the spectrum | `0..1` |
+| `micBand(n)` | the n-th of 24 FFT bands | `0..1` |
+| `micHit()` | a transient — a sung note, a clap — as a decaying pulse | `0..1` |
+
+*(`level(id)` / `band(id, n)` / `hit(id)` are the **other** audio path: per-track stems
+from Ableton over the Link Audio bridge. These need nothing but permission.)*
+
+**Sing particles out of your mouth** — the face and the mic together:
+
+```js
+group(
+  cam(0.45),                                          // you, behind it all
+  physics(
+    shape("dot*8")
+      .x(mouthX()).y(mouthY())                        // born at your mouth
+      .gate(mouthOpen().range(0, 1.2))                // …only while it's open
+      .size(mic().range(0.004, 0.05))                 // loudness = particle size
+      .color(palette("neon").at(micHigh()))           // brightness = timbre
+      .decay(2.5),
+    { gravity: -0.05, drag: 0.7, vel: 0.25,           // they drift upward
+      turbulence: mic().range(0.05, 0.5) }            // louder = more chaos
+  )
+).glow(micHit().range(0.2, 1.1))                      // the room flashes on each note
+```
+
 **Embedded effects inside feedback.** `feedback`'s optional last arg is a builder
 whose chain runs **on the history each frame, inside the loop** — so those effects
 **compound** as the image recirculates (hue keeps rotating, blur keeps diffusing,
@@ -629,6 +663,10 @@ hold their defaults.
 | `handSeen(hand?)` | `1` while a hand is tracked | `0`/`1` |
 | `poseX(j)` `poseY(j)` | body joint — by name (`"nose"` `"lwrist"` `"rwrist"` `"lhip"` `"rankle"` …) or raw index | `0..1` |
 | `poseSeen()` | `1` while a person is tracked | `0`/`1` |
+| `mouthOpen()` | how far your **jaw is open** — the singing / talking signal | `0..1` |
+| `smile()` `browRaise()` | grin amount · eyebrows raised | `0..1` |
+| `mouthX()` `mouthY()` | the **mouth's** position — emit from where you're actually singing | `0..1` |
+| `faceX()` `faceY()` `faceSeen()` | nose position · `1` while a face is tracked | `0..1` |
 
 `hand`: `0` = first seen (default), `"left"`/`"right"` = by handedness, `1`/`2` = first/second.
 The view is **selfie-mirrored by default** (`window.loom.cam.flipX`). **`cam(opacity?)`** shows

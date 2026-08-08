@@ -9,6 +9,7 @@ import { DSL } from './pattern.js';
 import { GLRenderer } from './gl/renderer.js';
 import { ensureRapier, rapierReady, PhysWorld } from './physics.js';
 import { ensureTracking, trackingReady, trackingVideo, trackingState, trackTick, setTrackingFlip, getTrackingFlip } from './hands.js';
+import { ensureMic, micTick, micState, micStateValues } from './mic.js';
 import { createEditor } from './editor.js';
 import { renderPackFrame } from './packrender.js';
 import REFERENCE from './REFERENCE.md?raw';   // full cheatsheet text, for the "copy for LLM" button
@@ -246,7 +247,8 @@ function run() {
     // hand/pose tracking: if the patch created any tracking signal, lazily load MediaPipe
     // + request the webcam (idempotent; a patch without them never touches the camera).
     const tw = DSL._getTracking();
-    if (tw.hands || tw.pose || tw.cam || tw.seg) {
+    if (tw.mic) ensureMic();                 // patch uses mic()/micLow()/… → ask for the microphone
+    if (tw.hands || tw.pose || tw.cam || tw.seg || tw.face) {
       ensureTracking(tw);
       // if the camera is already known-blocked, say so on every run — otherwise the patch
       // just draws nothing (gates closed, signals 0) with no clue why.
@@ -1089,9 +1091,11 @@ function tick(dt) {
     if (ts) {
       if (ts.hands) DSL._handInput(ts.hands);
       if (ts.pose) DSL._poseInput(ts.pose);
+      if (ts.face) DSL._faceInput(ts.face);
       if (ts.mask && glr) glr.setPersonMask(ts.mask, getTrackingFlip());
     }
   }
+  if (micState() === 'live') DSL._micInput(micTick(dt));   // mic → level/bands/hit signals
   // surface camera/tracking state transitions (starting → live / blocked) so a blank
   // canvas is never a mystery — the gates read 0 until the camera actually sees you.
   const trkSt = trackingState();
@@ -1345,6 +1349,10 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   jug: (m) => DSL._jugInput(m),   // inject a juggling-feed message (for tooling/testing)
   hand: (st) => DSL._handInput(st),   // inject hand-tracking state (for tooling/testing without a webcam)
   pose: (st) => DSL._poseInput(st),   // inject pose-tracking state (likewise)
+  get micState() { return micState(); },   // 'off' | 'starting' | 'live' | 'blocked'
+  get micValues() { const v = micStateValues(); return { level: +v.level.toFixed(3), low: +v.low.toFixed(3), mid: +v.mid.toFixed(3), high: +v.high.toFixed(3), hit: +v.hit.toFixed(3) }; },
+  mic: () => ensureMic(),                   // start the mic by hand (tooling)
+  face: (st) => DSL._faceInput(st),         // inject face state (testing without a camera)
   cam: {   // MediaPipe camera config (tracking starts lazily when a patch uses a hand/pose signal)
     get ready() { return trackingReady(); },
     get state() { return trackingState(); },   // 'off' | 'starting' | 'live' | 'blocked'
