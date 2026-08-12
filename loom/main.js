@@ -10,7 +10,7 @@ import { GLRenderer } from './gl/renderer.js';
 import { ensureRapier, rapierReady, PhysWorld } from './physics.js';
 import { ensureTracking, trackingReady, trackingVideo, trackingState, trackTick, setTrackingFlip, getTrackingFlip } from './hands.js';
 import { ensureMic, micTick, micState, micStateValues } from './mic.js';
-import { ensureSpeech, stopSpeech, speechTick, speechState, speechLocal, speechDebug } from './speech.js';
+import { ensureSpeech, stopSpeech, speechTick, speechState, speechLocal, speechDebug, installLocal } from './speech.js';
 import { createEditor } from './editor.js';
 import { renderPackFrame } from './packrender.js';
 import REFERENCE from './REFERENCE.md?raw';   // full cheatsheet text, for the "copy for LLM" button
@@ -1373,7 +1373,8 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   get micState() { return micState(); },   // 'off' | 'starting' | 'live' | 'blocked'
   get micValues() { const v = micStateValues(); return { level: +v.level.toFixed(3), low: +v.low.toFixed(3), mid: +v.mid.toFixed(3), high: +v.high.toFixed(3), hit: +v.hit.toFixed(3) }; },
   mic: () => ensureMic(),                   // start the mic by hand (tooling)
-  speech: () => speechDebug(),              // state/local/starts/heard/dead/lastError
+  speech: () => speechDebug(),              // state/local/localAvail/starts/heard/dead/lastError
+  speechInstall: () => installLocal(),      // pull the on-device model (the fix when lastError is 'network')
   say: (...w) => DSL._speechInput({ words: w, voicing: 1 }),   // inject words (testing without a mic)
   face: (st) => DSL._faceInput(st),         // inject face state (testing without a camera)
   cam: {   // MediaPipe camera config (tracking starts lazily when a patch uses a hand/pose signal)

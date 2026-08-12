@@ -55,14 +55,46 @@ function push(w) {
 // on another pending recognizer. Four of them holding the mic is what makes the tab's
 // recording dot flicker. Recognition now starts immediately with whatever we know.
 function probeLocal() {
-  if (!SR.available) return;
+  if (!SR.available) { localAvail = 'unsupported'; return; }
+  localAvail = 'pending';
   Promise.resolve()
     .then(() => SR.available({ langs: [lang], processLocally: true }))
     .then((a) => {
+      localAvail = String(a);
       if (a === 'available') { local = true; return; }
-      if (a !== 'unavailable' && SR.install) SR.install({ langs: [lang], processLocally: true }).catch(() => {});
+      if (a !== 'unavailable') installLocal();      // downloadable/downloading → go get it
     })
-    .catch(() => {});          // older shape, or the query itself is unsupported
+    .catch((e) => { localAvail = 'probe failed: ' + ((e && e.name) || e); });
+}
+
+// Fetch the on-device model. This is the ONLY way out when the cloud path is unreachable —
+// lastError 'network' means Chrome could not reach the speech service (a DNS filter, a
+// blocker, a VPN, or simply offline), and no amount of retrying fixes that. Exposed as
+// loom.speechInstall() so it can be kicked by hand; also fired automatically the first time
+// a network error lands. Once the model is in, we tear down the doomed cloud session so the
+// next one is local.
+export function installLocal() {
+  if (!SR || !SR.install) return Promise.resolve('unsupported');
+  if (local || installing) return Promise.resolve(localAvail);
+  installing = true; installTried = true;
+  localAvail = 'downloading';
+  return Promise.resolve()
+    .then(() => SR.install({ langs: [lang], processLocally: true }))
+    .then(() => (SR.available ? SR.available({ langs: [lang], processLocally: true }) : 'unknown'))
+    .then((a) => {
+      installing = false;
+      localAvail = String(a);
+      if (a === 'available') {
+        local = true; dead = 0; lastError = '';
+        if (want && rec) {                          // restart NOW on the local path
+          const r = rec; rec = null;
+          try { r.abort(); } catch {}
+          ensureSpeech();
+        }
+      }
+      return localAvail;
+    })
+    .catch((e) => { installing = false; localAvail = 'install failed: ' + ((e && e.name) || e); return localAvail; });
 }
 
 // Chrome ends a session on silence, on its own timeouts, and after errors, so restarting is
@@ -72,6 +104,7 @@ function probeLocal() {
 const BACKOFF = [400, 800, 1500, 2500, 4000];
 let dead = 0;                          // consecutive sessions that recognized nothing
 let heard = 0, starts = 0, lastError = '';
+let localAvail = 'unknown', installing = false, installTried = false;
 
 function build() {
   const r = new SR();
@@ -117,6 +150,9 @@ function build() {
     // but is not usable" case: drop the claim for good and let the next restart use the
     // cloud path, rather than failing identically forever.
     if (local && !got) { local = false; lastError += ' (dropped on-device)'; }
+    // 'network' = the cloud service is unreachable. Retrying it on a 4s loop just cycles the
+    // microphone for nothing, so back right off and try to pull the on-device model instead.
+    if (e.error === 'network' && !local && !installTried) installLocal();
   };
 
   r.onend = () => {
@@ -124,12 +160,13 @@ function build() {
     if (rec !== r) return;             // superseded by a newer recognizer: let it own restarts
     if (!want || failed) { if (!failed) state = 'off'; return; }
     if (!got) dead++;
-    state = 'idle';
+    const offline = !local && lastError.startsWith('network');
+    state = offline ? 'offline' : 'idle';
     clearTimeout(restartT);
     restartT = setTimeout(() => {
       if (!want || failed || rec !== r) return;
       try { r.start(); } catch { /* already running: the next onend will retry */ }
-    }, BACKOFF[Math.min(dead, BACKOFF.length - 1)]);
+    }, offline ? 15000 : BACKOFF[Math.min(dead, BACKOFF.length - 1)]);
   };
 
   return r;
@@ -158,7 +195,7 @@ export function stopSpeech() {
 }
 
 // what the tooling sees: loom.speech()
-export const speechDebug = () => ({ state, local, starts, heard, dead, lastError, want, has: !!rec });
+export const speechDebug = () => ({ state, local, localAvail, installing, starts, heard, dead, lastError, want, has: !!rec });
 
 // once per frame: hand over this frame's words and the current state
 export function speechTick() {
