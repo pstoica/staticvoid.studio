@@ -1211,6 +1211,29 @@ function _setGlyphPos(x, y) { _gpos.x = x; _gpos.y = y; }
 function gx() { return signal(() => _gpos.x); }
 function gy() { return signal(() => _gpos.y); }
 
+
+// near(x, y, radius): how close THIS glyph is to a point, 1 at the point falling to 0 at
+// `radius` away — a heat map. Unlike gx()/gy() above this is LIVE: it is an osc-family value,
+// re-evaluated per glyph per frame, so the glyph lights up as the cursor arrives and dims as
+// it leaves, and a glyph that is itself moving (physics, a positional osc) responds too.
+// Defaults to the pointer, but the point is any pair of signals — a fingertip, a ball, a face.
+//   shape("dot*64").grid(8).size(near().range(0.008, 0.05))          a bulge under the cursor
+//   shape("dot*64").grid(8).color(palette("ember").at(near()))       …as heat instead
+//   shape("dot*64").grid(8).alpha(near(fingerX(1), fingerY(1)))      a torch in your hand
+// Being osc-family, everything on that side composes: .range() .ease() .gt() .quantize()
+// .spring(). Distance is measured in x-units with the aspect corrected, so the falloff is a
+// circle on screen rather than an ellipse.
+function near(x, y, radius = 0.4) {
+  return makeOsc({ shape: 'near', rate: 0, lo: 0, hi: 1, phase: 0,
+    nx: x === undefined ? mouseX : x, ny: y === undefined ? mouseY : y, nr: radius });
+}
+// raw distance to the point (0 at it, ~1 across the canvas) — near() inverted and unclamped,
+// for when you want the falloff curve yourself: .size(dist().ease("inQuad").range(0.05, 0))
+function dist(x, y) {
+  return makeOsc({ shape: 'dist', rate: 0, lo: 0, hi: 1, phase: 0,
+    nx: x === undefined ? mouseX : x, ny: y === undefined ? mouseY : y, nr: 1 });
+}
+
 // ── named layers ($) ──────────────────────────────────────────────────────────
 // A patch can be several named, separately-editable layers instead of one giant
 // stack(...). Each `$(name?, pattern)` call registers a layer; compile() in main.js
@@ -1451,7 +1474,7 @@ export const DSL = {
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, flight, gyro, _jug, _jugInput, _jugDecay,
   fingerX, fingerY, fingerZ, fingerUp, fingersUp, pinch, palmX, palmY, handSeen, handNear, poseX, poseY, poseSeen,
   cam, _setCamSink, _handInput, _poseInput, _faceInput, _micInput, _resetTracking, _getTracking,
-  gx, gy, _setGlyphPos,
+  gx, gy, near, dist, _setGlyphPos,
   text, spoken, said, spoke, saying, heard, _speechInput, _speechFrame, _speechDecay,
   mouthOpen, smile, browRaise, mouthX, mouthY, faceX, faceY, faceSeen,
   mic, micLow, micMid, micHigh, micBand, micHit,

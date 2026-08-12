@@ -576,6 +576,9 @@ const _curl2 = (x, y) => {                       // ∇×φ in 2D = (∂φ/∂y,
   const e = 0.1;
   return [(_noise2(x, y + e) - _noise2(x, y - e)) / (2 * e), -(_noise2(x + e, y) - _noise2(x - e, y)) / (2 * e)];
 };
+// the glyph currently being resolved, normalized 0..1 — set by glResolve/drawGlyph before
+// they evaluate that glyph's mods, so near()/dist() can measure from where it is RIGHT NOW.
+const _curPos = { x: 0.5, y: 0.5 };
 function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
   // every parameter may itself be an oscillator → cross-modulation (FM via rate,
   // PM via phase, AM via range lo/hi). gp = the glyph's onset phase. The osc's running
@@ -585,6 +588,34 @@ function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
   // they fall back to age*cps for frozen/initial evaluation. .free() switches back to real
   // seconds (rate in Hz). phase/spread are already cycle-relative, so they're unscaled.
   let v;
+  // near()/dist(): distance from this glyph to a live point. The target is deliberately NOT
+  // run through freezeOscParams (it only freezes rate/lo/hi/phase/spread/drift), so a pointer
+  // or fingertip target stays live — freezing it would pin the heat map to wherever the mouse
+  // happened to be when the glyph was born.
+  if (d.shape === 'near' || d.shape === 'dist') {
+    const tx = +evalGlobal(d.nx, cycle, elapsed) || 0;
+    const ty = +evalGlobal(d.ny, cycle, elapsed) || 0;
+    const asp = W > 0 ? H / W : 1;                       // measure in x-units → a round falloff
+    const dx = _curPos.x - tx, dy = (_curPos.y - ty) * asp;
+    const d2 = Math.sqrt(dx * dx + dy * dy);
+    if (d.shape === 'dist') v = Math.min(1, d2);
+    else {
+      const r = +evalGlobal(d.nr, cycle, elapsed) || 0.0001;
+      const t = Math.max(0, Math.min(1, 1 - d2 / r));
+      v = t * t * (3 - 2 * t);                           // smoothstep: no hard rim
+    }
+    const lo0 = numAt(d.lo, age, gp, st, ageC, stC), hi0 = numAt(d.hi, age, gp, st, ageC, stC);
+    let r0 = lo0 + v * (hi0 - lo0);
+    if (d.ops) for (const [op, x] of d.ops) {
+      if (op === 'bt') { const l = numAt(x[0], age, gp, st, ageC, stC), h = numAt(x[1], age, gp, st, ageC, stC); r0 = r0 >= l && r0 <= h ? 1 : 0; continue; }
+      const y = numAt(x, age, gp, st, ageC, stC);
+      r0 = op === '*' ? r0 * y : op === '+' ? r0 + y : op === '-' ? r0 - y : op === '/' ? r0 / y
+        : op === 'q' ? Math.round(r0 * y) / y
+        : op === '>' ? (r0 > y ? 1 : 0) : op === '>=' ? (r0 >= y ? 1 : 0)
+        : op === '<' ? (r0 < y ? 1 : 0) : op === '<=' ? (r0 <= y ? 1 : 0) : r0;
+    }
+    return d.ease ? applyEase(d.ease, r0) : r0;
+  }
   if (d.env) {
     // attack/decay envelope keyed to the glyph's REAL-time age (seconds): 0→1 over `a`,
     // then 1→0 over `de`, each segment optionally Penner-eased. Animates over the glyph's
@@ -785,6 +816,7 @@ const JOIN_ID = { miter: 0, round: 1, bevel: 2 };  // polygon corners (default m
 function glResolve(p, minDim, out) {
   const age = p.age, ageC = p.ageCycles, stC = p.spawnCycle;
   let sizePx = p.size, rotTurns = p.rotTurns, rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline, shade = p.shade, color = null;
+  if (p.mods) { _curPos.x = W ? p.x / W : 0.5; _curPos.y = H ? p.y / H : 0.5; }
   if (p.mods) for (const m of p.mods) {
     const val = evalOsc(m.osc, age, p.phase, p.spawnT, ageC, stC);
     if (m.field === 'size') sizePx = val * minDim;
@@ -1037,6 +1069,7 @@ function drawGlyph(g, p, minDim) {
   const age = p.age, ageC = p.ageCycles, stC = p.spawnCycle;
   let sizePx = p.size, color = p.color, rotTurns = p.rotTurns,
       rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline;
+  if (p.mods) { _curPos.x = W ? p.x / W : 0.5; _curPos.y = H ? p.y / H : 0.5; }
   if (p.mods) for (const m of p.mods) {
     const val = evalOsc(m.osc, age, p.phase, p.spawnT, ageC, stC);
     if (m.field === 'size') sizePx = val * minDim;
@@ -1488,6 +1521,16 @@ function renderLayerChips() {
 
 // ── presets ───────────────────────────────────────────────────────────────────────
 const PRESETS = {
+  // a heat map under the cursor: every cell reads its own live distance to the pointer, so
+  // the grid bulges and glows where you point instead of anything moving
+  'heat': `stack(
+  bg("#05050c"),
+  shape("dot*256").grid(16)
+    .size(near().range(0.004, 0.03))
+    .color(palette("ember").at(near(mouseX, mouseY, 0.45)))
+    .alpha(near().range(0.25, 1))
+    .decay(0.2)
+)`,
   // pinch to drop a word: hand tracking spawns type at your fingertip, physics does the rest.
   // The hysteresis on the pinch is load-bearing — a bare threshold chatters as your fingers
   // hover near it and dumps a stream of words instead of releasing them one at a time.

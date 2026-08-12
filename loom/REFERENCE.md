@@ -794,6 +794,24 @@ Because the value comes from the resolved position rather than the onset phase, 
 work under `.burst()`, where every copy shares one onset — `.burst()` fans the *phase*, and
 `gx()` reads the *place* that phase produced.
 
+**For a heat map you want `near()`, not these.** `gx`/`gy` are frozen at birth, so a glyph
+that was born away from the cursor stays dim forever even when you hover it. `near(x, y,
+radius)` is the live version: how close *this* glyph is to a point right now, `1` at the point
+smoothly falling to `0` at `radius`. It is osc-family, so it is re-evaluated per glyph per
+frame — the glyph brightens as the cursor arrives and dims as it leaves, and a glyph that is
+itself moving (physics, a positional osc) responds too.
+
+```js
+shape("dot*256").grid(16).size(near().range(0.004, 0.03))    // the grid bulges under the cursor
+shape("dot*256").grid(16).color(palette("ember").at(near()))  // …as heat instead
+shape("dot*64").grid(8).alpha(near(fingerX(1), fingerY(1), 0.25))   // a torch in your hand
+```
+
+The point defaults to the pointer but is any pair of signals — a fingertip, a ball, a face,
+a mouth. `dist(x, y)` is the raw distance if you want to shape the falloff yourself. Distance
+is measured with the aspect corrected, so the falloff is a circle on screen, not an ellipse.
+Everything on the osc side composes: `.range()`, `.ease()`, `.gt()`, `.quantize()`, `.spring()`.
+
 ### Comparisons
 
 A comparison turns a continuous signal into a hard **`0/1`**, which is exactly what the
