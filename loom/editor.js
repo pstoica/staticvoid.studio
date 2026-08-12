@@ -7,7 +7,7 @@
 // Phase 2 (inline slider widgets) builds on this — it just adds decorations + a parser.
 
 import { EditorState } from '@codemirror/state';
-import { EditorView, keymap, Decoration, ViewPlugin, WidgetType, highlightActiveLine } from '@codemirror/view';
+import { EditorView, keymap, Decoration, ViewPlugin, WidgetType, highlightActiveLine, hoverTooltip } from '@codemirror/view';
 import { history, historyKeymap, defaultKeymap, indentWithTab, toggleComment } from '@codemirror/commands';
 import { StreamLanguage, HighlightStyle, syntaxHighlighting, indentUnit } from '@codemirror/language';
 import { Tag } from '@lezer/highlight';
@@ -33,7 +33,9 @@ const METHOD = new Set(['fast', 'slow', 'rev', 'every', 'iter', 'palindrome', 'j
   'outline', 'shade', 'pixelate', 'blur', 'glow', 'meshfill', 'radiance', 'feedback', 'trails', 'silhouette', 'hue', 'brightness', 'contrast', 'saturate',
   'negative', 'invert', 'displace', 'kaleido', 'mirror', 'cap', 'join', 'open', 'vertex', 'attack', 'decay',
   'life', 'hold', 'id', 'n', 'stencil', 'set', 'spread', 'phase', 'rate', 'quantize', 'ease', 'segment', 'seg', 'sample', 'spring',
-  'gt', 'gte', 'lt', 'lte', 'between']);
+  'gt', 'gte', 'lt', 'lte', 'between', 'drift', 'free', 'sync', 'falloff',
+  'tile', 'dots', 'halftone', 'rgbshift', 'rgb', 'posterize', 'dither', 'scanlines', 'slice', 'lens',
+  'scale', 'move', 'turn', 'aspect', 'hidden']);
 
 // ── autocomplete ────────────────────────────────────────────────────────────────
 // The API is wide enough that remembering it is the main friction, so completion
@@ -57,14 +59,21 @@ const C_FN = [
   ['stripes', '0/1 bands n times per cycle'], ['checker', 'chessboard over .grid() cells'],
   ['text', 'draw WORDS — text("hold my beer") is three glyphs'],
   ['$', 'named layer — $("name", pattern)'],
+  ['slowcat', 'alias of cat — one pattern per cycle'],
+  ['fastcat', 'squeeze patterns into ONE cycle (alias of seq)'],
+  ['sequence', 'alias of seq'], ['timecat', 'cat with per-pattern weights: timecat([3,a],[1,b])'],
+  ['mini', 'parse a mini-notation string into a pattern'],
+  ['fast', 'free-function form: fast(2, pat)'], ['slow', 'free-function form: slow(2, pat)'],
+  ['rev', 'free-function form: rev(pat)'], ['range', 'free-function form: range(lo, hi, pat)'],
 ];
 const C_SIG = [
   ['sine', '0..1 sine'], ['cosine', '0..1 cosine'], ['saw', '0..1 ramp'], ['isaw', 'reverse ramp'],
   ['tri', 'triangle'], ['square', 'hard 0/1'], ['rand', 'white noise'], ['perlin', 'smooth noise'],
   ['fbm', 'fractal noise'], ['brown', 'slow wander'], ['gauss', 'bell around 0.5'],
+  ['white', 'alias of rand — white noise'],
   ['mouseX', 'pointer x'], ['mouseY', 'pointer y'], ['mouseDown', '1 while pressed'],
   ['gx', "this glyph's own x at birth — colour/size by where it landed"], ['gy', "this glyph's own y at birth"],
-  ['near', 'LIVE closeness of this glyph to a point (default the cursor) — a heat map'],
+  ['near', 'LIVE closeness of this glyph to a point (default the cursor) — a heat map. 4th arg = field shape: square|diamond|cross|ring|star|noise|n-gon'],
   ['dist', 'LIVE distance of this glyph to a point — near() inverted, unclamped'],
   ['cc', 'MIDI CC — cc(num, ch)'], ['gate', '1 while a note is held'], ['vel', 'note velocity'],
   ['note', 'note pitch 0..1'], ['pc', 'pitch class (octave-independent)'], ['bend', 'pitch bend'],
@@ -91,7 +100,7 @@ const C_SIG = [
 const C_METHOD = [
   ['color', 'colour: hex, name, 0..1 hue, or palette'], ['size', 'radius 0..1'],
   ['x', 'centre x 0..1'], ['y', 'centre y 0..1'], ['radius', 'polar offset from centre'],
-  ['angle', 'orbital position (turns)'], ['grid', 'lay events into cols×rows'],
+  ['angle', 'orbital position (turns)'], ['grid', 'lay events into cols×rows — 3rd arg = fill order: rows|cols|snake|diag|spiral|random'],
   ['rotate', 'z rotation (turns)'], ['rotateX', '3D tilt'], ['rotateY', '3D tilt'],
   ['spin', 'continuous rotation (turns/sec)'], ['alpha', 'opacity'], ['opacity', 'alias for alpha'],
   ['blend', '"lighter" | "screen" | "multiply"'], ['jitter', 'random scatter'], ['pan', 'x shift'],
@@ -100,7 +109,7 @@ const C_METHOD = [
   ['open', 'arc/line gap'], ['vertex', 'dot at each vertex'], ['cap', 'line ends'], ['join', 'corners'],
   ['attack', 'fade-in seconds'], ['decay', 'fade-out / lifetime'], ['life', 'alias for decay'],
   ['hold', 'SUSTAIN while a condition is true — .hold(gate(1))'],
-  ['id', 'ONE addressable object; later onsets re-target it'],
+  ['id', 'ONE addressable object; later onsets re-target it in place (sprung fields glide)'],
   ['n', 'pick a drawn pack frame (patternable)'], ['stencil', '1 = recolour by luminance'],
   ['burst', 'n simultaneous copies, phases fanned'],
   ['fast', 'speed up'], ['slow', 'slow down'], ['rev', 'reverse each cycle'],
@@ -108,6 +117,9 @@ const C_METHOD = [
   ['palindrome', 'alternate forward/reversed'], ['jux', 'copy panned apart'],
   ['superimpose', 'overlay a transformed copy'], ['off', 'overlay a delayed copy'],
   ['degrade', 'drop ~half the events'], ['degradeBy', 'drop a fraction'],
+  ['unDegradeBy', 'KEEP a fraction — the complement of degradeBy'],
+  ['sometimesBy', 'apply f to a given fraction: .sometimesBy(0.3, f)'],
+  ['set', 'set a raw control by name: .set("size", 0.1)'],
   ['sometimes', 'apply f to a random share'], ['often', '75% of events'], ['rarely', '25%'],
   ['when', 'apply f where a condition holds'], ['gate', 'keep events where a condition holds'],
   ['early', 'shift earlier'], ['late', 'shift later'], ['range', 'remap a 0..1 signal'],
@@ -118,19 +130,23 @@ const C_METHOD = [
   ['lt', 'signal < t → hard 0/1 (2nd arg = hysteresis)'],
   ['lte', 'signal <= t → hard 0/1 (2nd arg = hysteresis)'],
   ['between', '1 while the value is inside [lo, hi]'], ['segment', 'snap the TIME to n steps'],
+  ['seg', 'alias of segment'],
   ['sample', 'sample-and-hold a live signal'], ['ease', 'shape a 0..1 signal through a curve'],
   ['spread', 'per-glyph osc phase offset'], ['phase', 'osc phase'], ['rate', 'osc rate'],
   ['drift', 'osc phase drift over time'], ['free', 'osc in real seconds, not cycles'],
   ['spring', 'chase this value with a damped spring'],
+  ['sync', 'osc back to tempo-synced time (undo .free)'],
+  ['falloff', 'near()/dist(): edge hardness — >1 tight hot spot, <1 broad wash'],
   // group FX
-  ['pixelate', 'FX: mosaic'], ['blur', 'FX: gaussian blur'], ['glow', 'FX: light bleeds from content'],
+  ['pixelate', 'FX: mosaic'], ['blur', 'FX: gaussian blur'], ['glow', 'FX: light bleeds from content — glow(amount, reach)'],
   ['meshfill', 'FX: mesh gradient from the glyphs'], ['radiance', 'FX: 2D GI with shadows'],
   ['feedback', 'FX: trails/tunnel (4th arg = effects INSIDE the loop)'],
-  ['trails', 'FX: feedback, no warp'], ['silhouette', 'FX: mask by the person in the webcam'],
+  ['trails', 'FX: feedback, no warp'], ['silhouette', 'FX: mask by the person in the webcam — 1 inside, -1 outside, 2nd arg freezes the pose'],
   ['hue', 'FX: rotate hue'], ['brightness', 'FX'], ['contrast', 'FX'], ['saturate', 'FX'],
   ['negative', 'FX: invert'], ['invert', 'FX: invert'], ['displace', 'FX: warp'],
   ['kaleido', 'FX: mirrored wedges'], ['mirror', 'FX: left/right symmetry'], ['tile', 'FX: repeat'],
   ['dots', 'FX: halftone'], ['halftone', 'FX: halftone'], ['rgbshift', 'FX: prism split'],
+  ['rgb', 'FX: alias of rgbshift'],
   ['posterize', 'FX: quantize colours'], ['dither', 'FX: ordered dither'],
   ['scanlines', 'FX: CRT lines'], ['slice', 'FX: offset bands'], ['lens', 'FX: barrel distortion'],
   ['scale', 'FX: zoom the layer'], ['move', 'FX: translate the layer'], ['turn', 'FX: rotate the layer'],
@@ -174,6 +190,51 @@ function loomComplete(ctx) {
   return { from: word ? word.from : ctx.pos,
     options: [...opt(C_FN, 'function'), ...opt(C_SIG, 'variable')], validFor: /^\w*$/ };
 }
+
+// ── hover docs ──────────────────────────────────────────────────────────────────
+// The completion lists above are the only description of this API that lives in the editor,
+// so they do double duty: hovering any Loom word shows the same one-liner without having to
+// trigger completion first. A name that is both a function and a method (n, range, fast,
+// slow, rev, spring…) shows both senses.
+const DOC = (() => {
+  const m = new Map();
+  const add = (list, kind) => {
+    for (const [name, detail] of list) {
+      const prev = m.get(name);
+      if (prev && prev.detail !== detail) { prev.detail += '  ·  ' + detail; prev.kind += ' / ' + kind; }
+      else if (!prev) m.set(name, { detail, kind });
+    }
+  };
+  add(C_FN, 'function'); add(C_SIG, 'signal'); add(C_METHOD, 'method');
+  return m;
+})();
+
+const loomHover = hoverTooltip((view, pos) => {
+  const line = view.state.doc.lineAt(pos);
+  const txt = line.text;
+  let a = pos - line.from, b = pos - line.from;
+  while (a > 0 && /[\w$]/.test(txt[a - 1])) a--;
+  while (b < txt.length && /[\w$]/.test(txt[b])) b++;
+  if (a === b) return null;
+  const word = txt.slice(a, b);
+  const doc = DOC.get(word);
+  if (!doc) return null;
+  return {
+    pos: line.from + a, end: line.from + b, above: true,
+    create() {
+      const dom = document.createElement('div');
+      dom.className = 'cm-loomdoc';
+      const head = document.createElement('div');
+      head.className = 'ld-head';
+      const n = document.createElement('span'); n.className = 'ld-name'; n.textContent = word;
+      const k = document.createElement('span'); k.className = 'ld-kind'; k.textContent = doc.kind;
+      head.append(n, k);
+      const d = document.createElement('div'); d.className = 'ld-detail'; d.textContent = doc.detail;
+      dom.append(head, d);
+      return { dom };
+    },
+  };
+}, { hoverTime: 250 });
 
 // one custom highlight tag per Loom token class
 const T = {
@@ -235,6 +296,22 @@ const loomHighlight = HighlightStyle.define([
 // old #code rule, a dark text-shadow halo for legibility over busy art (the CM analog of the
 // old per-line hugging box, which doesn't map to CM's block lines while wrapping).
 const loomTheme = EditorView.theme({
+  '.cm-tooltip': { border: '1px solid rgba(255,255,255,.14)', borderRadius: '8px',
+    background: 'rgba(18,18,26,.97)', color: 'var(--ink)', boxShadow: '0 8px 28px rgba(0,0,0,.45)',
+    backdropFilter: 'blur(6px)' },
+  '.cm-tooltip.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--mono)', fontSize: '13px', maxHeight: '17em' },
+  '.cm-tooltip.cm-tooltip-autocomplete > ul > li': { padding: '3px 9px', lineHeight: '1.5' },
+  '.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+    background: 'rgba(145,160,255,.26)', color: '#fff' },
+  '.cm-completionLabel': { color: 'var(--ink)' },
+  '.cm-completionMatchedText': { textDecoration: 'none', color: '#ffd166', fontWeight: '600' },
+  '.cm-completionDetail': { marginLeft: '1.1em', fontStyle: 'normal', opacity: '.62', fontSize: '12px' },
+  '.cm-completionIcon': { display: 'none' },
+  '.cm-loomdoc': { padding: '7px 10px', maxWidth: '30em', fontFamily: 'var(--mono)' },
+  '.cm-loomdoc .ld-head': { display: 'flex', alignItems: 'baseline', gap: '.6em', marginBottom: '3px' },
+  '.cm-loomdoc .ld-name': { color: '#ffd166', fontWeight: '600', fontSize: '13px' },
+  '.cm-loomdoc .ld-kind': { fontSize: '10.5px', letterSpacing: '.06em', textTransform: 'uppercase', opacity: '.45' },
+  '.cm-loomdoc .ld-detail': { fontSize: '12.5px', lineHeight: '1.55', opacity: '.85' },
   '&': { color: 'var(--ink)', backgroundColor: 'transparent', height: '100%' },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': { fontFamily: 'var(--mono)', fontSize: '15px', lineHeight: '1.65', overflow: 'auto' },
@@ -461,6 +538,7 @@ export function createEditor(parent, opts = {}) {
       sliderPlugin,
       liveSigPlugin,
       autocompletion({ override: [loomComplete], activateOnTyping: true, maxRenderedOptions: 30 }),
+      loomHover,
       runKeys,
       keymap.of([
         indentWithTab,
