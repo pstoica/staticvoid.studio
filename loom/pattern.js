@@ -1221,10 +1221,26 @@ function gy() { return signal(() => _gpos.y); }
 //   shape("dot*64").grid(8).color(palette("ember").at(near()))       …as heat instead
 //   shape("dot*64").grid(8).alpha(near(fingerX(1), fingerY(1)))      a torch in your hand
 // Being osc-family, everything on that side composes: .range() .ease() .gt() .quantize()
-// .spring(). Distance is measured in x-units with the aspect corrected, so the falloff is a
-// circle on screen rather than an ellipse.
-function near(x, y, radius = 0.4) {
-  return makeOsc({ shape: 'near', rate: 0, lo: 0, hi: 1, phase: 0,
+// .spring(). Distance is measured in x-units with the aspect corrected, so the field is round
+// on screen rather than an ellipse.
+//
+// The FIELD SHAPE is the 4th argument — or the first, if you pass a string and want the
+// pointer: near("square"), near("diamond", 0.3), near(fingerX(1), fingerY(1), 0.25, "star").
+//   circle   the default, even in all directions
+//   square   Chebyshev distance — a hard-edged box
+//   diamond  Manhattan distance — a rhombus
+//   cross    high along BOTH axes: a plus reaching to the edges
+//   ring     a halo: peaks on the rim, hollow in the middle
+//   star     five lobes (petals)
+//   noise    a circle with a wobbling, organic rim
+//   <number> a regular n-gon: near(0.4, 6) via near(x, y, 0.4, 6) — 3 = triangle, 6 = hex
+// .phase(t) ROTATES the field (turns), and it is patternable like any osc param, so
+// near("square").phase(saw.slow(8)) is a slowly turning box of light.
+function near(x, y, radius = 0.4, form) {
+  // near("square") / near("star", 0.3): a leading string is the FORM, target defaults to the
+  // pointer — the common case should not need two undefineds to reach the interesting argument.
+  if (typeof x === 'string') { form = x; radius = y === undefined ? 0.4 : y; x = undefined; y = undefined; }
+  return makeOsc({ shape: 'near', rate: 0, lo: 0, hi: 1, phase: 0, nf: form == null ? 'circle' : form,
     nx: x === undefined ? mouseX : x, ny: y === undefined ? mouseY : y, nr: radius });
 }
 // raw distance to the point (0 at it, ~1 across the canvas) — near() inverted and unclamped,

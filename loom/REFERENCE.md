@@ -807,6 +807,29 @@ shape("dot*256").grid(16).color(palette("ember").at(near()))  // …as heat inst
 shape("dot*64").grid(8).alpha(near(fingerX(1), fingerY(1), 0.25))   // a torch in your hand
 ```
 
+**The field doesn't have to be round.** The shape is the 4th argument — or the *first*, if you
+pass a string and want the pointer, so the interesting argument isn't behind two `undefined`s:
+
+| form | field |
+| --- | --- |
+| `"circle"` | the default, even in all directions |
+| `"square"` | Chebyshev distance — a hard-edged box |
+| `"diamond"` | Manhattan distance — a rhombus |
+| `"cross"` | high along **both** axes: a plus reaching to the edges |
+| `"ring"` | a halo — peaks on the rim, hollow in the middle |
+| `"star"` | five lobes |
+| `"noise"` | a circle with a slowly wobbling, organic rim |
+| a number | a regular n-gon — `3` triangle, `6` hexagon |
+
+```js
+near("square")                              // a box of light on the cursor
+near("ring", 0.35)                          // a halo, dark at the centre
+near(fingerX(1), fingerY(1), 0.25, "star")  // a five-lobed torch in your hand
+near("square").phase(saw.slow(8))           // …slowly turning
+```
+
+`.phase(t)` **rotates** the field in turns, and it's patternable like any osc param.
+
 The point defaults to the pointer but is any pair of signals — a fingertip, a ball, a face,
 a mouth. `dist(x, y)` is the raw distance if you want to shape the falloff yourself. Distance
 is measured with the aspect corrected, so the falloff is a circle on screen, not an ellipse.

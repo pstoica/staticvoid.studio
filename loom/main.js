@@ -595,12 +595,33 @@ function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
   if (d.shape === 'near' || d.shape === 'dist') {
     const tx = +evalGlobal(d.nx, cycle, elapsed) || 0;
     const ty = +evalGlobal(d.ny, cycle, elapsed) || 0;
-    const asp = W > 0 ? H / W : 1;                       // measure in x-units → a round falloff
-    const dx = _curPos.x - tx, dy = (_curPos.y - ty) * asp;
-    const d2 = Math.sqrt(dx * dx + dy * dy);
+    const asp = W > 0 ? H / W : 1;                       // measure in x-units → round on screen
+    let dx = _curPos.x - tx, dy = (_curPos.y - ty) * asp;
+    const turn = numAt(d.phase, age, gp, st, ageC, stC) || 0;   // .phase() rotates the field
+    if (turn) { const c = Math.cos(turn * TAU), sn = Math.sin(turn * TAU);
+      const rx = dx * c - dy * sn; dy = dx * sn + dy * c; dx = rx; }
+    const ax = Math.abs(dx), ay = Math.abs(dy);
+    const hyp = Math.sqrt(dx * dx + dy * dy);
+    // the field's SHAPE is just a choice of distance metric
+    let d2;
+    const f = d.nf;
+    if (f === 'square') d2 = Math.max(ax, ay);                  // Chebyshev → a box
+    else if (f === 'diamond') d2 = ax + ay;                     // Manhattan → a rhombus
+    else if (f === 'cross') d2 = Math.min(ax, ay);              // near BOTH axes → a plus
+    else if (f === 'ring') {                                    // a halo: peaks on the rim
+      const rr = (+evalGlobal(d.nr, cycle, elapsed) || 0.0001);
+      d2 = Math.abs(hyp - rr * 0.72) / (rr * 0.45);   // thickness tracks the radius, else a big                                                  // radius reads as a blob with a pinhole
+
+    } else if (f === 'star') d2 = hyp / (0.62 + 0.38 * Math.cos(5 * Math.atan2(dy, dx)));
+    else if (f === 'noise') d2 = hyp / (0.78 + 0.34 * _snoise(Math.atan2(dy, dx) * 2.2 + elapsed * 0.25));
+    else if (typeof f === 'number' && f >= 3) {                 // a regular n-gon
+      const a = TAU / f, th = Math.atan2(dy, dx);
+      const seg = ((th % a) + a) % a - a / 2;
+      d2 = hyp * Math.cos(seg) / Math.cos(a / 2);
+    } else d2 = hyp;                                            // circle
     if (d.shape === 'dist') v = Math.min(1, d2);
     else {
-      const r = +evalGlobal(d.nr, cycle, elapsed) || 0.0001;
+      const r = f === 'ring' ? 1 : (+evalGlobal(d.nr, cycle, elapsed) || 0.0001);
       const t = Math.max(0, Math.min(1, 1 - d2 / r));
       v = t * t * (3 - 2 * t);                           // smoothstep: no hard rim
     }
@@ -1526,9 +1547,9 @@ const PRESETS = {
   'heat': `stack(
   bg("#05050c"),
   shape("dot*256").grid(16)
-    .size(near().range(0.004, 0.03))
-    .color(palette("ember").at(near(mouseX, mouseY, 0.45)))
-    .alpha(near().range(0.25, 1))
+    .size(near("diamond", 0.45).range(0.004, 0.03))
+    .color(palette("ember").at(near(mouseX, mouseY, 0.45, "diamond")))
+    .alpha(near("diamond", 0.45).range(0.25, 1))
     .decay(0.2)
 )`,
   // pinch to drop a word: hand tracking spawns type at your fingertip, physics does the rest.
