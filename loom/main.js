@@ -251,17 +251,18 @@ function run() {
     if (tw.mic) ensureMic();                 // patch uses mic()/micLow()/… → ask for the microphone
     if (tw.speech) ensureSpeech();           // patch uses spoken()/said()/… → start dictation
     else stopSpeech();                       // …and let it go when the patch stops asking
+    errBar.textContent = '';
+    errBar.classList.remove('show');
     if (tw.hands || tw.pose || tw.cam || tw.seg || tw.face) {
       ensureTracking(tw);
       // if the camera is already known-blocked, say so on every run — otherwise the patch
-      // just draws nothing (gates closed, signals 0) with no clue why.
+      // just draws nothing (gates closed, signals 0) with no clue why. (This used to be set
+      // and then cleared two lines later, so it never actually showed.)
       if (trackingState() === 'blocked') {
         errBar.textContent = 'camera unavailable — tracking signals read 0. Allow camera access for this site, then reload.';
         errBar.classList.add('show');
       }
     }
-    errBar.textContent = '';
-    errBar.classList.remove('show');
     localStorage.setItem('loom.code', editor.getCode());
     // reflect which preset this code IS in the list (boot restores the last patch without
     // ever selecting it). Only update on an exact match — edited code keeps the previous
@@ -1099,6 +1100,23 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+// Dictation fails silently by nature — a blocked, unsupported or unreachable recognizer looks
+// exactly like nobody talking. Report each state change once, and only touch the error bar if
+// it is empty or already carrying our own notice (patch errors win).
+let speechNotice = '';
+function watchSpeech() {
+  const msg = !DSL._getTracking().speech ? '' : ({
+    unsupported: 'no speech recognition in this browser — spoken()/said() read nothing. Chrome or Edge.',
+    blocked: 'microphone blocked — spoken()/said() read nothing. Allow mic access for this site, then reload.',
+    offline: 'speech service unreachable — spoken()/said() read nothing. Turn on Chrome\u2019s Live Caption (Settings → Accessibility) to fetch the on-device model, or check a blocker/VPN. loom.speech() for detail.',
+  }[speechState()] || '');
+  if (msg === speechNotice) return;
+  const ours = errBar.textContent === speechNotice;
+  speechNotice = msg;
+  if (msg) { errBar.textContent = msg; errBar.classList.add('show'); }
+  else if (ours) { errBar.textContent = ''; errBar.classList.remove('show'); }
+}
+
 function tick(dt) {
   elapsed += dt;   // advances even when paused (like glyph age), so FX keep living
   DSL._jugDecay(dt);   // age the juggling throw/catch/tap pulses (decays even when paused)
@@ -1117,6 +1135,7 @@ function tick(dt) {
   DSL._speechDecay(dt);                                    // age the said()/spoke() pulses
   DSL._speechInput(speechTick());   // unconditional: gating on 'live' dropped words heard mid-restart
   DSL._speechFrame();    // snapshot this frame's words for spoken() (one glyph per word)
+  watchSpeech();         // say so when dictation is dead rather than looking like silence
   // surface camera/tracking state transitions (starting → live / blocked) so a blank
   // canvas is never a mystery — the gates read 0 until the camera actually sees you.
   const trkSt = trackingState();
