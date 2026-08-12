@@ -356,6 +356,14 @@ function spawn(value, onset) {
   const mods = [];
   for (const f of MOD_FIELDS) if (isOsc(v[f])) mods.push({ field: f, osc: freezeOscParams(v[f].__osc, onset) });
 
+  // Resolve the position BEFORE the controls below, so gx()/gy() can be read by any of them
+  // (colour, size, alpha…). resolvePos only needs these few fields, so a stand-in stands in;
+  // the authoritative p.x/p.y is still computed from the real particle further down.
+  const posProbe = { pin, jx, jy, spawnT: elapsed, ageCycles: 0, spawnCycle: cycle,
+    _spr: springs.length ? { ...sprInit } : null };
+  const probeXY = resolvePos(posProbe, minDim, 0);
+  DSL._setGlyphPos(W ? probeXY[0] / W : 0.5, H ? probeXY[1] / H : 0.5);
+
   const p = {
     pin, posLive, jx, jy, phase,
     shape: v.shape || 'dot',

@@ -773,6 +773,27 @@ or attach the physics attractor to a wrist: `{ attract: 1, ax: poseX("rwrist"), 
 | `.gt(t)` `.gte(t)` `.lt(t)` `.lte(t)` | compare against a threshold → a hard **`0` or `1`**. `t` is patternable like `range`'s bounds. Optional 2nd arg = hysteresis (below) |
 | `.between(lo, hi)` | `1` while the value sits inside the band, else `0` |
 
+### The glyph's own position (`gx` / `gy`)
+
+`gx()` / `gy()` read **where the glyph being spawned landed**, `0..1` across the canvas, so a
+control can depend on its own glyph's position — however that position came about: a grid
+cell, a ring angle, a fingertip, mini-notation, a spring.
+
+```js
+shape("dot*64").grid(8).color(palette("neon").at(gx()))        // horizontal gradient
+shape("dot*64").grid(8).size(gy().range(0.01, 0.05))           // grows down the screen
+shape("square*32").burst(4).alpha(gx().gt(0.5).range(0.2, 1))  // right half brighter
+```
+
+They're **frozen at onset** by nature — the value is sampled while the glyph is being built —
+so a glyph whose position keeps moving (a positional osc, a physics body) keeps the colour it
+was born with instead of repainting as it travels. That's usually what you want for a trail;
+if you need the live version, drive the control from the same signal that drives the position.
+
+Because the value comes from the resolved position rather than the onset phase, these also
+work under `.burst()`, where every copy shares one onset — `.burst()` fans the *phase*, and
+`gx()` reads the *place* that phase produced.
+
 ### Comparisons
 
 A comparison turns a continuous signal into a hard **`0/1`**, which is exactly what the

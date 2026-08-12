@@ -1195,6 +1195,22 @@ class Physics {
 }
 function physics(pat, opts) { return new Physics(pat, opts); }
 
+
+// ── the glyph's own position, as signals ──────────────────────────────────────────
+// gx()/gy() read where the glyph BEING SPAWNED landed, so a control can depend on its own
+// glyph's position however that position was arrived at — grid cell, ring angle, fingertip,
+// mini-notation, a spring. The classic use is colour-by-place:
+//   shape("dot*64").grid(8).color(palette("neon").at(gx()))       a horizontal gradient
+//   shape("dot*64").grid(8).size(gy().range(0.01, 0.05))          growing down the screen
+//   shape("square*32").burst(4).alpha(gx().gt(0.5).range(0.2, 1)) right half brighter
+// Frozen at onset by nature: the value is sampled while the glyph is being built, so a glyph
+// whose position keeps MOVING (a positional osc, or a physics body) keeps the colour it was
+// born with rather than repainting as it travels.
+const _gpos = { x: 0.5, y: 0.5 };
+function _setGlyphPos(x, y) { _gpos.x = x; _gpos.y = y; }
+function gx() { return signal(() => _gpos.x); }
+function gy() { return signal(() => _gpos.y); }
+
 // ── named layers ($) ──────────────────────────────────────────────────────────
 // A patch can be several named, separately-editable layers instead of one giant
 // stack(...). Each `$(name?, pattern)` call registers a layer; compile() in main.js
@@ -1435,6 +1451,7 @@ export const DSL = {
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, flight, gyro, _jug, _jugInput, _jugDecay,
   fingerX, fingerY, fingerZ, fingerUp, fingersUp, pinch, palmX, palmY, handSeen, handNear, poseX, poseY, poseSeen,
   cam, _setCamSink, _handInput, _poseInput, _faceInput, _micInput, _resetTracking, _getTracking,
+  gx, gy, _setGlyphPos,
   text, spoken, said, spoke, saying, heard, _speechInput, _speechFrame, _speechDecay,
   mouthOpen, smile, browRaise, mouthX, mouthY, faceX, faceY, faceSeen,
   mic, micLow, micMid, micHigh, micBand, micHit,
