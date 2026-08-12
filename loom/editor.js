@@ -11,6 +11,7 @@ import { EditorView, keymap, Decoration, ViewPlugin, WidgetType, highlightActive
 import { history, historyKeymap, defaultKeymap, indentWithTab, toggleComment } from '@codemirror/commands';
 import { StreamLanguage, HighlightStyle, syntaxHighlighting, indentUnit } from '@codemirror/language';
 import { Tag } from '@lezer/highlight';
+import { autocompletion } from '@codemirror/autocomplete';
 
 // ── Loom vocabulary (highlight only — kept in sync with the DSL) ──
 const FN = new Set(['shape', 's', 'n', 'polygon', 'polyline', 'stack', 'cat', 'slowcat', 'fastcat', 'seq', 'sequence', 'timecat',
@@ -31,6 +32,134 @@ const METHOD = new Set(['fast', 'slow', 'rev', 'every', 'iter', 'palindrome', 'j
   'outline', 'shade', 'pixelate', 'blur', 'glow', 'meshfill', 'radiance', 'feedback', 'trails', 'silhouette', 'hue', 'brightness', 'contrast', 'saturate',
   'negative', 'invert', 'displace', 'kaleido', 'mirror', 'cap', 'join', 'open', 'vertex', 'attack', 'decay',
   'life', 'hold', 'id', 'n', 'stencil', 'set', 'spread', 'phase', 'rate', 'quantize', 'ease', 'segment', 'seg', 'sample', 'spring']);
+
+// ── autocomplete ────────────────────────────────────────────────────────────────
+// The API is wide enough that remembering it is the main friction, so completion
+// doubles as inline docs: each entry carries a one-line description. Three contexts —
+// a bare word (sources / signals / free functions), after a dot (controls + FX), and
+// INSIDE a string where the argument set is known (shape names, palettes, curves…).
+const C_FN = [
+  ['shape', 'a glyph per token — shape("circle*8")'], ['s', 'alias for shape'],
+  ['n', 'numbered dots'], ['stack', 'layer patterns in parallel'],
+  ['cat', 'one pattern per cycle'], ['seq', 'squeeze patterns into one cycle'],
+  ['run', 'numeric pattern 0..k-1'], ['pure', 'one event per cycle'], ['silence', 'nothing'],
+  ['euclid', 'euclidean rhythm: euclid(3, 8, pat)'], ['polygon', 'one glyph through N points'],
+  ['polyline', 'open polygon'], ['choose', 'random pick per onset'], ['irand', 'random int 0..k-1'],
+  ['pick', 'index a list by a 0..1 signal'], ['iff', 'branch on a condition'],
+  ['osc', 'live oscillator over a glyph\'s life — osc(rate, shape)'],
+  ['env', 'attack/decay envelope as a signal'], ['spring', 'stateful chase toward a target'],
+  ['palette', 'colour ramp — palette("neon").at(saw)'], ['bg', 'background colour (patternable)'],
+  ['persp', '3D-tilt camera; persp(0) = orthographic'], ['cam', 'webcam behind the glyphs'],
+  ['group', 'render a layer to its own buffer for FX'], ['echo', 'accumulate layers on re-run'],
+  ['physics', 'rapier2d bodies — physics(pat, opts)'], ['slider', 'inline draggable number'],
+  ['stripes', '0/1 bands n times per cycle'], ['checker', 'chessboard over .grid() cells'],
+  ['$', 'named layer — $("name", pattern)'],
+];
+const C_SIG = [
+  ['sine', '0..1 sine'], ['cosine', '0..1 cosine'], ['saw', '0..1 ramp'], ['isaw', 'reverse ramp'],
+  ['tri', 'triangle'], ['square', 'hard 0/1'], ['rand', 'white noise'], ['perlin', 'smooth noise'],
+  ['fbm', 'fractal noise'], ['brown', 'slow wander'], ['gauss', 'bell around 0.5'],
+  ['mouseX', 'pointer x'], ['mouseY', 'pointer y'], ['mouseDown', '1 while pressed'],
+  ['cc', 'MIDI CC — cc(num, ch)'], ['gate', '1 while a note is held'], ['vel', 'note velocity'],
+  ['note', 'note pitch 0..1'], ['pc', 'pitch class (octave-independent)'], ['bend', 'pitch bend'],
+  ['onNote', 'one glyph per note-on — onNote(ch, shape)'], ['dev', 'scope MIDI to one device'],
+  ['mic', 'microphone loudness'], ['micLow', 'mic bass'], ['micMid', 'mic body'], ['micHigh', 'mic air'],
+  ['micBand', 'one of 24 FFT bands'], ['micHit', 'mic transient pulse'],
+  ['mouthOpen', 'jaw open 0..1 (singing)'], ['smile', 'grin 0..1'], ['browRaise', 'eyebrows 0..1'],
+  ['mouthX', 'mouth x'], ['mouthY', 'mouth y'], ['faceX', 'nose x'], ['faceY', 'nose y'], ['faceSeen', 'face tracked'],
+  ['fingerX', 'fingertip x — fingerX(0..4)'], ['fingerY', 'fingertip y'], ['fingerZ', 'fingertip depth'],
+  ['fingerUp', '1 while that finger is extended'], ['fingersUp', 'how many fingers are out'],
+  ['pinch', 'thumb↔index closeness'], ['palmX', 'palm x'], ['palmY', 'palm y'],
+  ['handSeen', 'hand tracked'], ['handNear', 'hand distance proxy'],
+  ['poseX', 'body joint x — poseX("nose")'], ['poseY', 'body joint y'], ['poseSeen', 'person tracked'],
+  ['ballX', 'juggling ball x'], ['ballY', 'juggling ball y'], ['ballSeen', 'ball detected'],
+  ['moving', 'ball seen and moving'], ['thrown', 'throw pulse'], ['caught', 'catch pulse'],
+  ['tapped', 'tap pulse'], ['held', 'ball held still'], ['shaken', 'shake pulse'],
+  ['flight', 'last airtime'], ['gyro', 'ball spin'],
+  ['level', 'Link Audio track level'], ['band', 'Link Audio FFT band'], ['low', 'track bass'],
+  ['mid', 'track body'], ['high', 'track air'], ['hit', 'track transient'],
+];
+const C_METHOD = [
+  ['color', 'colour: hex, name, 0..1 hue, or palette'], ['size', 'radius 0..1'],
+  ['x', 'centre x 0..1'], ['y', 'centre y 0..1'], ['radius', 'polar offset from centre'],
+  ['angle', 'orbital position (turns)'], ['grid', 'lay events into cols×rows'],
+  ['rotate', 'z rotation (turns)'], ['rotateX', '3D tilt'], ['rotateY', '3D tilt'],
+  ['spin', 'continuous rotation (turns/sec)'], ['alpha', 'opacity'], ['opacity', 'alias for alpha'],
+  ['blend', '"lighter" | "screen" | "multiply"'], ['jitter', 'random scatter'], ['pan', 'x shift'],
+  ['fill', 'filled 0/1'], ['stroke', 'outlined 0/1'], ['weight', 'stroke width'],
+  ['outline', 'stroke as a fraction of radius'], ['shade', '3D shading amount'],
+  ['open', 'arc/line gap'], ['vertex', 'dot at each vertex'], ['cap', 'line ends'], ['join', 'corners'],
+  ['attack', 'fade-in seconds'], ['decay', 'fade-out / lifetime'], ['life', 'alias for decay'],
+  ['hold', 'SUSTAIN while a condition is true — .hold(gate(1))'],
+  ['id', 'ONE addressable object; later onsets re-target it'],
+  ['n', 'pick a drawn pack frame (patternable)'], ['stencil', '1 = recolour by luminance'],
+  ['burst', 'n simultaneous copies, phases fanned'],
+  ['fast', 'speed up'], ['slow', 'slow down'], ['rev', 'reverse each cycle'],
+  ['every', 'apply f every n-th cycle'], ['iter', 'rotate by 1/n each cycle'],
+  ['palindrome', 'alternate forward/reversed'], ['jux', 'copy panned apart'],
+  ['superimpose', 'overlay a transformed copy'], ['off', 'overlay a delayed copy'],
+  ['degrade', 'drop ~half the events'], ['degradeBy', 'drop a fraction'],
+  ['sometimes', 'apply f to a random share'], ['often', '75% of events'], ['rarely', '25%'],
+  ['when', 'apply f where a condition holds'], ['gate', 'keep events where a condition holds'],
+  ['early', 'shift earlier'], ['late', 'shift later'], ['range', 'remap a 0..1 signal'],
+  ['add', 'arithmetic'], ['sub', 'arithmetic'], ['mul', 'arithmetic'], ['div', 'arithmetic'],
+  ['quantize', 'snap the VALUE to n steps'], ['segment', 'snap the TIME to n steps'],
+  ['sample', 'sample-and-hold a live signal'], ['ease', 'shape a 0..1 signal through a curve'],
+  ['spread', 'per-glyph osc phase offset'], ['phase', 'osc phase'], ['rate', 'osc rate'],
+  ['drift', 'osc phase drift over time'], ['free', 'osc in real seconds, not cycles'],
+  ['spring', 'chase this value with a damped spring'],
+  // group FX
+  ['pixelate', 'FX: mosaic'], ['blur', 'FX: gaussian blur'], ['glow', 'FX: light bleeds from content'],
+  ['meshfill', 'FX: mesh gradient from the glyphs'], ['radiance', 'FX: 2D GI with shadows'],
+  ['feedback', 'FX: trails/tunnel (4th arg = effects INSIDE the loop)'],
+  ['trails', 'FX: feedback, no warp'], ['silhouette', 'FX: mask by the person in the webcam'],
+  ['hue', 'FX: rotate hue'], ['brightness', 'FX'], ['contrast', 'FX'], ['saturate', 'FX'],
+  ['negative', 'FX: invert'], ['invert', 'FX: invert'], ['displace', 'FX: warp'],
+  ['kaleido', 'FX: mirrored wedges'], ['mirror', 'FX: left/right symmetry'], ['tile', 'FX: repeat'],
+  ['dots', 'FX: halftone'], ['halftone', 'FX: halftone'], ['rgbshift', 'FX: prism split'],
+  ['posterize', 'FX: quantize colours'], ['dither', 'FX: ordered dither'],
+  ['scanlines', 'FX: CRT lines'], ['slice', 'FX: offset bands'], ['lens', 'FX: barrel distortion'],
+  ['scale', 'FX: zoom the layer'], ['move', 'FX: translate the layer'], ['turn', 'FX: rotate the layer'],
+  ['aspect', 'FX: crop to a ratio'], ['hidden', 'render to a buffer but do not composite'],
+];
+const SHAPE_NAMES = ['dot', 'circle', 'ring', 'arc', 'square', 'box', 'tri', 'pent', 'hex', 'star',
+  'plus', 'line', 'cross', 'cube', 'sphere', 'torus', 'hoop', 'octa',
+  'bong', 'knot', 'amongus', 'balloons', 'chain'];
+const PALETTE_NAMES = ['sunset', 'ember', 'ice', 'neon', 'forest', 'candy', 'mono', 'rainbow', 'aurora'];
+const EASE_NAMES = ['linear', 'inSine', 'outSine', 'inOutSine', 'inQuad', 'outQuad', 'inOutQuad',
+  'inCubic', 'outCubic', 'inOutCubic', 'inQuart', 'outQuart', 'inOutQuart', 'inExpo', 'outExpo',
+  'inOutExpo', 'inBack', 'outBack', 'inOutBack', 'inElastic', 'outElastic', 'inOutElastic',
+  'inBounce', 'outBounce', 'inOutBounce'];
+const opt = (list, type) => list.map(([label, detail]) => ({ label, type, detail }));
+const words = (list, type, detail) => list.map((label) => ({ label, type, detail }));
+
+// argument sets that only make sense inside a particular call's string
+const STRING_ARGS = [
+  [/\b(?:shape|s)\s*\(\s*"[^"]*$/, words(SHAPE_NAMES, 'constant', 'shape')],
+  [/\bpalette\s*\(\s*"[^"]*$/, words(PALETTE_NAMES, 'constant', 'palette')],
+  [/\.ease\s*\(\s*"[^"]*$/, words(EASE_NAMES, 'constant', 'curve')],
+  [/\.blend\s*\(\s*"[^"]*$/, words(['source-over', 'lighter', 'screen', 'multiply'], 'constant', 'blend')],
+  [/\.cap\s*\(\s*"[^"]*$/, words(['round', 'butt', 'square'], 'constant', 'cap')],
+  [/\.join\s*\(\s*"[^"]*$/, words(['round', 'miter', 'bevel'], 'constant', 'join')],
+  [/\bposeX?Y?\s*\(\s*"[^"]*$/, words(['nose', 'lshoulder', 'rshoulder', 'lelbow', 'relbow',
+    'lwrist', 'rwrist', 'lhip', 'rhip', 'lknee', 'rknee', 'lankle', 'rankle'], 'constant', 'joint')],
+];
+
+function loomComplete(ctx) {
+  const before = ctx.state.sliceDoc(Math.max(0, ctx.pos - 160), ctx.pos);
+  for (const [re, options] of STRING_ARGS) {                 // inside a known string arg
+    if (re.test(before)) {
+      const w = ctx.matchBefore(/[\w-]*/);
+      return { from: w ? w.from : ctx.pos, options, validFor: /^[\w-]*$/ };
+    }
+  }
+  const dot = ctx.matchBefore(/\.\w*/);                      // .method / .control / FX
+  if (dot) return { from: dot.from + 1, options: opt(C_METHOD, 'method'), validFor: /^\w*$/ };
+  const word = ctx.matchBefore(/\w+/);                       // a bare identifier
+  if (!word && !ctx.explicit) return null;
+  return { from: word ? word.from : ctx.pos,
+    options: [...opt(C_FN, 'function'), ...opt(C_SIG, 'variable')], validFor: /^\w*$/ };
+}
 
 // one custom highlight tag per Loom token class
 const T = {
@@ -317,6 +446,7 @@ export function createEditor(parent, opts = {}) {
       loomTheme,
       sliderPlugin,
       liveSigPlugin,
+      autocompletion({ override: [loomComplete], activateOnTyping: true, maxRenderedOptions: 30 }),
       runKeys,
       keymap.of([
         indentWithTab,
