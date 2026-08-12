@@ -1462,6 +1462,14 @@ const PRESETS = {
   // for where they appear. Words stream in as you speak, one glyph each.
   'say drop': `group(
   cam(0.35),
+  // stamped where it was born: a sharp copy plus a soft halo, both stay put and fade,
+  // so the words pile up at your fingertip as well as falling away from it
+  spoken()
+    .x(fingerX(1)).y(fingerY(1))
+    .size(0.07)
+    .color(palette("neon").at(rand))
+    .alpha(0.5).decay(2.2)
+    .superimpose(w => w.size(0.18).alpha(0.09).decay(3.6)),
   physics(
     spoken()
       .x(fingerX(1)).y(fingerY(1))
