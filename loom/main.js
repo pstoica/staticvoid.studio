@@ -1432,6 +1432,22 @@ function renderLayerChips() {
 
 // ── presets ───────────────────────────────────────────────────────────────────────
 const PRESETS = {
+  // pinch to drop a word: hand tracking spawns type at your fingertip, physics does the rest.
+  // The hysteresis on the pinch is load-bearing — a bare threshold chatters as your fingers
+  // hover near it and dumps a stream of words instead of releasing them one at a time.
+  'drop words': `group(
+  cam(0.35),
+  physics(
+    text("<drip drop plip plop splash>*2")
+      .x(fingerX(1)).y(fingerY(1))
+      .gate(pinch().gt(0.55, 0.3))
+      .size(0.055)
+      .color(palette("candy").at(rand))
+      .rotate(rand.range(-0.05, 0.05))
+      .decay(4),
+    { gravity: 0.9, bounce: 0.45, drag: 0.15, vel: 0.06, spin: 0.25 }
+  )
+).glow(0.3, 0.55)`,
   // a physics swarm lured to the cursor (attract + swirl + turbulence) beneath trailing rings
   'magnet': `stack(
   bg("#06060f"),
