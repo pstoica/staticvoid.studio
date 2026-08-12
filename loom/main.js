@@ -342,7 +342,13 @@ function spawn(value, onset) {
   // only when one is an osc/spring; otherwise the spawn position stands. A physics body
   // owns its own position (the sim drives x/y), so live-position resolution is off for it —
   // x/y/radius/angle only set the spawn POINT.
-  const pin = { x: v.x, y: v.y, radius: v.radius, angle: v.angle, gridX: v.gridX, gridY: v.gridY, pan: v.pan, phase };
+  // POSITION oscs get the same param-freezing the scalar mods get (line below): the waveform
+  // stays live over the glyph's life, but a SIGNAL used as one of its params is captured at
+  // onset. Without this, .x(osc(...).add(fingerX(1))) left a raw Pattern in the osc's op list
+  // and resolvePos computed number + Pattern — not a number, so the glyph vanished.
+  const froz = (a) => (isOsc(a) ? { __osc: freezeOscParams(a.__osc, onset) } : a);
+  const pin = { x: froz(v.x), y: froz(v.y), radius: froz(v.radius), angle: froz(v.angle),
+    gridX: froz(v.gridX), gridY: froz(v.gridY), pan: froz(v.pan), phase };
   const posLive = !v._pid && (isOsc(v.x) || isOsc(v.y) || isOsc(v.radius) || isOsc(v.angle) || isOsc(v.gridX) || isOsc(v.gridY) || isOsc(v.pan)
     || springs.some((s) => SPRING_POS.has(s.field)));
 
@@ -825,6 +831,25 @@ function glResolve(p, minDim, out) {
 // sampled at the current cycle. Numbers pass through.
 function evalGlobal(param, cycle, elapsed) {
   if (param == null) return param;
+  // spring() on a GLOBAL param (an FX amount, a physics field, bg) — the per-glyph springs in
+  // tick() need a glyph to hang state on, so this is the layer-level equivalent: state rides
+  // the spring descriptor itself, which compile() rebuilds per run, so ⌘↵ resets it. Same
+  // integrator and substepping as the per-glyph path, so they feel identical.
+  if (isSpring(param)) {
+    const sd = param.__spring;
+    const tgt = +evalGlobal(sd.target, cycle, elapsed) || 0;    // target may be a signal or osc
+    let st = sd._g;
+    if (!st) { st = sd._g = { x: tgt, v: 0, t: elapsed }; return st.x; }
+    const dt = Math.min(0.1, Math.max(0, elapsed - st.t));      // clamp: a hidden tab must not explode it
+    st.t = elapsed;
+    if (dt > 0) {
+      const sub = Math.min(8, Math.max(1, Math.ceil(dt / 0.008)));
+      const h = dt / sub;
+      for (let k = 0; k < sub; k++) { st.v += (sd.k * (tgt - st.x) - sd.d * st.v) * h; st.x += st.v * h; }
+      if (!Number.isFinite(st.x)) { st.x = tgt; st.v = 0; }
+    }
+    return st.x;
+  }
   if (isOsc(param)) return evalOsc(param.__osc, elapsed, 0, 0, cycle, 0);   // cycle = tempo-synced time
   if (param instanceof DSL.Pattern) {
     // a tiny forward window, not a zero-width span: discrete patterns (mini
@@ -1462,24 +1487,30 @@ const PRESETS = {
   // for where they appear. Words stream in as you speak, one glyph each.
   'say drop': `group(
   cam(0.35),
-  // stamped where it was born: a sharp copy plus a soft halo, both stay put and fade,
-  // so the words pile up at your fingertip as well as falling away from it
+  // stamped where it was born: a sharp copy plus a soft halo, both stay put and fade.
+  // The oscs drift over each word's life; .spread(1) offsets them by the word's onset
+  // phase, so no two words breathe or colour alike.
   spoken()
-    .x(fingerX(1)).y(fingerY(1))
-    .size(0.07)
-    .color(palette("neon").at(rand))
+    .x(osc(0.09, "perlin").spread(1).range(-0.014, 0.014).add(fingerX(1)))
+    .y(osc(0.11, "perlin").spread(1).range(-0.014, 0.014).add(fingerY(1)))
+    .size(osc(0.07).spread(1).range(0.062, 0.082))
+    .color(palette("neon").at(osc(0.05, "perlin").spread(1).range(0.12, 0.88)))
+    .rotate(osc(0.06).spread(1).range(-0.015, 0.015))
     .alpha(0.5).decay(2.2)
-    .superimpose(w => w.size(0.18).alpha(0.09).decay(3.6)),
+    .superimpose(w => w
+      .size(osc(0.04).spread(1).range(0.16, 0.23))
+      .alpha(0.09).decay(3.6)),
   physics(
     spoken()
       .x(fingerX(1)).y(fingerY(1))
-      .size(0.07)
-      .color(palette("neon").at(rand))
-      .rotate(rand.range(-0.04, 0.04))
+      .jitter(0.014)
+      .size(osc(0.07).spread(1).range(0.062, 0.082))
+      .color(palette("neon").at(osc(0.04, "perlin").spread(1).range(0.12, 0.88)))
+      .rotate(rand.range(-0.05, 0.05))
       .decay(5),
     { gravity: 0.8, bounce: 0.5, drag: 0.12, vel: 0.05, spin: 0.2 }
   )
-).glow(spoke().range(0.15, 0.8), 0.6)`,
+).glow(spring(spoke().range(0.15, 1.2), 16, 5), 0.6)`,
   'drop words': `group(
   cam(0.35),
   physics(
