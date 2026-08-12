@@ -264,6 +264,50 @@ group(
 ).glow(micHit().range(0.2, 1.1))                      // the room flashes on each note
 ```
 
+### Words (`text` / `spoken` / `said` …)
+
+`text("…")` draws **type**. It takes the same mini-notation as `shape()`, so spaces make
+a sequence — `text("hold my beer")` is three glyphs across the cycle, each rasterized as
+its own word. `.size()` sets the **height**; the width follows the word, so long words
+stay readable instead of being squeezed into a square.
+
+`spoken()` is the live version: it hooks browser **dictation** and emits one glyph per
+word **as you say it** — words stream out of interim results rather than waiting for you
+to finish the sentence. Creating any of these asks for the microphone on the next run.
+
+| signal | what it is | range |
+| --- | --- | --- |
+| `spoken()` | one glyph per spoken word, **drawn as that word** | *event source* |
+| `spoken("star")` | …one glyph per word, but always this shape | *event source* |
+| `said("more")` | decaying pulse when you say that word (case-insensitive) | `0..1` |
+| `spoke()` | decaying pulse on **any** word | `0..1` |
+| `saying()` | `1` while you're actually making sound | `0/1` |
+| `heard()` | how many words so far this run — a counter | `0..n` |
+
+```js
+group(
+  spoken()                                    // say something; it appears
+    .x(rand).y(sine.range(0.3, 0.7))
+    .size(0.07).decay(4)
+    .color(palette("neon").at(rand))
+    .rotate(perlin.range(-0.03, 0.03)),
+  text("shhh").size(0.2).x(0.5).y(0.5)        // …over a word you placed by hand
+    .alpha(saying().range(0.4, 0)),           // which fades out while you talk
+).glow(spoke().range(0.15, 0.9))              // a flash on every word
+```
+
+Chrome ≥ 138 runs recognition **on-device** where the language model is installed — no
+audio leaves the machine and nothing depends on the network mid-set. Loom asks for that
+first, falls back to the cloud path when the model isn't there yet, and kicks off the
+download in the background so the next session is local. `loom.speech()` in the console
+reports `{ state, local }`. Firefox has no Web Speech recognition at all; there the
+signals sit at zero and `text()` still works.
+
+Two things worth knowing before you perform with it: recognition **stops itself** on
+silence and after errors (Loom restarts it automatically, but there's a ~0.25 s gap), and
+it opens its **own** microphone capture alongside `mic()`, which some audio interfaces
+dislike. Test your rig before the set, not during it.
+
 **Embedded effects inside feedback.** `feedback`'s optional last arg is a builder
 whose chain runs **on the history each frame, inside the loop** — so those effects
 **compound** as the image recirculates (hue keeps rotating, blur keeps diffusing,

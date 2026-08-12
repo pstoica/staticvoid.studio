@@ -22,6 +22,7 @@ const FN = new Set(['shape', 's', 'n', 'polygon', 'polyline', 'stack', 'cat', 's
   'fingerX', 'fingerY', 'fingerZ', 'fingerUp', 'fingersUp', 'pinch', 'palmX', 'palmY', 'handSeen', 'handNear', 'poseX', 'poseY', 'poseSeen',
   'mouthOpen', 'smile', 'browRaise', 'mouthX', 'mouthY', 'faceX', 'faceY', 'faceSeen',
   'mic', 'micLow', 'micMid', 'micHigh', 'micBand', 'micHit',
+  'text', 'spoken', 'said', 'spoke', 'saying', 'heard',
   'level', 'band', 'low', 'mid', 'high', 'hit', '$']);
 const SIG = new Set(['sine', 'cosine', 'saw', 'isaw', 'tri', 'square', 'rand', 'perlin', 'fbm', 'brown',
   'gauss', 'white', 'mouseX', 'mouseY', 'mouseDown']);
@@ -53,6 +54,7 @@ const C_FN = [
   ['group', 'render a layer to its own buffer for FX'], ['echo', 'accumulate layers on re-run'],
   ['physics', 'rapier2d bodies — physics(pat, opts)'], ['slider', 'inline draggable number'],
   ['stripes', '0/1 bands n times per cycle'], ['checker', 'chessboard over .grid() cells'],
+  ['text', 'draw WORDS — text("hold my beer") is three glyphs'],
   ['$', 'named layer — $("name", pattern)'],
 ];
 const C_SIG = [
@@ -65,6 +67,9 @@ const C_SIG = [
   ['onNote', 'one glyph per note-on — onNote(ch, shape)'], ['dev', 'scope MIDI to one device'],
   ['mic', 'microphone loudness'], ['micLow', 'mic bass'], ['micMid', 'mic body'], ['micHigh', 'mic air'],
   ['micBand', 'one of 24 FFT bands'], ['micHit', 'mic transient pulse'],
+  ['spoken', 'a glyph per SPOKEN WORD, drawn as that word'], ['said', 'pulse when you say that word'],
+  ['spoke', 'pulse on any spoken word'], ['saying', '1 while you are making sound'],
+  ['heard', 'how many words so far this run'],
   ['mouthOpen', 'jaw open 0..1 (singing)'], ['smile', 'grin 0..1'], ['browRaise', 'eyebrows 0..1'],
   ['mouthX', 'mouth x'], ['mouthY', 'mouth y'], ['faceX', 'nose x'], ['faceY', 'nose y'], ['faceSeen', 'face tracked'],
   ['fingerX', 'fingertip x — fingerX(0..4)'], ['fingerY', 'fingertip y'], ['fingerZ', 'fingertip depth'],

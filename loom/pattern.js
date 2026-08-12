@@ -624,8 +624,8 @@ function shaken(id)   { return signal(() => _jval(id, 'shake', 0)); }
 // rule: `.x(fingerX(1))` per-glyph freezes at onset (a trail), live as FX/physics params.
 const _handState = { hands: [] };
 const _poseState = { seen: 0, x: [], y: [] };
-let _trackWant = { hands: false, pose: false, cam: false, seg: false, face: false, mic: false };
-function _resetTracking() { _trackWant = { hands: false, pose: false, cam: false, seg: false, face: false, mic: false }; }
+let _trackWant = { hands: false, pose: false, cam: false, seg: false, face: false, mic: false, speech: false };
+function _resetTracking() { _trackWant = { hands: false, pose: false, cam: false, seg: false, face: false, mic: false, speech: false }; }
 function _getTracking() { return _trackWant; }
 function _handInput(st) { _handState.hands = (st && st.hands) || []; }
 function _poseInput(st) { _poseState.seen = st && st.seen ? 1 : 0; _poseState.x = (st && st.x) || []; _poseState.y = (st && st.y) || []; }
@@ -700,6 +700,48 @@ function micBand(n = 0) {
   return signal(() => { const b = _micState.bands; if (!b || !b.length) return 0;
     return b[Math.max(0, Math.min(b.length - 1, n | 0))] || 0; });
 }
+
+// ── dictation (Web Speech), as events + signals ───────────────────────────────────
+// Talking becomes glyphs. spoken() is an EVENT source in the onNote() mould — one hap per
+// recognized word, textured with the word itself (the sprite path rasterizes any string,
+// so a word is a texture for free). Words stream in as you say them, not at end-of-phrase.
+//   spoken()              one glyph per spoken word, drawn AS that word
+//   spoken("star")        …but always this shape instead (the word only triggers it)
+//   said("more")          decaying pulse when that word lands (case-insensitive)
+//   spoke()               decaying pulse on ANY word
+//   saying()              1 while you're actually making sound (speech-detected)
+//   heard()               how many words so far this run — a monotonic counter
+// Chrome runs this on-device where the model is installed; otherwise it's the cloud path.
+const _speech = { frame: [], pending: [], hits: {}, pulse: 0, voicing: 0, last: '', interim: '', count: 0 };
+function _speechInput(st) {
+  if (!st) return;
+  _speech.voicing = st.voicing || 0;
+  _speech.interim = st.interim || '';
+  for (const w of st.words || []) {
+    _speech.pending.push(w);
+    _speech.last = w;
+    _speech.count++;
+    _speech.pulse = 1;
+    _speech.hits[w.toLowerCase()] = 1;
+  }
+}
+// snapshot this frame's words (pure within the frame, like _midiFrame)
+function _speechFrame() { _speech.frame = _speech.pending; _speech.pending = []; }
+function _speechDecay(dt) {
+  const k = Math.exp(-dt * 6);
+  _speech.pulse *= k;
+  for (const w in _speech.hits) { const v = _speech.hits[w] * k; if (v < 0.001) delete _speech.hits[w]; else _speech.hits[w] = v; }
+}
+const _speechSig = (fn) => { _trackWant.speech = true; return signal(fn); };
+function spoken(shape) {
+  _trackWant.speech = true;
+  return new Pattern((s) => _speech.frame.map((w) => hap({ begin: s.begin, end: s.end }, s,
+    shape == null ? { shape: w, _text: 1 } : { shape: String(shape) })));
+}
+function said(word = '') { const k = String(word).toLowerCase(); return _speechSig(() => _speech.hits[k] || 0); }
+function spoke()  { return _speechSig(() => _speech.pulse); }
+function saying() { return _speechSig(() => _speech.voicing); }
+function heard()  { return _speechSig(() => _speech.count); }
 
 // cam(opacity?): show the WEBCAM behind the glyphs — the patch-declared backdrop, like
 // bg() but a live camera. Sits in a stack(...) (returns silence); opacity is patternable
@@ -1308,6 +1350,12 @@ function reifyControl(arg, numeric) {
 // ── DSL entry points (these produce control-bearing patterns) ──────────────────
 function shape(arg) { return reify(arg).fmap((v) => ({ shape: String(v) })); }
 const s = shape;
+// text(str): draw WORDS. Same mini-notation as shape(), so spaces make a sequence —
+// text("hold my beer") is three glyphs in a cycle, each rasterized as its own word.
+// The _text flag is what tells the renderer "this string is type, not a shape name";
+// without it an unknown name would silently fall back to a dot (and a drawn-pack name
+// that failed to load would print itself, which is a bug we have already had once).
+function text(arg) { return reify(arg).fmap((v) => ({ shape: String(v), _text: 1 })); }
 function n(arg) { return reify(arg).fmap((v) => ({ shape: 'dot', n: Number(v) })); }
 
 // polygon / polyline: ONE glyph drawn as edges through a list of points. Each point is either a
@@ -1346,6 +1394,7 @@ export const DSL = {
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, flight, gyro, _jug, _jugInput, _jugDecay,
   fingerX, fingerY, fingerZ, fingerUp, fingersUp, pinch, palmX, palmY, handSeen, handNear, poseX, poseY, poseSeen,
   cam, _setCamSink, _handInput, _poseInput, _faceInput, _micInput, _resetTracking, _getTracking,
+  text, spoken, said, spoke, saying, heard, _speechInput, _speechFrame, _speechDecay,
   mouthOpen, smile, browRaise, mouthX, mouthY, faceX, faceY, faceSeen,
   mic, micLow, micMid, micHigh, micBand, micHit,
   level, band, low, mid, high, hit, _audio, _audioInput, _audioDecay,

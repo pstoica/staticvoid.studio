@@ -480,6 +480,7 @@ uniform float uPersp;      // tilt camera distance, glyph radii; <= 0 = orthogra
 attribute vec3 position;   // quad corner in -1..1
 attribute vec2 sPos;       // centre, css px
 attribute float sRadius;   // half-size, px
+attribute float sAspect;   // width / height of the texture (1 = square; >1 = a word)
 attribute float sRot;      // z rotation, radians
 attribute float sRotX;     // 3D tilt, radians
 attribute float sRotY;
@@ -492,7 +493,7 @@ void main() {
   vUv = vec2(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5);   // y-down screen ↔ flipY texture
   vTint = sTint;
   vMode = sMode;
-  vec2 l = position.xy * sRadius;
+  vec2 l = position.xy * sRadius * vec2(sAspect, 1.0);
   float cx = cos(sRotX), sx = sin(sRotX), cy = cos(sRotY), sy = sin(sRotY);
   float x = l.x, y = l.y * cx, z = l.y * sx;
   float x2 = x * cy + z * sy; z = -x * sy + z * cy; x = x2;
@@ -1375,19 +1376,29 @@ export class GLRenderer {
 
   // ── emoji sprites (ids ≥ 100): one rasterized texture per character, drawn as
   // instanced textured quads. Rig built lazily on first use.
+  // any string → a texture. Emoji were the first customer; text()/spoken() words are the
+  // second, and a word is WIDER than it is tall, so the canvas grows sideways and the quad
+  // is told its aspect (sAspect). Height stays 128 either way, so .size() means the same
+  // thing for a word as for an emoji, and a single glyph still lands in a square canvas —
+  // exactly what it got before this existed.
   ensureSprite(id, str) {
     if (!this.sprites) this.sprites = {};
     if (this.sprites[id]) return;
-    const S = 128, c = document.createElement('canvas');
-    c.width = c.height = S;
+    const S = 128, FONT = Math.round(S * 0.8) + 'px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+    const c = document.createElement('canvas');
     const x = c.getContext('2d');
-    x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.font = Math.round(S * 0.8) + 'px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
-    x.fillText(str, S / 2, S / 2 + S * 0.04);
+    x.font = FONT;
+    const w = Math.min(S * 8, Math.max(S, Math.ceil(x.measureText(str).width) + S * 0.15));
+    c.width = w; c.height = S;
+    const x2 = c.getContext('2d');                 // resizing the canvas resets the context
+    x2.textAlign = 'center'; x2.textBaseline = 'middle';
+    x2.font = FONT;
+    x2.fillStyle = '#fff';
+    x2.fillText(str, w / 2, S / 2 + S * 0.04, w - S * 0.1);
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter;
-    this.sprites[id] = { tex };
+    this.sprites[id] = { tex, aspect: w / S };
     this._ensureSpriteRig();
   }
   // drawn-pack frames: the grid is rasterized through the pack's CONNECTOR mode
@@ -1414,9 +1425,10 @@ export class GLRenderer {
     const SPR_CAP = 4096;
     const geo = new THREE.InstancedBufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, 1, 0, -1, 1, 0]), 3));
-    this.sprArrays = { sPos: new Float32Array(SPR_CAP * 2), sRadius: new Float32Array(SPR_CAP), sRot: new Float32Array(SPR_CAP), sRotX: new Float32Array(SPR_CAP), sRotY: new Float32Array(SPR_CAP), sMode: new Float32Array(SPR_CAP), sTint: new Float32Array(SPR_CAP * 4) };
+    this.sprArrays = { sPos: new Float32Array(SPR_CAP * 2), sRadius: new Float32Array(SPR_CAP), sAspect: new Float32Array(SPR_CAP), sRot: new Float32Array(SPR_CAP), sRotX: new Float32Array(SPR_CAP), sRotY: new Float32Array(SPR_CAP), sMode: new Float32Array(SPR_CAP), sTint: new Float32Array(SPR_CAP * 4) };
     geo.setAttribute('sPos', new THREE.InstancedBufferAttribute(this.sprArrays.sPos, 2));
     geo.setAttribute('sRadius', new THREE.InstancedBufferAttribute(this.sprArrays.sRadius, 1));
+    geo.setAttribute('sAspect', new THREE.InstancedBufferAttribute(this.sprArrays.sAspect, 1));
     geo.setAttribute('sRot', new THREE.InstancedBufferAttribute(this.sprArrays.sRot, 1));
     geo.setAttribute('sRotX', new THREE.InstancedBufferAttribute(this.sprArrays.sRotX, 1));
     geo.setAttribute('sRotY', new THREE.InstancedBufferAttribute(this.sprArrays.sRotY, 1));
@@ -1449,6 +1461,7 @@ export class GLRenderer {
     r.setRenderTarget(target || null);
     for (const [id, list] of buckets) {
       const spr = this.sprites[id]; if (!spr) continue;
+      const aspect = spr.aspect || 1;              // >1 for a word: the quad widens to match
       let n = 0;
       for (const p of list) {
         if (n >= this._sprCap) break;
@@ -1456,13 +1469,14 @@ export class GLRenderer {
         if (out.alpha <= 0.003) continue;
         A.sPos[n * 2] = out.x; A.sPos[n * 2 + 1] = out.y;
         A.sRadius[n] = out.r; A.sRot[n] = out.rot;
+        A.sAspect[n] = aspect;
         A.sRotX[n] = out.rotX; A.sRotY[n] = out.rotY;
         A.sMode[n] = out.stencil || 0;
         A.sTint[n * 4] = out.rgb[0]; A.sTint[n * 4 + 1] = out.rgb[1]; A.sTint[n * 4 + 2] = out.rgb[2]; A.sTint[n * 4 + 3] = out.alpha;
         n++;
       }
       if (!n) continue;
-      for (const name of ['sPos', 'sRadius', 'sRot', 'sRotX', 'sRotY', 'sMode', 'sTint']) geo.getAttribute(name).needsUpdate = true;
+      for (const name of ['sPos', 'sRadius', 'sAspect', 'sRot', 'sRotX', 'sRotY', 'sMode', 'sTint']) geo.getAttribute(name).needsUpdate = true;
       geo.instanceCount = n;
       mat.uniforms.tMap.value = spr.tex;
       r.render(this.spriteScene, this.camera);

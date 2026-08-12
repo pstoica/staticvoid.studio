@@ -10,6 +10,7 @@ import { GLRenderer } from './gl/renderer.js';
 import { ensureRapier, rapierReady, PhysWorld } from './physics.js';
 import { ensureTracking, trackingReady, trackingVideo, trackingState, trackTick, setTrackingFlip, getTrackingFlip } from './hands.js';
 import { ensureMic, micTick, micState, micStateValues } from './mic.js';
+import { ensureSpeech, stopSpeech, speechTick, speechState, speechLocal } from './speech.js';
 import { createEditor } from './editor.js';
 import { renderPackFrame } from './packrender.js';
 import REFERENCE from './REFERENCE.md?raw';   // full cheatsheet text, for the "copy for LLM" button
@@ -248,6 +249,8 @@ function run() {
     // + request the webcam (idempotent; a patch without them never touches the camera).
     const tw = DSL._getTracking();
     if (tw.mic) ensureMic();                 // patch uses mic()/micLow()/… → ask for the microphone
+    if (tw.speech) ensureSpeech();           // patch uses spoken()/said()/… → start dictation
+    else stopSpeech();                       // …and let it go when the patch stops asking
     if (tw.hands || tw.pose || tw.cam || tw.seg || tw.face) {
       ensureTracking(tw);
       // if the camera is already known-blocked, say so on every run — otherwise the patch
@@ -393,12 +396,18 @@ function spawn(value, onset) {
     pid: v._pid || 0,          // physics() group id (0 = not a body); body created lazily in tick
     body: null,                // rapier rigid body handle once created
     physRot: 0,                // body rotation (rad), synced from the sim each frame
-    sprite: 0,                 // sprite id (0 = not a sprite): emoji or a drawn-pack frame
+    sprite: 0,                 // sprite id (0 = not a sprite): emoji, a word, or a drawn-pack frame
+    text: 0,                   // 1 = the sprite is rasterized TYPE (from text() / spoken())
     stencil: numAt(v.stencil != null ? v.stencil : 0, 0, phase),   // 0 = multiply tint · 1 = luma stencil
   };
   // textured shapes → sprites, natural colours unless .color() was set explicitly:
-  // a drawn pack name (frame picked by .n(), wrapped) — else any emoji
-  if (SHAPE_ID[p.shape] == null) {
+  // text() / spoken() words first (the flag is explicit, so a word may shadow a shape
+  // name), then a drawn pack name (frame picked by .n(), wrapped), else any emoji
+  if (v._text) {
+    p.sprite = spriteIdFor(p.shape);
+    p.text = 1;
+    if (v.color == null) p.color = '#ffffff';
+  } else if (SHAPE_ID[p.shape] == null) {
     const pack = SHAPE_PACKS[p.shape];
     if (pack && pack.length) {
       const fi = ((Math.floor(numAt(v.n != null ? v.n : 0, 0, phase)) % pack.length) + pack.length) % pack.length;
@@ -1020,7 +1029,7 @@ function drawGlyph(g, p, minDim) {
     if (img) {                                              // drawn pack frame → blit the rendered art
       g.imageSmoothingEnabled = spriteSmooth[p.sprite] !== false;
       g.drawImage(img, -sizePx, -sizePx, sizePx * 2, sizePx * 2);
-    } else if (EMOJI_RE.test(p.shape)) {                    // emoji → the character itself
+    } else if (p.text || EMOJI_RE.test(p.shape)) {          // a word, or the emoji character
       g.font = Math.round(sizePx * 2) + 'px system-ui';
       g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText(p.shape, 0, 0);
@@ -1096,6 +1105,9 @@ function tick(dt) {
     }
   }
   if (micState() === 'live') DSL._micInput(micTick(dt));   // mic → level/bands/hit signals
+  DSL._speechDecay(dt);                                    // age the said()/spoke() pulses
+  if (speechState() === 'live') DSL._speechInput(speechTick());
+  DSL._speechFrame();    // snapshot this frame's words for spoken() (one glyph per word)
   // surface camera/tracking state transitions (starting → live / blocked) so a blank
   // canvas is never a mystery — the gates read 0 until the camera actually sees you.
   const trkSt = trackingState();
@@ -1352,6 +1364,8 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   get micState() { return micState(); },   // 'off' | 'starting' | 'live' | 'blocked'
   get micValues() { const v = micStateValues(); return { level: +v.level.toFixed(3), low: +v.low.toFixed(3), mid: +v.mid.toFixed(3), high: +v.high.toFixed(3), hit: +v.hit.toFixed(3) }; },
   mic: () => ensureMic(),                   // start the mic by hand (tooling)
+  speech: () => ({ state: speechState(), local: speechLocal() }),
+  say: (...w) => DSL._speechInput({ words: w, voicing: 1 }),   // inject words (testing without a mic)
   face: (st) => DSL._faceInput(st),         // inject face state (testing without a camera)
   cam: {   // MediaPipe camera config (tracking starts lazily when a patch uses a hand/pose signal)
     get ready() { return trackingReady(); },
