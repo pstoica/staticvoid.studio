@@ -303,6 +303,17 @@ download in the background so the next session is local. `loom.speech()` in the 
 reports `{ state, local }`. Firefox has no Web Speech recognition at all; there the
 signals sit at zero and `text()` still works.
 
+**Latency.** A word appears about 140 ms after you stop changing it. The recognizer keeps
+revising the word you're mid-way through saying, so Loom waits for it to settle rather than
+drawing three wrong spellings first — but only for the *trailing* word. Once you move on,
+the previous word is settled by definition and lands on the next frame. Tune or disable the
+wait from the console:
+
+```js
+loom.speechLag(0)     // instant — words appear as typed-in-progress, revisions and all
+loom.speechLag(300)   // calmer, fewer misfires
+```
+
 Two things worth knowing before you perform with it: recognition **stops itself** on
 silence and after errors (Loom restarts it automatically, but there's a ~0.25 s gap), and
 it opens its **own** microphone capture alongside `mic()`, which some audio interfaces

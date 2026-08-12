@@ -10,7 +10,7 @@ import { GLRenderer } from './gl/renderer.js';
 import { ensureRapier, rapierReady, PhysWorld } from './physics.js';
 import { ensureTracking, trackingReady, trackingVideo, trackingState, trackTick, setTrackingFlip, getTrackingFlip } from './hands.js';
 import { ensureMic, micTick, micState, micStateValues } from './mic.js';
-import { ensureSpeech, stopSpeech, speechTick, speechState, speechLocal, speechDebug, installLocal } from './speech.js';
+import { ensureSpeech, stopSpeech, speechTick, speechState, speechLocal, speechDebug, installLocal, setSpeechLag } from './speech.js';
 import { createEditor } from './editor.js';
 import { renderPackFrame } from './packrender.js';
 import REFERENCE from './REFERENCE.md?raw';   // full cheatsheet text, for the "copy for LLM" button
@@ -1394,6 +1394,7 @@ window.loom = { tick, step: (n = 60, dt = 1 / 60) => { for (let i = 0; i < n; i+
   mic: () => ensureMic(),                   // start the mic by hand (tooling)
   speech: () => speechDebug(),              // state/local/localAvail/starts/heard/dead/lastError
   speechInstall: () => installLocal(),      // pull the on-device model (the fix when lastError is 'network')
+  speechLag: (ms) => setSpeechLag(ms),      // ms a word must hold still before it appears (default 140; 0 = instant)
   say: (...w) => DSL._speechInput({ words: w, voicing: 1 }),   // inject words (testing without a mic)
   face: (st) => DSL._faceInput(st),         // inject face state (testing without a camera)
   cam: {   // MediaPipe camera config (tracking starts lazily when a patch uses a hand/pose signal)

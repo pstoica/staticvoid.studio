@@ -123,6 +123,16 @@ const BACKOFF = [400, 800, 1500, 2500, 4000];
 let dead = 0;                          // consecutive sessions that recognized nothing
 let heard = 0, starts = 0, lastError = '';
 let localAvail = 'unknown', installing = false, installTried = false;
+// How long the trailing word must stop changing before we let it out. The recognizer keeps
+// revising the word you are mid-way through saying, so the safe move is to hold it — but
+// holding it until the NEXT word arrives means a lone word waits for the phrase to finalize,
+// seconds later. Instead we watch it settle: once it has held still this long, ship it. If a
+// later result revises a word we already emitted, we let it stand (a slightly wrong word beats
+// a slow one here) — the count of emitted words only ever moves forward.
+let lagMs = 140;
+let tailWord = '', tailIdx = -1, tailAt = 0;
+const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+export const setSpeechLag = (ms) => { lagMs = Math.max(0, +ms || 0); return lagMs; };
 
 function build() {
   const r = new SR();
@@ -149,11 +159,18 @@ function build() {
         for (let k = emitted; k < words.length; k++) push(words[k]);
         emitted = 0;                   // next result index starts a new utterance
         interim = '';
+        tailWord = ''; tailIdx = -1;
       } else {
         interim = text;
-        // hold back the last word: it's still being revised as it's spoken
+        // everything before the trailing word is settled by definition — the recognizer has
+        // moved past it — so those go out immediately
         for (let k = emitted; k < words.length - 1; k++) push(words[k]);
         emitted = Math.max(emitted, words.length - 1);
+        // the trailing word waits on the settle timer in speechTick, not on the next word
+        const last = words[words.length - 1] || '';
+        if (last !== tailWord || words.length - 1 !== tailIdx) {
+          tailWord = last; tailIdx = words.length - 1; tailAt = nowMs();
+        }
       }
     }
   };
@@ -213,10 +230,16 @@ export function stopSpeech() {
 }
 
 // what the tooling sees: loom.speech()
-export const speechDebug = () => ({ state, local, localAvail, installing, waitedSec: waited, starts, heard, dead, lastError, want, has: !!rec });
+export const speechDebug = () => ({ state, local, localAvail, installing, lagMs, waitedSec: waited, starts, heard, dead, lastError, want, has: !!rec });
 
 // once per frame: hand over this frame's words and the current state
 export function speechTick() {
+  // release the trailing word once it has stopped changing (see lagMs)
+  if (tailWord && tailIdx >= emitted && nowMs() - tailAt >= lagMs) {
+    push(tailWord);
+    emitted = tailIdx + 1;
+    tailWord = ''; tailIdx = -1;
+  }
   const words = queue;
   queue = [];
   return { words, interim, last, voicing, state };
