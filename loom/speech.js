@@ -73,25 +73,43 @@ function probeLocal() {
 // loom.speechInstall() so it can be kicked by hand; also fired automatically the first time
 // a network error lands. Once the model is in, we tear down the doomed cloud session so the
 // next one is local.
+// install() can resolve late, never, or with nothing useful, so the honest progress report
+// is Chrome's own availability answer, re-asked. `localAvail` is whatever IT last said —
+// 'downloadable' / 'downloading' / 'available' / 'unavailable' — never a label we invented.
+let pollT = null, waited = 0;
+function goLocal() {
+  local = true; dead = 0; lastError = ''; installing = false;
+  if (want && rec) { const r = rec; rec = null; try { r.abort(); } catch {} ensureSpeech(); }
+}
+function pollAvailability() {
+  clearTimeout(pollT);
+  const tick = () => {
+    if (!SR.available) return;
+    Promise.resolve()
+      .then(() => SR.available({ langs: [lang], processLocally: true }))
+      .then((a) => {
+        localAvail = String(a);
+        if (a === 'available') { goLocal(); return; }
+        if (waited >= 300) { installing = false; return; }   // 5 min: stop narrating
+        waited += 5;
+        pollT = setTimeout(tick, 5000);
+      })
+      .catch((e) => { localAvail = 'probe failed: ' + ((e && e.name) || e); installing = false; });
+  };
+  tick();
+}
+
 export function installLocal() {
   if (!SR || !SR.install) return Promise.resolve('unsupported');
   if (local || installing) return Promise.resolve(localAvail);
   installing = true; installTried = true;
-  localAvail = 'downloading';
+  pollAvailability();          // report CHROME's answer, not our optimism
   return Promise.resolve()
     .then(() => SR.install({ langs: [lang], processLocally: true }))
     .then(() => (SR.available ? SR.available({ langs: [lang], processLocally: true }) : 'unknown'))
     .then((a) => {
-      installing = false;
       localAvail = String(a);
-      if (a === 'available') {
-        local = true; dead = 0; lastError = '';
-        if (want && rec) {                          // restart NOW on the local path
-          const r = rec; rec = null;
-          try { r.abort(); } catch {}
-          ensureSpeech();
-        }
-      }
+      if (a === 'available') goLocal(); else installing = false;
       return localAvail;
     })
     .catch((e) => { installing = false; localAvail = 'install failed: ' + ((e && e.name) || e); return localAvail; });
@@ -195,7 +213,7 @@ export function stopSpeech() {
 }
 
 // what the tooling sees: loom.speech()
-export const speechDebug = () => ({ state, local, localAvail, installing, starts, heard, dead, lastError, want, has: !!rec });
+export const speechDebug = () => ({ state, local, localAvail, installing, waitedSec: waited, starts, heard, dead, lastError, want, has: !!rec });
 
 // once per frame: hand over this frame's words and the current state
 export function speechTick() {
