@@ -49,17 +49,29 @@ function push(w) {
   if (queue.length > 64) queue.shift();      // a stuck consumer must not grow forever
 }
 
-// Ask for on-device first. 'downloadable' means it CAN be local but isn't yet — start the
-// download for next time and run through the cloud today rather than blocking on it.
-async function preferLocal() {
-  if (!SR.available) return false;
-  try {
-    const a = await SR.available({ langs: [lang], processLocally: true });
-    if (a === 'available') return true;
-    if (a !== 'unavailable' && SR.install) SR.install({ langs: [lang], processLocally: true }).catch(() => {});
-  } catch { /* older shape, or the query itself is unsupported */ }
-  return false;
+// On-device support is queried in the BACKGROUND, never awaited. An early version made
+// startup depend on SpeechRecognition.available(), which can hang — and while it hung the
+// state sat at 'starting', the frame pump (gated on 'live') never ran, and every run() piled
+// on another pending recognizer. Four of them holding the mic is what makes the tab's
+// recording dot flicker. Recognition now starts immediately with whatever we know.
+function probeLocal() {
+  if (!SR.available) return;
+  Promise.resolve()
+    .then(() => SR.available({ langs: [lang], processLocally: true }))
+    .then((a) => {
+      if (a === 'available') { local = true; return; }
+      if (a !== 'unavailable' && SR.install) SR.install({ langs: [lang], processLocally: true }).catch(() => {});
+    })
+    .catch(() => {});          // older shape, or the query itself is unsupported
 }
+
+// Chrome ends a session on silence, on its own timeouts, and after errors, so restarting is
+// mandatory — but restarting INSTANTLY on a session that produced nothing is how you get a
+// mic that ticks on and off. Back off when nothing is being heard; snap back to responsive
+// the moment a word actually lands.
+const BACKOFF = [400, 800, 1500, 2500, 4000];
+let dead = 0;                          // consecutive sessions that recognized nothing
+let heard = 0, starts = 0, lastError = '';
 
 function build() {
   const r = new SR();
@@ -67,20 +79,24 @@ function build() {
   r.interimResults = true;
   r.maxAlternatives = 1;
   r.lang = lang;
+  // only claim on-device when the probe confirmed it AND it has not already failed us
   if (local) { try { r.processLocally = true; } catch {} }
 
-  r.onstart = () => { state = 'live'; };
+  let got = false;                     // did THIS session produce anything?
+
+  r.onstart = () => { state = 'live'; starts++; };
   r.onsoundstart = () => { voicing = 1; };
   r.onsoundend = () => { voicing = 0; };
 
   r.onresult = (ev) => {
+    got = true; dead = 0; heard++;     // it works — go back to snappy restarts
     for (let i = ev.resultIndex; i < ev.results.length; i++) {
       const res = ev.results[i];
       const text = res[0] ? res[0].transcript : '';
       const words = text.match(WORD) || [];
       if (res.isFinal) {
         for (let k = emitted; k < words.length; k++) push(words[k]);
-        emitted = 0;                          // next result index starts a new utterance
+        emitted = 0;                   // next result index starts a new utterance
         interim = '';
       } else {
         interim = text;
@@ -92,43 +108,57 @@ function build() {
   };
 
   r.onerror = (e) => {
-    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-      state = 'blocked'; failed = true; want = false;
+    lastError = e.error || 'error';
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'audio-capture') {
+      state = 'blocked'; failed = true; want = false;   // no mic, or the user said no
+      return;
     }
-    // 'no-speech' / 'aborted' / 'network' are routine — onend restarts
+    // A session that claimed on-device and then failed is the classic "model said available
+    // but is not usable" case: drop the claim for good and let the next restart use the
+    // cloud path, rather than failing identically forever.
+    if (local && !got) { local = false; lastError += ' (dropped on-device)'; }
   };
 
   r.onend = () => {
     emitted = 0; interim = ''; voicing = 0;
-    if (!want || failed) { state = failed ? state : 'off'; return; }
+    if (rec !== r) return;             // superseded by a newer recognizer: let it own restarts
+    if (!want || failed) { if (!failed) state = 'off'; return; }
+    if (!got) dead++;
+    state = 'idle';
     clearTimeout(restartT);
-    restartT = setTimeout(() => { try { rec.start(); } catch {} }, 250);
+    restartT = setTimeout(() => {
+      if (!want || failed || rec !== r) return;
+      try { r.start(); } catch { /* already running: the next onend will retry */ }
+    }, BACKOFF[Math.min(dead, BACKOFF.length - 1)]);
   };
 
   return r;
 }
 
 export function ensureSpeech(l) {
-  if (l && l !== lang) { lang = l; if (rec) { try { rec.abort(); } catch {} rec = null; } }
+  if (l && l !== lang) { lang = l; stopSpeech(); failed = false; }
   if (!SR) { state = 'unsupported'; return null; }
-  if (failed || rec) return rec;
+  if (failed || rec) return rec;       // rec is assigned SYNCHRONOUSLY now — a real guard
   want = true;
   state = 'starting';
-  return preferLocal().then((ok) => {
-    local = ok;
-    rec = build();
-    try { rec.start(); } catch { state = 'blocked'; failed = true; }
-    return rec;
-  });
+  probeLocal();                        // background; applies from the next session on
+  rec = build();
+  try { rec.start(); } catch (e) { lastError = String(e && e.name || e); state = 'blocked'; failed = true; }
+  return rec;
 }
 
 export function stopSpeech() {
+  if (!rec && !want) return;
   want = false;
   clearTimeout(restartT);
-  if (rec) { try { rec.abort(); } catch {} }
-  rec = null;
-  state = failed ? state : 'off';
+  const r = rec;
+  rec = null;                          // clear FIRST so the pending onend bails out
+  if (r) { try { r.abort(); } catch {} }
+  if (!failed) state = 'off';
 }
+
+// what the tooling sees: loom.speech()
+export const speechDebug = () => ({ state, local, starts, heard, dead, lastError, want, has: !!rec });
 
 // once per frame: hand over this frame's words and the current state
 export function speechTick() {
