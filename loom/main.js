@@ -1435,6 +1435,20 @@ const PRESETS = {
   // pinch to drop a word: hand tracking spawns type at your fingertip, physics does the rest.
   // The hysteresis on the pinch is load-bearing — a bare threshold chatters as your fingers
   // hover near it and dumps a stream of words instead of releasing them one at a time.
+  // say a word and it falls out of your hand — dictation for the words, hand tracking
+  // for where they appear. Words stream in as you speak, one glyph each.
+  'say drop': `group(
+  cam(0.35),
+  physics(
+    spoken()
+      .x(fingerX(1)).y(fingerY(1))
+      .size(0.07)
+      .color(palette("neon").at(rand))
+      .rotate(rand.range(-0.04, 0.04))
+      .decay(5),
+    { gravity: 0.8, bounce: 0.5, drag: 0.12, vel: 0.05, spin: 0.2 }
+  )
+).glow(spoke().range(0.15, 0.8), 0.6)`,
   'drop words': `group(
   cam(0.35),
   physics(
