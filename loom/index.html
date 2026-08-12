@@ -598,7 +598,7 @@
         <code>.size(0.06)</code><p>radius, fraction of min(w,h)</p>
         <code>.x(0..1) .y(0..1)</code><p>centre point (default screen centre)</p>
         <code>.radius(0..0.5) .angle(turns)</code><p>polar offset from the centre, <em>combine with x/y to orbit a point.</em> angle defaults to onset phase; <code>.angle(saw.range(0,5))</code> winds a spiral</p>
-        <code>.grid(cols, rows)</code><p>lay events into a grid by onset</p>
+        <code>.grid(cols, rows, order)</code><p>lay events into a grid by onset · <em>order</em> = the path the sequence walks the cells: <code>rows</code> (default) · <code>cols</code> · <code>snake</code> (boustrophedon) · <code>diag</code> · <code>spiral</code> · <code>random</code> (a fixed shuffle, stable across cycles). visible when events arrive over a cycle — <code>shape("dot*64").grid(8,8,"spiral")</code></p>
         <code>.rotate(turns) .spin(turns/s)</code><p>Z spin · 1 = full turn</p>
         <code>.rotateX(turns) .rotateY(turns)</code><p>3D tilt (foreshorten)</p>
         <code>persp(n)</code><p>the 3D-tilt camera, global (sits in a stack): n = distance in glyph radii, default 2.6 (close/dramatic — the near edge swells, tumbling wobbles). <code>persp(0)</code> = <em>orthographic</em>: a tilted circle is an exact centred ellipse, pinned while it tumbles. patternable like <code>bg()</code></p>
@@ -668,6 +668,7 @@
         <code>gx() gy()</code><p>the glyph's <em>own</em> position (0..1) — colour or size by <em>where it landed</em>, however it got there: <code>shape("dot*64").grid(8).color(palette("neon").at(gx()))</code> is a gradient across the grid. frozen at onset, and unlike phase-based tricks it works under <code>.burst()</code></p>
         <code>near(x?, y?, radius?)</code><p><em>heat map</em> — how close <em>this glyph</em> is to a point, live per frame: 1 at the point, smoothly 0 by <code>radius</code>. defaults to the cursor. <code>shape("dot*256").grid(16).size(near().range(0.004,0.03))</code> bulges under the pointer; <code>.color(palette("ember").at(near()))</code> glows instead. the point is any pair of signals — <code>near(fingerX(1), fingerY(1))</code> is a torch in your hand. <code>dist()</code> = raw distance. osc-family, so <code>.range/.ease/.gt/.spring</code> all apply</p>
         <code>near("square") near("ring", 0.35)</code><p>the field needn't be round — <em>circle · square · diamond · cross · ring</em> (hollow halo) <em>· star · noise</em> (wobbling rim) · or a number for a regular n-gon (<code>6</code> = hex). a leading string means "this shape, on the cursor". <code>.phase(t)</code> rotates it, patternable: <code>near("square").phase(saw.slow(8))</code></p>
+        <code>near().falloff(k)</code><p>how hard the edge is: 1 = default, &gt;1 a tight hot spot, &lt;1 a broad wash. patternable, so the focus can breathe — <code>near().falloff(sine.range(0.5,3).slow(4))</code>. <code>.ease()</code> shapes it too</p>
         <code>choose("a","b") irand(8)</code><p>random pick / integer per onset</p>
         <code>osc(rate, "sine").range(lo, hi)</code><p>live LFO, keeps moving over a glyph's life (vs signals, frozen at spawn). shapes: sine saw tri square rand perlin fbm</p>
         <code>osc(…).spread(n)</code><p>per-glyph phase offset = n × onset phase, spreads the wave <em>around a ring/grid</em> instead of every glyph in lockstep</p>

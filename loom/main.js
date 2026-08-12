@@ -348,7 +348,7 @@ function spawn(value, onset) {
   // and resolvePos computed number + Pattern — not a number, so the glyph vanished.
   const froz = (a) => (isOsc(a) ? { __osc: freezeOscParams(a.__osc, onset) } : a);
   const pin = { x: froz(v.x), y: froz(v.y), radius: froz(v.radius), angle: froz(v.angle),
-    gridX: froz(v.gridX), gridY: froz(v.gridY), pan: froz(v.pan), phase };
+    gridX: froz(v.gridX), gridY: froz(v.gridY), gridOrder: v.gridOrder, pan: froz(v.pan), phase };
   const posLive = !v._pid && (isOsc(v.x) || isOsc(v.y) || isOsc(v.radius) || isOsc(v.angle) || isOsc(v.gridX) || isOsc(v.gridY) || isOsc(v.pan)
     || springs.some((s) => SPRING_POS.has(s.field)));
 
@@ -624,7 +624,10 @@ function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
       const r = f === 'ring' ? 1 : (+evalGlobal(d.nr, cycle, elapsed) || 0.0001);
       const t = Math.max(0, Math.min(1, 1 - d2 / r));
       v = t * t * (3 - 2 * t);                           // smoothstep: no hard rim
+      const k = d.nk == null ? 1 : (numAt(d.nk, age, gp, st, ageC, stC) || 1);
+      if (k !== 1) v = Math.pow(v, Math.max(0.05, k));    // .falloff(): tighten or spread it
     }
+    if (d.ease) v = applyEase(d.ease, v);                // shape the UNIT value, like every osc
     const lo0 = numAt(d.lo, age, gp, st, ageC, stC), hi0 = numAt(d.hi, age, gp, st, ageC, stC);
     let r0 = lo0 + v * (hi0 - lo0);
     if (d.ops) for (const [op, x] of d.ops) {
@@ -635,7 +638,7 @@ function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
         : op === '>' ? (r0 > y ? 1 : 0) : op === '>=' ? (r0 >= y ? 1 : 0)
         : op === '<' ? (r0 < y ? 1 : 0) : op === '<=' ? (r0 <= y ? 1 : 0) : r0;
     }
-    return d.ease ? applyEase(d.ease, r0) : r0;
+    return r0;
   }
   if (d.env) {
     // attack/decay envelope keyed to the glyph's REAL-time age (seconds): 0→1 over `a`,
@@ -941,6 +944,68 @@ function bgEval(src, cycle, elapsed) {
 // default to screen centre; radius defaults to the mandala ring (0.34) only when
 // nothing else is set, else 0, so you can mix freely: x/y alone = cartesian,
 // radius/angle alone = ring, both = orbit around (x,y).
+// A seeded shuffle per cell count, memoized. Hashing n straight to a cell is NOT a
+// permutation — it collides, so most cells never get an event and some get several.
+// Fisher-Yates over a fixed seed is a real bijection and stays put across cycles.
+const _shufCache = new Map();
+function shuffleFor(total) {
+  let a = _shufCache.get(total);
+  if (!a) {
+    a = Array.from({ length: total }, (_, i) => i);
+    for (let i = total - 1; i > 0; i--) {
+      const j = Math.floor(_h1(i * 1.37 + total * 0.11) * (i + 1)) % (i + 1);
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    _shufCache.set(total, a);
+  }
+  return a;
+}
+// Which cell the n-th event lands in. Row-major by default; the alternatives change the
+// PATH the sequence walks, which is what you see when events arrive over a cycle.
+function gridCell(n, cols, rows, order) {
+  const total = cols * rows;
+  let row, col;
+  switch (order) {
+    case 'cols':                                        // top→bottom, then right
+      col = Math.floor(n / rows); row = n % rows; break;
+    case 'snake': case 'boustrophedon':                 // every other row reversed
+      row = Math.floor(n / cols); col = n % cols;
+      if (row % 2) col = cols - 1 - col;
+      break;
+    case 'diag': {                                      // along anti-diagonals
+      let k = 0, i = n;
+      while (k < cols + rows - 1) {
+        const lo = Math.max(0, k - rows + 1), hi = Math.min(k, cols - 1), len = hi - lo + 1;
+        if (i < len) { col = lo + i; row = k - col; break; }
+        i -= len; k++;
+      }
+      if (col == null) { col = cols - 1; row = rows - 1; }
+      break;
+    }
+    case 'spiral': {                                    // inward from the top-left
+      let top = 0, bottom = rows - 1, left = 0, right = cols - 1, i = 0;
+      outer: while (top <= bottom && left <= right) {
+        for (let x = left; x <= right; x++) { if (i++ === n) { col = x; row = top; break outer; } }
+        top++;
+        for (let y = top; y <= bottom; y++) { if (i++ === n) { col = right; row = y; break outer; } }
+        right--;
+        if (top <= bottom) { for (let x = right; x >= left; x--) { if (i++ === n) { col = x; row = bottom; break outer; } } bottom--; }
+        if (left <= right) { for (let y = bottom; y >= top; y--) { if (i++ === n) { col = left; row = y; break outer; } } left++; }
+      }
+      if (col == null) { col = 0; row = 0; }
+      break;
+    }
+    case 'random': {                                    // a FIXED shuffle: the same cell every
+      const m = shuffleFor(total)[((n % total) + total) % total];   // cycle, so it doesn't boil
+      col = m % cols; row = Math.floor(m / cols);
+      break;
+    }
+    default:                                            // 'rows'
+      col = n % cols; row = Math.floor(n / cols);
+  }
+  return [((col % cols) + cols) % cols, ((row % rows) + rows) % rows];
+}
+
 function resolvePos(p, minDim, age) {
   const { x, y, radius, angle, gridX, gridY, pan, phase } = p.pin;
   const st = p.spawnT || 0;                            // spawn time → osc().drift() (free)
@@ -955,8 +1020,9 @@ function resolvePos(p, minDim, age) {
     // tiny epsilon: burst(n) produces phases like exactly i/n, and (i/n)*(n) can float to
     // 1.9999…98 → floor drops a cell. Nudging by 1e-6 keeps exact boundaries in their cell.
     const cell = Math.min(cols * rows - 1, Math.floor((((phase % 1) + 1) % 1) * cols * rows + 1e-6));
-    px = ((cell % cols) + 0.5) / cols * W;
-    py = ((Math.floor(cell / cols) % rows) + 0.5) / rows * H;
+    const c = gridCell(cell, cols, rows, p.pin.gridOrder);
+    px = (c[0] + 0.5) / cols * W;
+    py = (c[1] + 0.5) / rows * H;
   } else {
     px = (x != null ? gv('x', x) : 0.5) * W;
     py = (y != null ? gv('y', y) : 0.5) * H;

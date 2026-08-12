@@ -770,6 +770,7 @@ or attach the physics attractor to a wrist: `{ attract: 1, ax: poseX("rwrist"), 
 | `.segment(n)` (alias `.seg`) | snap the **time**: resample `n` times per cycle on an even grid and hold each value — Tidal's `segment`/`discretise`. `quantize` steps the value, `segment` steps the time |
 | `.sample(n)` | **sample-and-hold** a *live* signal `n` times per cycle: capture the value when each slot starts and hold it. Unlike `segment` (a fixed pattern-time), this snapshots the value at that moment, so it works on `mouseX`/`mouseY` — `mouseX.sample(8)` is the pointer stepped/held at 8/cycle (`segment` is a no-op there). |
 | `.ease(name)` | reshape the **0..1 signal** through an easing curve **before** `.range()` maps it — turn a linear ramp into an accelerating / decelerating / overshooting one |
+| `.grid(cols, rows, order)` | lay events into a grid by onset. `order` is the **path the sequence walks**: `rows` (default) · `cols` · `snake` (boustrophedon) · `diag` · `spiral` · `random` (a fixed shuffle) |
 | `.gt(t)` `.gte(t)` `.lt(t)` `.lte(t)` | compare against a threshold → a hard **`0` or `1`**. `t` is patternable like `range`'s bounds. Optional 2nd arg = hysteresis (below) |
 | `.between(lo, hi)` | `1` while the value sits inside the band, else `0` |
 
@@ -829,6 +830,18 @@ near("square").phase(saw.slow(8))           // …slowly turning
 ```
 
 `.phase(t)` **rotates** the field in turns, and it's patternable like any osc param.
+
+**Falloff intensity** is `.falloff(k)`: `1` is the default smoothstep, above that concentrates
+the light into a tight hot spot, below it spreads to a broad wash. Patternable, so the focus
+can breathe — `near().falloff(sine.range(0.5, 3).slow(4))`. `.ease(name)` also shapes the
+falloff, applied to the unit value before `.range()` maps it, exactly like any other osc.
+
+```
+.falloff(0.35)  @@@@@@@@@######******+++===:::
+.falloff(1)     @@@@@@###***+++===---:::...
+.falloff(4)     @@@###+++---......
+                centre          →         edge
+```
 
 The point defaults to the pointer but is any pair of signals — a fingertip, a ball, a face,
 a mouth. `dist(x, y)` is the raw distance if you want to shape the falloff yourself. Distance

@@ -304,7 +304,19 @@ class Pattern {
   y(a)     { return this.set('y', a); }
   radius(a){ return this.set('radius', a); }
   angle(a) { return this.set('angle', a); }  // orbital position on the ring (turns); default = onset phase
-  grid(cols, rows) { return this.set('gridX', cols).set('gridY', rows == null ? cols : rows); } // lay events into a cols×rows grid by onset
+  // grid(cols, rows, order): lay events into a cols×rows grid by onset. `order` is HOW the
+  // sequence walks the cells — the same events, dealt differently:
+  //   rows (default) left→right, top→bottom   ·  cols  top→bottom, left→right
+  //   snake  boustrophedon: every other row reversed, so the path never jumps back
+  //   spiral inward from the top-left corner  ·  diag  along anti-diagonals
+  //   random a fixed shuffle (stable per cell count, so it doesn't reshuffle per frame)
+  // It only shows when the events ARRIVE in sequence — "dot*64" fills the grid over a cycle,
+  // and the order is the shape of that fill. Simultaneous events (.burst) land everywhere at
+  // once, so the order is invisible unless something else reads position (gx/gy/near).
+  grid(cols, rows, order) {
+    const p = this.set('gridX', cols).set('gridY', rows == null ? cols : rows);
+    return order == null ? p : p.set('gridOrder', String(order));
+  }
   rotate(a){ return this.set('rotate', a); }
   spin(a)  { return this.set('spin', a); }
   blend(a) { return this.set('blend', a); }
@@ -922,6 +934,10 @@ function makeOsc(o) {
     // is the target). See spring() below — the per-glyph momentum/overshoot/settle that
     // ease & osc can't do. Great after .quantize (settle between steps).
     spring(stiffness, damping) { return spring(makeOsc(o), stiffness, damping); },
+    // falloff(k): only meaningful on near()/dist() — how hard the field's edge is. 1 = the
+    // default smoothstep, >1 concentrates the light at the centre (a tight hot spot), <1
+    // spreads it out to a broad wash. Patternable, so the focus can breathe.
+    falloff(k = 1) { return makeOsc({ ...o, nk: k }); },
   };
 }
 const isOsc = (a) => a != null && typeof a === 'object' && a.__osc !== undefined;
