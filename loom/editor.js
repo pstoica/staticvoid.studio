@@ -32,7 +32,8 @@ const METHOD = new Set(['fast', 'slow', 'rev', 'every', 'iter', 'palindrome', 'j
   'rotateX', 'rotateY', 'spin', 'blend', 'alpha', 'opacity', 'pan', 'jitter', 'fill', 'stroke', 'weight',
   'outline', 'shade', 'pixelate', 'blur', 'glow', 'meshfill', 'radiance', 'feedback', 'trails', 'silhouette', 'hue', 'brightness', 'contrast', 'saturate',
   'negative', 'invert', 'displace', 'kaleido', 'mirror', 'cap', 'join', 'open', 'vertex', 'attack', 'decay',
-  'life', 'hold', 'id', 'n', 'stencil', 'set', 'spread', 'phase', 'rate', 'quantize', 'ease', 'segment', 'seg', 'sample', 'spring']);
+  'life', 'hold', 'id', 'n', 'stencil', 'set', 'spread', 'phase', 'rate', 'quantize', 'ease', 'segment', 'seg', 'sample', 'spring',
+  'gt', 'gte', 'lt', 'lte', 'between']);
 
 // ── autocomplete ────────────────────────────────────────────────────────────────
 // The API is wide enough that remembering it is the main friction, so completion
@@ -108,7 +109,12 @@ const C_METHOD = [
   ['when', 'apply f where a condition holds'], ['gate', 'keep events where a condition holds'],
   ['early', 'shift earlier'], ['late', 'shift later'], ['range', 'remap a 0..1 signal'],
   ['add', 'arithmetic'], ['sub', 'arithmetic'], ['mul', 'arithmetic'], ['div', 'arithmetic'],
-  ['quantize', 'snap the VALUE to n steps'], ['segment', 'snap the TIME to n steps'],
+  ['quantize', 'snap the VALUE to n steps'],
+  ['gt', 'signal > t → hard 0/1 · .gt(trip, release) = hysteresis'],
+  ['gte', 'signal >= t → hard 0/1 (2nd arg = hysteresis)'],
+  ['lt', 'signal < t → hard 0/1 (2nd arg = hysteresis)'],
+  ['lte', 'signal <= t → hard 0/1 (2nd arg = hysteresis)'],
+  ['between', '1 while the value is inside [lo, hi]'], ['segment', 'snap the TIME to n steps'],
   ['sample', 'sample-and-hold a live signal'], ['ease', 'shape a 0..1 signal through a curve'],
   ['spread', 'per-glyph osc phase offset'], ['phase', 'osc phase'], ['rate', 'osc rate'],
   ['drift', 'osc phase drift over time'], ['free', 'osc in real seconds, not cycles'],

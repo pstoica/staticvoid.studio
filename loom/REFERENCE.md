@@ -752,6 +752,42 @@ or attach the physics attractor to a wrist: `{ attract: 1, ax: poseX("rwrist"), 
 | `.segment(n)` (alias `.seg`) | snap the **time**: resample `n` times per cycle on an even grid and hold each value — Tidal's `segment`/`discretise`. `quantize` steps the value, `segment` steps the time |
 | `.sample(n)` | **sample-and-hold** a *live* signal `n` times per cycle: capture the value when each slot starts and hold it. Unlike `segment` (a fixed pattern-time), this snapshots the value at that moment, so it works on `mouseX`/`mouseY` — `mouseX.sample(8)` is the pointer stepped/held at 8/cycle (`segment` is a no-op there). |
 | `.ease(name)` | reshape the **0..1 signal** through an easing curve **before** `.range()` maps it — turn a linear ramp into an accelerating / decelerating / overshooting one |
+| `.gt(t)` `.gte(t)` `.lt(t)` `.lte(t)` | compare against a threshold → a hard **`0` or `1`**. `t` is patternable like `range`'s bounds. Optional 2nd arg = hysteresis (below) |
+| `.between(lo, hi)` | `1` while the value sits inside the band, else `0` |
+
+### Comparisons
+
+A comparison turns a continuous signal into a hard **`0/1`**, which is exactly what the
+gate-shaped inputs want — `.gate()`, `.hold()`, `iff()`, `.alpha()`, physics field
+strengths, FX amounts:
+
+```js
+shape("dot*16").gate(mic().gt(0.3))              // only spawn when the room is loud
+  .hold(pinch().gt(0.6))                          // …and sustain while you pinch
+  .alpha(micHigh().gt(0.5))                       // blink on cymbals
+shape("star").gate(poseY("nose").between(0.2, 0.5))  // only while your head is up top
+```
+
+`.quantize(2)` is **not** a substitute — it snaps to `0 / 0.5 / 1`, three levels, not two.
+(`.quantize(1)` does give `0/1`, but only ever at `0.5`.)
+
+**Hysteresis.** A bare threshold on a live signal *chatters*: `mic()` hovering right at
+`0.3` flips the gate on and off every frame. Pass a second, lower value and the comparator
+becomes a Schmitt trigger — it turns **on** above the trip point but doesn't turn **off**
+until the signal falls below the release point, so the dead band swallows the jitter:
+
+```js
+.gate(mic().gt(0.35, 0.2))     // on above .35, stays on until it drops under .2
+```
+
+Rule of thumb: release ≈ half the trip. Measured on noise sitting right at the trip point
+(`.34 .36 .33 .37 .34 .36`), the bare threshold flips 5 times; with hysteresis, once.
+
+The latch is a single piece of state per comparator, reset on each ⌘↵, so it's built for
+**live** signals — mic, tracking, MIDI — which hold one value per frame. On a deterministic
+waveform queried at many instants within a frame it still works, it just latches in query
+order rather than in time order. Oscillators (`osc(0.5).gt(0.7)` — a pulse train with a 30%
+duty cycle) take the plain form only; an oscillator has no noise to debounce.
 
 ### Easing
 

@@ -215,6 +215,29 @@ class Pattern {
   mul(arg) { return appLeft(this.fmap((l) => (r) => l * r), reify(arg)); }
   div(arg) { return appLeft(this.fmap((l) => (r) => l / r), reify(arg)); }
   quantize(n) { return this.fmap((v) => Math.round(v * n) / n); } // snap to nearest 1/n
+  // ── comparisons: a signal → a hard 0/1 ──
+  // These compose anywhere a signal goes, which is the point: .gate(mic().gt(0.3)) only
+  // spawns when the room is loud, .hold(pinch().gt(0.6)) sustains while you pinch,
+  // .alpha(micHigh().gt(0.5)) blinks on cymbals. (quantize(2) does NOT do this — it snaps
+  // to 0 / 0.5 / 1, three levels, not two.) Both bounds are patternable like range()'s.
+  //
+  // The optional second argument is HYSTERESIS — a Schmitt trigger. A bare threshold on a
+  // noisy live signal chatters: mic() hovering at 0.30 flickers the gate on and off every
+  // frame. `.gt(0.35, 0.2)` turns ON above 0.35 but doesn't turn OFF until it falls below
+  // 0.2, so the dead band swallows the jitter. Rule of thumb: release ≈ half the trip.
+  // The latch is one piece of state shared by that comparator for the whole run (reset on
+  // ⌘↵), so it's meant for LIVE signals — mic, tracking, MIDI — which hold one value per
+  // frame. On a deterministic waveform queried at many different times in a frame it still
+  // works, it just latches in query order rather than in time order.
+  gt(trip = 0.5, release)  { return _cmp(this, trip, release, (v, t) => v >  t, (v, r) => v <= r); }
+  gte(trip = 0.5, release) { return _cmp(this, trip, release, (v, t) => v >= t, (v, r) => v <  r); }
+  lt(trip = 0.5, release)  { return _cmp(this, trip, release, (v, t) => v <  t, (v, r) => v >= r); }
+  lte(trip = 0.5, release) { return _cmp(this, trip, release, (v, t) => v <= t, (v, r) => v >  r); }
+  // 1 while the value sits inside [lo, hi] — a band rather than a threshold:
+  // .gate(poseY("nose").between(0.2, 0.5)) only draws while your head is in the top half.
+  between(lo = 0, hi = 1) {
+    return appLeft(appLeft(this.fmap((v) => (l) => (h) => (v >= +l && v <= +h ? 1 : 0)), reify(lo)), reify(hi));
+  }
   // ease(name): shape this 0..1 signal through a Penner curve, BEFORE any .range().
   // The rule is "ease the unit signal, range maps it", so `saw.ease("outExpo").range(0,1)`
   // accelerates the ramp then maps it. The curve name is itself sampled from the right,
@@ -852,6 +875,17 @@ function irand(k) { return signal((t) => Math.floor(timeRand(t) * k)); }
 // Tempo-synced by default: rate is cycles-per-cycle, so it rides the clock and the
 // drawn structure is the same at any tempo. Use .free() for real-time (rate in Hz).
 function osc(rate = 1, shape = 'sine') { return makeOsc({ shape, rate, lo: 0, hi: 1, phase: 0 }); }
+// _cmp: the shared body of gt/gte/lt/lte. Without `release` it is a pure per-value test.
+// With one it keeps a latch — on() crosses it up, off() releases it — see Pattern.gt above.
+function _cmp(pat, trip, release, on, off) {
+  if (release == null) return appLeft(pat.fmap((v) => (t) => (on(v, +t) ? 1 : 0)), reify(trip));
+  const st = { on: 0 };
+  return appLeft(appLeft(pat.fmap((v) => (t) => (r) => {
+    st.on = st.on ? (off(v, +r) ? 0 : 1) : (on(v, +t) ? 1 : 0);
+    return st.on;
+  }), reify(trip)), reify(release));
+}
+
 function makeOsc(o) {
   return {
     __osc: o,
@@ -873,6 +907,13 @@ function makeOsc(o) {
     mul(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['*', x]] }); },
     div(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['/', x]] }); },
     quantize(n) { return makeOsc({ ...o, ops: [...(o.ops || []), ['q', n]] }); }, // snap to nearest 1/n
+    // comparisons → a hard 0/1, same as the signal forms (osc(0.5).gt(0.7) = a pulse train
+    // with a 30% duty cycle). No hysteresis form here: an oscillator does not chatter.
+    gt(x = 0.5)  { return makeOsc({ ...o, ops: [...(o.ops || []), ['>', x]] }); },
+    gte(x = 0.5) { return makeOsc({ ...o, ops: [...(o.ops || []), ['>=', x]] }); },
+    lt(x = 0.5)  { return makeOsc({ ...o, ops: [...(o.ops || []), ['<', x]] }); },
+    lte(x = 0.5) { return makeOsc({ ...o, ops: [...(o.ops || []), ['<=', x]] }); },
+    between(lo = 0, hi = 1) { return makeOsc({ ...o, ops: [...(o.ops || []), ['bt', [lo, hi]]] }); },
     // ease(name): shape the osc's 0..1 waveform through a Penner curve, BEFORE range —
     // same rule as Pattern.ease, so `osc(0.2).ease("inOutSine").range(0,0.4)` matches the
     // signal form. (A dedicated pre-range slot, not an op, which run post-range.)

@@ -598,9 +598,17 @@ function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
   if (d.ease) v = applyEase(d.ease, v);                   // shape the 0..1 waveform BEFORE range
   const lo = numAt(d.lo, age, gp, st, ageC, stC), hi = numAt(d.hi, age, gp, st, ageC, stC);
   let r = lo + v * (hi - lo);
-  if (d.ops) for (const [op, x] of d.ops) {            // .add/.sub/.mul/.div/.quantize (x may be an osc)
+  if (d.ops) for (const [op, x] of d.ops) {            // .add/.sub/.mul/.div/.quantize/comparisons (x may be an osc)
+    if (op === 'bt') {                                 // .between(lo, hi) — the only two-arg op
+      const l = numAt(x[0], age, gp, st, ageC, stC), h = numAt(x[1], age, gp, st, ageC, stC);
+      r = r >= l && r <= h ? 1 : 0;
+      continue;
+    }
     const y = numAt(x, age, gp, st, ageC, stC);
-    r = op === '*' ? r * y : op === '+' ? r + y : op === '-' ? r - y : op === '/' ? r / y : op === 'q' ? Math.round(r * y) / y : r;
+    r = op === '*' ? r * y : op === '+' ? r + y : op === '-' ? r - y : op === '/' ? r / y
+      : op === 'q' ? Math.round(r * y) / y
+      : op === '>' ? (r > y ? 1 : 0) : op === '>=' ? (r >= y ? 1 : 0)
+      : op === '<' ? (r < y ? 1 : 0) : op === '<=' ? (r <= y ? 1 : 0) : r;
   }
   return r;
 }
@@ -625,6 +633,7 @@ function freezeOscParams(o, onset) {
   const fp = (x) => {
     if (isOsc(x)) return { __osc: freezeOscParams(x.__osc, onset) };
     if (x instanceof DSL.Pattern) { for (const h of x.query(DSL.span(onset, onset))) if (h.value != null) return +h.value; return 0; }
+    if (Array.isArray(x)) return x.map(fp);            // .between(lo, hi) carries its pair
     return x;
   };
   const r = { ...o };
