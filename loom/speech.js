@@ -129,10 +129,43 @@ let localAvail = 'unknown', installing = false, installTried = false;
 // seconds later. Instead we watch it settle: once it has held still this long, ship it. If a
 // later result revises a word we already emitted, we let it stand (a slightly wrong word beats
 // a slow one here) — the count of emitted words only ever moves forward.
-let lagMs = 140;
+// 'phrase' (default) buffers a whole utterance and then REPLAYS it at the pace you spoke it;
+// 'live' races each word out as it settles. Live sounds better than it is: a long word that
+// pauses mid-articulation ("some… times") settles early and commits wrong, and the correction
+// can never land because that slot has already gone. Phrase mode waits for the recognizer's
+// final answer — accurate — and buys back the liveness by restoring your rhythm.
+//
+// The API exposes no word timings, so the pacing is DERIVED: every interim result reveals how
+// many word slots exist so far, and the moment a new slot appears is (near enough) the moment
+// you said it. Those onsets become the replay schedule.
+let mode = 'phrase';
+let lagMs = 140;                   // 'live' only: settle time before the trailing word ships
+let pace = 1;                      // replay speed multiplier (2 = twice as fast)
+const MAX_GAP = 900;               // clamp dead air between words so a pause is not a stall
+let wordAt = [];                   // observed onset per word slot in the current utterance
+let replay = [];                   // scheduled {w, at} awaiting their moment
 let tailWord = '', tailIdx = -1, tailAt = 0;
 const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 export const setSpeechLag = (ms) => { lagMs = Math.max(0, +ms || 0); return lagMs; };
+export const setSpeechPace = (x) => { pace = Math.max(0.05, +x || 1); return pace; };
+export const setSpeechMode = (m) => { mode = m === 'live' ? 'live' : 'phrase'; return mode; };
+
+// Turn the finished utterance into a timed schedule. Words we never saw appear in an interim
+// result (fast speech can finalize slots we never observed) get evenly spaced after the last
+// one we did time, so a sentence never collapses into a single instant.
+function scheduleReplay(words) {
+  if (!words.length) return;
+  const t0 = wordAt[0] != null ? wordAt[0] : nowMs();
+  const start = nowMs();
+  let prev = 0;
+  for (let i = 0; i < words.length; i++) {
+    let off = wordAt[i] != null ? wordAt[i] - t0 : prev + 180;
+    if (off < prev) off = prev;                       // onsets must not go backwards
+    if (off - prev > MAX_GAP) off = prev + MAX_GAP;   // a long pause replays as a short one
+    prev = off;
+    replay.push({ w: words[i], at: start + off / pace });
+  }
+}
 
 function build() {
   const r = new SR();
@@ -155,23 +188,25 @@ function build() {
       const res = ev.results[i];
       const text = res[0] ? res[0].transcript : '';
       const words = text.match(WORD) || [];
-      if (res.isFinal) {
-        for (let k = emitted; k < words.length; k++) push(words[k]);
-        emitted = 0;                   // next result index starts a new utterance
-        interim = '';
-        tailWord = ''; tailIdx = -1;
-      } else {
+      if (!res.isFinal) {
         interim = text;
-        // everything before the trailing word is settled by definition — the recognizer has
-        // moved past it — so those go out immediately
-        for (let k = emitted; k < words.length - 1; k++) push(words[k]);
-        emitted = Math.max(emitted, words.length - 1);
-        // the trailing word waits on the settle timer in speechTick, not on the next word
-        const last = words[words.length - 1] || '';
-        if (last !== tailWord || words.length - 1 !== tailIdx) {
-          tailWord = last; tailIdx = words.length - 1; tailAt = nowMs();
+        // record when each word SLOT first showed up — this is the pacing, and it is the only
+        // timing information the API gives away
+        for (let k = 0; k < words.length; k++) if (wordAt[k] == null) wordAt[k] = nowMs();
+        if (mode === 'live') {
+          for (let k = emitted; k < words.length - 1; k++) push(words[k]);
+          emitted = Math.max(emitted, words.length - 1);
+          const last = words[words.length - 1] || '';
+          if (last !== tailWord || words.length - 1 !== tailIdx) {
+            tailWord = last; tailIdx = words.length - 1; tailAt = nowMs();
+          }
         }
+        continue;
       }
+      // final: the recognizer's settled answer, spellings and all
+      if (mode === 'live') for (let k = emitted; k < words.length; k++) push(words[k]);
+      else scheduleReplay(words);
+      emitted = 0; interim = ''; tailWord = ''; tailIdx = -1; wordAt = [];
     }
   };
 
@@ -223,6 +258,7 @@ export function stopSpeech() {
   if (!rec && !want) return;
   want = false;
   clearTimeout(restartT);
+  replay = []; wordAt = []; tailWord = ''; tailIdx = -1;
   const r = rec;
   rec = null;                          // clear FIRST so the pending onend bails out
   if (r) { try { r.abort(); } catch {} }
@@ -230,12 +266,15 @@ export function stopSpeech() {
 }
 
 // what the tooling sees: loom.speech()
-export const speechDebug = () => ({ state, local, localAvail, installing, lagMs, waitedSec: waited, starts, heard, dead, lastError, want, has: !!rec });
+export const speechDebug = () => ({ state, local, localAvail, installing, mode, pace, lagMs, queued: replay.length, waitedSec: waited, starts, heard, dead, lastError, want, has: !!rec });
 
 // once per frame: hand over this frame's words and the current state
 export function speechTick() {
-  // release the trailing word once it has stopped changing (see lagMs)
-  if (tailWord && tailIdx >= emitted && nowMs() - tailAt >= lagMs) {
+  const t = nowMs();
+  // phrase mode: let scheduled words out at the moment they were spoken
+  while (replay.length && replay[0].at <= t) push(replay.shift().w);
+  // live mode: release the trailing word once it has stopped changing (see lagMs)
+  if (mode === 'live' && tailWord && tailIdx >= emitted && nowMs() - tailAt >= lagMs) {
     push(tailWord);
     emitted = tailIdx + 1;
     tailWord = ''; tailIdx = -1;

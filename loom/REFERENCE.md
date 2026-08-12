@@ -303,15 +303,22 @@ download in the background so the next session is local. `loom.speech()` in the 
 reports `{ state, local }`. Firefox has no Web Speech recognition at all; there the
 signals sit at zero and `text()` still works.
 
-**Latency.** A word appears about 140 ms after you stop changing it. The recognizer keeps
-revising the word you're mid-way through saying, so Loom waits for it to settle rather than
-drawing three wrong spellings first — but only for the *trailing* word. Once you move on,
-the previous word is settled by definition and lands on the next frame. Tune or disable the
-wait from the console:
+**Pacing.** By default Loom buffers a whole utterance and then **replays it at the pace you
+spoke it** — you talk, and a beat later the words fall out one at a time with your own rhythm,
+pauses and all. That is deliberate rather than lazy: racing each word out as it is recognized
+sounds better than it works, because a long word that pauses mid-articulation
+("some… times") commits early and wrong, and the correction can never land once that word is
+already on screen. Waiting for the recognizer's final answer keeps the spelling honest, and
+replaying the timing buys back the liveness.
+
+The Web Speech API exposes no word timings, so the rhythm is derived: each interim result
+reveals how many word slots exist so far, and a new slot appearing is near enough the moment
+you said it. A silence longer than ~0.9 s replays shorter, so a pause is never a stall.
 
 ```js
-loom.speechLag(0)     // instant — words appear as typed-in-progress, revisions and all
-loom.speechLag(300)   // calmer, fewer misfires
+loom.speechPace(2)        // replay twice as fast as you spoke
+loom.speechMode("live")   // opposite trade: words race out as they settle, misfires and all
+loom.speechLag(0)         //   …in live mode, how long a word must hold still (0 = instant)
 ```
 
 Two things worth knowing before you perform with it: recognition **stops itself** on
