@@ -1446,6 +1446,11 @@ function parseMiniClean(str) {
 // ── reification: turn a user arg into a Pattern ─────────────────────────────────
 function reify(arg) {
   if (arg instanceof Pattern) return arg;
+  // physics() is duck-typed: it has query() but is not a Pattern subclass. stack() calls
+  // query() directly so it always worked there, but reify would wrap it with pure() as an
+  // inert value — which silently drew NOTHING for the single-child forms, group(physics(...))
+  // and $("name", physics(...)). Pass it through as the pattern it behaves like.
+  if (arg instanceof Physics) return arg;
   if (typeof arg === 'string') return mini(arg);
   return pure(arg);
 }

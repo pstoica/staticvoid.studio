@@ -1608,6 +1608,57 @@ function renderLayerChips() {
 
 // ── presets ───────────────────────────────────────────────────────────────────────
 const PRESETS = {
+  // three juggling balls, three temperaments. Each ball owns a group(), so its character is
+  // physics AND effects, not just colour: A rises and burns (negative gravity + turbulence,
+  // bloom on every throw), B hangs in a cold vortex it smears through (attract+swirl around
+  // itself, feedback with hue creeping inside the loop), C is hard-edged and has no physics
+  // at all, snapping on each catch. Every layer is gated on its own ball, so a dropped ball
+  // takes its whole world with it instead of parking at centre.
+  'juggle 3': `group(
+  cam(0.4),
+
+  // ─ ball A · EMBER: rises, burns out. heat around it, bloom on every throw ─
+  group(
+    physics(
+      shape("dot*24").x(ballX("a")).y(ballY("a"))
+        .gate(ballSeen("a"))
+        .size(near(ballX("a"), ballY("a"), 0.18).range(0.004, 0.022))
+        .color(palette("ember").at(osc(3, "perlin").spread(1)))
+        .opacity(0.55).decay(1.6),
+      { gravity: -0.35, drag: 0.9, vel: 0.06, turbulence: 0.45, turbScale: 5 }
+    ),
+    shape("dot*60").x(ballX("a")).y(ballY("a")).jitter(0.012)
+      .gate(ballSeen("a"))
+      .size(0.006).color(palette("ember").at(rand))
+      .opacity(0.4).decay(0.7)
+  ).glow(thrown("a").range(0.12, 0.95), 0.7),
+
+  // ─ ball B · VORTEX: cold, orbits itself, smears. spin drives the swirl ─
+  group(
+    physics(
+      shape("ring*16").x(ballX("b")).y(ballY("b"))
+        .gate(ballSeen("b"))
+        .size(0.02).weight(0.003)
+        .color(palette("ice").at(osc(2).spread(1)))
+        .opacity(0.5).decay(2.4),
+      { gravity: 0, drag: 1.1, vel: 0.02,
+        attract: 0.55, ax: ballX("b"), ay: ballY("b"),
+        swirl: gyro("b").range(0.3, 1.4) }
+    )
+  ).feedback(0.86, 1.012, 0.004, f => f.hue(0.004)),
+
+  // ─ ball C · GLITCH: hard edges, no physics, snaps on catch ─
+  group(
+    shape("square*18").x(ballX("c")).y(ballY("c")).jitter(0.03)
+      .gate(ballSeen("c"))
+      .size(caught("c").range(0.01, 0.07))
+      .rotate(rand).spin(0.6)
+      .color(palette("neon").at(gx()))
+      .fill(0).stroke(1).weight(0.004)
+      .opacity(0.75).decay(0.9)
+  ).rgbshift(caught("c").range(0.001, 0.012)).scanlines(0.25)
+
+).glow(0.12, 0.5)`,
   // a heat map under the cursor: every cell reads its own live distance to the pointer, so
   // the grid bulges and glows where you point instead of anything moving
   'heat': `stack(
