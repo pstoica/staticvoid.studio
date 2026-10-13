@@ -122,6 +122,7 @@ new ResizeObserver(resize).observe(activeCanvas);
 
 // ── the pattern + clock ──────────────────────────────────────────────────────────
 let pattern = DSL.silence;
+let activeLayerOrder = null;     // $ layer name → stacking index (null: no $ layers)
 let activeGroupFx = new Map();   // gid → fx for the running patch; live glyphs read their group's CURRENT fx
 const physWorlds = new Map();    // pid → PhysWorld (lazy; one rapier2d world per physics() group)
 let activePhys = new Map();      // pid → opts for the running patch (params resolved per frame)
@@ -199,9 +200,11 @@ function compile(code) {
   const layers = DSL._getLayers();
   if (layers.length) {
     activeLayers = layers.map((l) => l.name);
+    activeLayerOrder = new Map(activeLayers.map((n, i) => [n, i]));   // $ order = stacking order
     return layers.length === 1 ? layers[0].pat : DSL.stack(...layers.map((l) => l.pat));
   }
   activeLayers = [];
+  activeLayerOrder = null;
   if (!result || typeof result.query !== 'function') throw new Error('expression did not evaluate to a pattern');
   return result;
 }
@@ -1527,7 +1530,7 @@ function tick(dt) {
   // so a layer effect (pixelate) can be applied before compositing. `vis` excludes
   // muted / non-soloed layers.
   if (USE_GL) {
-    glr.render({ live: vis, minDim, resolve: glResolve, evalGlobal, elapsed, W, H, cycle, showClock, traceMode, persp: perspVal, groupFx: activeGroupFx });
+    glr.render({ live: vis, minDim, resolve: glResolve, evalGlobal, elapsed, W, H, cycle, showClock, traceMode, persp: perspVal, groupFx: activeGroupFx, layerOrder: activeLayerOrder });
   } else {
     const buckets = new Map();   // gid -> particle[]
     for (const p of vis) {

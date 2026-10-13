@@ -1330,8 +1330,6 @@ export class GLRenderer {
       }
     }
 
-    if (ungrouped.length) this._drawGlyphs(ungrouped, null);
-
     const all = (g) => g.kids.reduce((acc, k) => acc.concat(all(groups.get(k))), g.parts);
     const layer = (gid) => {             // render one group's finished layer → texture
       const g = groups.get(gid), rt = this._getGroupRT(gid);
@@ -1340,7 +1338,31 @@ export class GLRenderer {
       this._chainParts = g.kids.length ? all(g) : g.parts;   // meshfill control points
       return this._applyChain(rt, g.fx);
     };
-    for (const [gid, g] of groups) if (!g.parent) this._composite(layer(gid), g.fx);
+
+    // Stacking: $(...) layers draw in the order they're written (later on top), whether a
+    // layer is a group or bare glyphs. (Bare glyphs used to always go first, under every
+    // group, so a bare layer could never sit on top of a grouped one.) Glyphs with no $
+    // layer keep the old order: bare first, then groups.
+    const order = (state && state.layerOrder) || null;
+    const li = (name) => (order && name != null && order.has(name) ? order.get(name) : -1);
+    const units = [];                    // [layer index, kind (0 bare, 1 group), payload]
+    const bare = new Map();
+    for (const p of ungrouped) {
+      const k = li(p.layer);
+      let list = bare.get(k);
+      if (!list) { bare.set(k, list = []); units.push([k, 0, list]); }
+      list.push(p);
+    }
+    for (const [gid, g] of groups) {
+      if (g.parent) continue;
+      const first = g.parts[0] || all(g)[0];
+      units.push([li(first && first.layer), 1, gid]);
+    }
+    units.sort((u, v) => u[0] - v[0] || u[1] - v[1]);   // stable: ties keep first-seen order
+    for (const [, kind, payload] of units) {
+      if (kind === 0) this._drawGlyphs(payload, null);
+      else this._composite(layer(payload), groups.get(payload).fx);
+    }
     this._pruneGroups(groups);
     drawOverlay();   // clock sweep / trace on top of all the art
   }
