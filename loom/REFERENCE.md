@@ -682,6 +682,8 @@ glyph's onset (a trail), live as an FX/physics param.
 | `landing(id)` | ramps **0→1 from the apex to the predicted catch**, `0` otherwise — anticipate the catch | `0..1` |
 | `flight(id)` | last catch's airtime, **held** until the next catch | seconds |
 | `gyro(id)` | on-ball spin (IMU), if streaming | `0..1` |
+| `accel(id)` | motion energy from the accelerometer — `0` at rest, spikes on throws/catches (real IMU, or the host's camera-derived stand-in for plain balls) | `0..1` |
+| `speed(id)` | how fast the ball moves in the frame, from its tracked position (`1` ≈ 3 frame heights/s) — any ball | `0..1` |
 
 `id` is the ball — `"a"`, `"b"`, `"c"` (also `0` / `1` / `2`, or the full `"ball_a"`); it's the
 **join key**, the same across position and events, so each ball is its own independent input.

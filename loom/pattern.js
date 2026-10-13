@@ -605,13 +605,21 @@ const _ballId = (id) => {                                          // 0/1/2 · "
 const _ball = (id) => _jug.balls[_ballId(id)];
 // normalise the INCOMING id too (the feed sends "ball_A"/"ball_B"…) so it matches the lowercased
 // key ballX("b") looks up — otherwise "ball_B" is stored but "ball_b" is read and never found.
-const _mkBall = (id) => { const k = _ballId(id); return _jug.balls[k] || (_jug.balls[k] = { x: 0.5, y: 0.5, seen: 0, still: 0, thr: 0, cat: 0, tap: 0, flight: 0, mag: 0, spin: 0, tiltx: 0, tilty: 0, held: 0, shake: 0, apx: 0, apexH: 0, lx: 0.5, ly: 0.5, l0: 0, l1: 0 }); };
+const _mkBall = (id) => { const k = _ballId(id); return _jug.balls[k] || (_jug.balls[k] = { x: 0.5, y: 0.5, seen: 0, still: 0, thr: 0, cat: 0, tap: 0, flight: 0, mag: 0, spin: 0, tiltx: 0, tilty: 0, acc: 0, vel: 0, pt: 0, held: 0, shake: 0, apx: 0, apexH: 0, lx: 0.5, ly: 0.5, l0: 0, l1: 0 }); };
 function _jugInput(m) {                                            // one feed message; switch on type, ignore unknown
   if (!m || typeof m !== 'object') return;
   if (m.type === 'balls' && m.coords) {
-    for (const id in _jug.balls) _jug.balls[id].seen = 0;          // clear; only ids present this frame re-flag
+    const was = {};
+    for (const id in _jug.balls) { was[id] = _jug.balls[id].seen; _jug.balls[id].seen = 0; }   // clear; only ids present this frame re-flag
     const st = m.stationary || {};
-    for (const id in m.coords) { const c = m.coords[id], b = _mkBall(id); b.x = +c[0]; b.y = +c[1]; b.seen = 1; b.still = st[id] ? 1 : 0; }
+    const now = performance.now() / 1000;
+    for (const id in m.coords) {
+      const c = m.coords[id], b = _mkBall(id), x = +c[0], y = +c[1];
+      // speed: smoothed frame-heights/s from consecutive positions (any ball, no sensor)
+      const dt = now - (b.pt || 0);
+      if (was[_ballId(id)] && dt > 0.005 && dt < 0.25) b.vel = 0.6 * (b.vel || 0) + 0.4 * Math.hypot(x - b.x, y - b.y) / dt;
+      b.pt = now; b.x = x; b.y = y; b.seen = 1; b.still = st[id] ? 1 : 0;
+    }
   } else if (m.type === 'throw') { const b = _mkBall(m.name); b.thr = 1; b.l1 = 0; }
   else if (m.type === 'catch') { const b = _mkBall(m.name); b.cat = 1; b.flight = +m.flight || 0;
     if (m.x != null) { b.lx = +m.x; b.ly = +m.y; }                // where it actually came down
@@ -622,7 +630,9 @@ function _jugInput(m) {                                            // one feed m
       b.lx = +m.land_x; b.ly = +m.land_y; b.l0 = now; b.l1 = now + Math.max(0.01, +m.land_in || 0); } }
   else if (m.type === 'tap')   { const b = _mkBall(m.name); b.mag = +m.magnitude || 0; b.tap = Math.min(1, b.mag / 30); }
   else if (m.type === 'imu')   { const b = _mkBall(m.name), g = m.gyro || [0, 0, 0], a = m.accel || [0, 0, 0];
-    b.spin = Math.min(1, Math.hypot(g[0], g[1], g[2]) / 35); b.tiltx = (a[0] || 0) / 9.8; b.tilty = (a[1] || 0) / 9.8; }
+    b.spin = Math.min(1, Math.hypot(g[0], g[1], g[2]) / 35); b.tiltx = (a[0] || 0) / 9.8; b.tilty = (a[1] || 0) / 9.8;
+    // accel: how far the reading is from "at rest" (|a| = g), 0..1 — throws/catches spike it
+    b.acc = Math.min(1, Math.abs(Math.hypot(a[0] || 0, a[1] || 0, a[2] || 0) - 9.81) / 15); }
   else if (m.type === 'hold')   { _mkBall(m.name).held = 1; }       // latched: settled still
   else if (m.type === 'active') { _mkBall(m.name).held = 0; }       // latched: moving again
   else if (m.type === 'shake')  { _mkBall(m.name).shake = Math.min(1, (+m.intensity || 6) / 12); } // pulse, scaled by intensity
@@ -642,6 +652,12 @@ function caught(id)   { return signal(() => _jval(id, 'cat', 0)); }
 function tapped(id)   { return signal(() => _jval(id, 'tap', 0)); }
 function flight(id)   { return signal(() => _jval(id, 'flight', 0)); }
 function gyro(id)     { return signal(() => _jval(id, 'spin', 0)); }
+// accel(id): motion energy from the ball's accelerometer (a real IMU, or the host's
+// camera-derived stand-in for plain balls), 0 at rest → 1 on a hard throw/catch.
+// speed(id): how fast the ball moves in the frame, from its tracked positions, 0..1
+// (1 ≈ 3 frame heights/s — a fast throw); works for any tracked ball.
+function accel(id)    { return signal(() => _jval(id, 'acc', 0)); }
+function speed(id)    { return signal(() => { const b = _ball(id); return b && b.seen ? Math.min(1, (b.vel || 0) / 3) : 0; }); }
 // held(id): 1 while the ball is held still (latched by hold/active gesture events, not decayed).
 // shaken(id): decaying 0..1 pulse on a deliberate shake, amplitude scaled by shake intensity.
 function held(id)     { return signal(() => _jval(id, 'held', 0)); }
@@ -1545,7 +1561,7 @@ export const DSL = {
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white, stripes, checker,
   mouseX, mouseY, mouseDown, _setPointer,
   cc, gate, vel, note, pc, bend, onNote, dev, _midiInput, _midiFrame,
-  ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, apexed, apexHeight, landX, landY, landing, flight, gyro, _jug, _jugInput, _jugDecay,
+  ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, apexed, apexHeight, landX, landY, landing, flight, gyro, accel, speed, _jug, _jugInput, _jugDecay,
   fingerX, fingerY, fingerZ, fingerUp, fingersUp, pinch, palmX, palmY, handSeen, handNear, poseX, poseY, poseSeen,
   cam, _setCamSink, _handInput, _poseInput, _faceInput, _micInput, _resetTracking, _getTracking,
   gx, gy, near, dist, _setGlyphPos,

@@ -18,7 +18,7 @@ const FN = new Set(['shape', 's', 'n', 'polygon', 'polyline', 'stack', 'cat', 's
   'pure', 'silence', 'run', 'range', 'mini', 'euclid', 'fast', 'slow', 'rev', 'choose', 'irand', 'pick', 'iff', 'osc', 'env',
   'stripes', 'checker',
   'palette', 'bg', 'persp', 'cam', 'group', 'echo', 'spring', 'physics', 'slider', 'cc', 'gate', 'vel', 'note', 'pc', 'bend', 'onNote', 'dev',
-  'ballX', 'ballY', 'ballSeen', 'moving', 'thrown', 'caught', 'tapped', 'held', 'shaken', 'flight', 'gyro',
+  'ballX', 'ballY', 'ballSeen', 'moving', 'thrown', 'caught', 'tapped', 'held', 'shaken', 'flight', 'gyro', 'accel', 'speed', 'apexed', 'apexHeight', 'landX', 'landY', 'landing',
   'fingerX', 'fingerY', 'fingerZ', 'fingerUp', 'fingersUp', 'pinch', 'palmX', 'palmY', 'handSeen', 'handNear', 'poseX', 'poseY', 'poseSeen',
   'mouthOpen', 'smile', 'browRaise', 'mouthX', 'mouthY', 'faceX', 'faceY', 'faceSeen',
   'mic', 'micLow', 'micMid', 'micHigh', 'micBand', 'micHit', 'gx', 'gy', 'near', 'dist',
@@ -93,7 +93,7 @@ const C_SIG = [
   ['ballX', 'juggling ball x'], ['ballY', 'juggling ball y'], ['ballSeen', 'ball detected'],
   ['moving', 'ball seen and moving'], ['thrown', 'throw pulse'], ['caught', 'catch pulse'],
   ['tapped', 'tap pulse'], ['held', 'ball held still'], ['shaken', 'shake pulse'],
-  ['flight', 'last airtime'], ['gyro', 'ball spin'],
+  ['flight', 'last airtime'], ['gyro', 'ball spin'], ['accel', 'ball motion energy 0..1 (throws/catches spike)'], ['speed', 'ball speed in frame 0..1'], ['apexed', 'pulse at the top of the arc'], ['apexHeight', 'last throw height'], ['landX', 'predicted landing x'], ['landY', 'predicted landing y'], ['landing', '0→1 from apex to the predicted catch'],
   ['level', 'Link Audio track level'], ['band', 'Link Audio FFT band'], ['low', 'track bass'],
   ['mid', 'track body'], ['high', 'track air'], ['hit', 'track transient'],
 ];
