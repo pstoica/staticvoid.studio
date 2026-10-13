@@ -631,8 +631,12 @@ function _jugInput(m) {                                            // one feed m
   else if (m.type === 'tap')   { const b = _mkBall(m.name); b.mag = +m.magnitude || 0; b.tap = Math.min(1, b.mag / 30); }
   else if (m.type === 'imu')   { const b = _mkBall(m.name), g = m.gyro || [0, 0, 0], a = m.accel || [0, 0, 0];
     b.spin = Math.min(1, Math.hypot(g[0], g[1], g[2]) / 35); b.tiltx = (a[0] || 0) / 9.8; b.tilty = (a[1] || 0) / 9.8;
-    // accel: how far the reading is from "at rest" (|a| = g), 0..1 — throws/catches spike it
-    b.acc = Math.min(1, Math.abs(Math.hypot(a[0] || 0, a[1] || 0, a[2] || 0) - 9.81) / 15); }
+    // accel: how far the reading is from "at rest" (|a| = g), 0..1 — throws/catches spike it.
+    // An envelope, not the raw reading: it jumps UP to a spike and _jugDecay eases it back
+    // down, so a noisy 20 Hz stream (the camera stand-in especially) doesn't flicker
+    // whatever it drives (opacity, glow).
+    const acc = Math.min(1, Math.abs(Math.hypot(a[0] || 0, a[1] || 0, a[2] || 0) - 9.81) / 15);
+    b.acc = Math.max(b.acc || 0, acc); }
   else if (m.type === 'hold')   { _mkBall(m.name).held = 1; }       // latched: settled still
   else if (m.type === 'active') { _mkBall(m.name).held = 0; }       // latched: moving again
   else if (m.type === 'shake')  { _mkBall(m.name).shake = Math.min(1, (+m.intensity || 6) / 12); } // pulse, scaled by intensity
@@ -640,7 +644,7 @@ function _jugInput(m) {                                            // one feed m
 }
 // decay the throw/catch/tap pulses each frame (driven from the tick loop) — a flash to 1 that
 // falls to ~0 over ~0.4s, so an event reads as a discrete trigger on controls and FX alike.
-function _jugDecay(dt) { const k = Math.exp(-dt * 6); for (const id in _jug.balls) { const b = _jug.balls[id]; b.thr *= k; b.cat *= k; b.tap *= k; b.shake *= k; b.apx *= k; } }
+function _jugDecay(dt) { const k = Math.exp(-dt * 6), ka = Math.exp(-dt * 3); for (const id in _jug.balls) { const b = _jug.balls[id]; b.thr *= k; b.cat *= k; b.tap *= k; b.shake *= k; b.apx *= k; b.acc = (b.acc || 0) * ka; } }
 const _jval = (id, f, def) => { const b = _ball(id); return b ? b[f] : def; };
 function ballX(id)    { return signal(() => { const x = _jval(id, 'x', 0.5); return _jug.flipX ? 1 - x : x; }); }
 function ballY(id)    { return signal(() => _jval(id, 'y', 0.5)); }
