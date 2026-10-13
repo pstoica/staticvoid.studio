@@ -701,6 +701,20 @@ shape("ring*2").x(landX("a")).y(landY("a")).size(landing("a").range(0.12, 0.02))
   .weight(0.003).opacity(landing("a")).decay(0.2)
 ```
 
+**Shapes across balls: `polygon` / `polyline`.** `polygon(["a", "b", "c"])` is one shape
+whose corners are points — ball ids (`"a"` = that ball's position) or `[x, y]` pairs (numbers,
+oscs, signals, `0..1`). It draws its edges as lines (so `.color` / `.weight` / `.cap` and
+group FX apply); `polyline` leaves it open. Corners are sampled at each onset, so `.fast(n)` it
+to follow moving balls. **`.fill(a)` fills a closed polygon** (a solid, convex fill under the
+edges); with `.fill()` the edges only draw if `.stroke()` is set too.
+
+```
+// a solid triangle between the three balls, its colour drifting round the rainbow
+polygon(["a", "b", "c"]).fast(128)
+  .gate(ballSeen("a").mul(ballSeen("b")).mul(ballSeen("c")))
+  .fill(1).color(palette("rainbow").at(osc(0.2))).opacity(0.6).decay(0.1)
+```
+
 **Off by default** (Loom is also a public web app — it won't dial `ws://localhost` from every
 visitor's browser). The **feed button** in the toolbar (antenna icon) opens a config card:
 **connect** on/off + a live status dot, the **host** (`host:port`), **flip X** (selfie mirror),

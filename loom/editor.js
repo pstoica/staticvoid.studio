@@ -47,7 +47,7 @@ const C_FN = [
   ['n', 'numbered dots'], ['stack', 'layer patterns in parallel'],
   ['cat', 'one pattern per cycle'], ['seq', 'squeeze patterns into one cycle'],
   ['run', 'numeric pattern 0..k-1'], ['pure', 'one event per cycle'], ['silence', 'nothing'],
-  ['euclid', 'euclidean rhythm: euclid(3, 8, pat)'], ['polygon', 'one glyph through N points'],
+  ['euclid', 'euclidean rhythm: euclid(3, 8, pat)'], ['polygon', 'one shape through N points (ball ids or [x, y]); .fill(a) fills it'],
   ['polyline', 'open polygon'], ['choose', 'random pick per onset'], ['irand', 'random int 0..k-1'],
   ['pick', 'index a list by a 0..1 signal'], ['iff', 'branch on a condition'],
   ['osc', 'live oscillator over a glyph\'s life — osc(rate, shape)'],

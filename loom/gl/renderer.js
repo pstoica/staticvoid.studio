@@ -1353,11 +1353,12 @@ export class GLRenderer {
     this._ensureCapacity(parts.length);
     r.setRenderTarget(target);
     if (target) { r.setClearColor(0x000000, 0); r.clear(true, false, false); }
+    this._drawPolyFills(parts);          // filled polygons sit under the glyphs of their layer
     for (const key of BLEND_ORDER) {
       let count = 0;
       for (let i = 0; i < parts.length; i++) {
         const p = parts[i];
-        if (blendKey(p.blend) !== key) continue;
+        if (p.polyFill || blendKey(p.blend) !== key) continue;
         resolve(p, minDim, out);
         if ((out.shape >= 15 && out.shape < 20) || out.shape >= 100) continue;   // meshes → _drawMeshes, sprites → _drawSprites
         const a = this.arrays;
@@ -1579,6 +1580,63 @@ export class GLRenderer {
   //   B) translucent instances → rendered one at a time (depth cleared between) so each
   //      resolves to a single surface yet composites like a 2D glyph, blending through.
   // A is drawn first, so in a mixed scene opaque sits behind translucent.
+  // filled polygons (polygon([...]).fill(a)): each glyph carries its corners (0..1); draw
+  // them as triangle fans in one batch, coloured + faded exactly like a glyph (resolve gives
+  // the live colour and the enveloped alpha), premultiplied, normal blend. Convex shapes
+  // fill exactly; a concave one (a crossed 4+-gon) fans from its first corner.
+  _drawPolyFills(parts) {
+    let tris = 0;
+    for (const p of parts) if (p.polyFill && p.polyFill.length >= 3) tris += p.polyFill.length - 2;
+    if (!tris) return;
+    const need = tris * 3;
+    if (!this.pf || this.pf.cap < need) {
+      const cap = Math.max(need, 768, this.pf ? this.pf.cap * 2 : 0);
+      if (this.pf) this.pf.geom.dispose();
+      const geom = new THREE.BufferGeometry();
+      const pos = new THREE.BufferAttribute(new Float32Array(cap * 3), 3).setUsage(THREE.DynamicDrawUsage);
+      const col = new THREE.BufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
+      geom.setAttribute('position', pos); geom.setAttribute('fillColor', col);
+      if (!this.pfMat) {
+        this.pfMat = new THREE.ShaderMaterial({
+          vertexShader: 'attribute vec4 fillColor; varying vec4 vC; void main() { vC = fillColor; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+          fragmentShader: 'varying vec4 vC; void main() { gl_FragColor = vC; }',   // premultiplied
+          transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+          blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+          blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+          blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+        });
+        this.pfScene = new THREE.Scene();
+      }
+      const mesh = new THREE.Mesh(geom, this.pfMat);
+      mesh.frustumCulled = false;
+      if (this.pf) this.pfScene.remove(this.pf.mesh);
+      this.pfScene.add(mesh);
+      this.pf = { cap, geom, pos, col, mesh };
+    }
+    const W = this.camera.right || 1, H = this.camera.bottom || 1;
+    const out = this._scratch, pos = this.pf.pos.array, col = this.pf.col.array;
+    let k = 0;
+    for (const p of parts) {
+      const P = p.polyFill;
+      if (!P || P.length < 3) continue;
+      this._resolve(p, this._minDim, out);
+      const a = Math.max(0, Math.min(1, out.alpha));
+      if (a <= 0) continue;
+      const rr = out.rgb[0] * a, gg = out.rgb[1] * a, bb = out.rgb[2] * a;
+      for (let i = 1; i < P.length - 1; i++) {
+        for (const q of [P[0], P[i], P[i + 1]]) {
+          pos[k * 3] = q[0] * W; pos[k * 3 + 1] = q[1] * H; pos[k * 3 + 2] = 0;
+          col[k * 4] = rr; col[k * 4 + 1] = gg; col[k * 4 + 2] = bb; col[k * 4 + 3] = a;
+          k++;
+        }
+      }
+    }
+    if (!k) return;
+    this.pf.pos.needsUpdate = true; this.pf.col.needsUpdate = true;
+    this.pf.geom.setDrawRange(0, k);
+    this.renderer.render(this.pfScene, this.camera);
+  }
+
   _drawMeshes(parts, target) {
     if (!parts.length) return;
     const r = this.renderer, out = this._scratch, minDim = this._minDim, resolve = this._resolve;

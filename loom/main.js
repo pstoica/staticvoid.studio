@@ -305,6 +305,15 @@ function spawnPoly(v, onset) {
   // style-only base: drop the poly marker + every geometry field (we set those per edge)
   const base = { ...v };
   for (const k of ['_poly', 'x', 'y', 'radius', 'angle', 'gridX', 'gridY', 'pan', 'rotate', 'spin', 'size', 'open', 'id']) delete base[k];   // id: N edges must not upsert one key
+  // .fill(a) on a closed polygon (3+ points) fills it: one glyph carrying the corner points,
+  // drawn by the GL renderer as real triangles under the edges. Edges then only draw if
+  // .stroke() is also set; without .fill() a polygon is its outline, as before.
+  const filled = poly.closed && n >= 3 && v.fill != null && +v.fill > 0;
+  if (filled) {
+    const cx = P.reduce((t, q) => t + q[0], 0) / n, cy = P.reduce((t, q) => t + q[1], 0) / n;
+    spawn({ ...base, shape: 'dot', _polyFill: P, x: cx, y: cy, size: 0.001 }, onset);
+    if (v.stroke == null || +v.stroke <= 0) return;
+  }
   base.shape = 'line';
   base.cap = v.cap || 'round';                          // round caps read as joined corners
   const edges = poly.closed ? n : n - 1;
@@ -380,6 +389,7 @@ function spawn(value, onset) {
     rotX: baseNum('rotateX', 0) * TAU,     // tilt (radians)
     rotY: baseNum('rotateY', 0) * TAU,
     spin: (v.spin != null ? v.spin : 0) * TAU,                 // turns/sec (Z), age-driven
+    polyFill: v._polyFill || null,   // filled polygon: [[x, y], …] 0..1 corners (renderer draws triangles)
     fill: v.fill != null ? v.fill : 1,
     stroke: v.stroke != null ? v.stroke : 0,
     vertex: v.vertex != null ? v.vertex : 0,
