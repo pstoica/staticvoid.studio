@@ -41,10 +41,40 @@ async function ensureVision() {
   return _mpLoading;
 }
 
+// The browser's default camera is often a virtual one (OBS Virtual Camera outputs black
+// unless OBS is streaming to it). Steer to a real camera: localStorage 'loom.camLabel'
+// (a substring of the device label, e.g. "FaceTime" / "Logitech") wins if set, else the
+// first camera whose label doesn't look virtual.
+const VIRTUAL_CAM = /obs|virtual|snap camera|mmhmm|ndi|camtwist|epoccam/i;
+const _camWant = () => { try { return (localStorage.getItem('loom.camLabel') || '').toLowerCase(); } catch { return ''; } };
+
+async function openCamera() {
+  const base = { width: { ideal: 640 } };
+  let stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', ...base }, audio: false });
+  // device labels are only readable after a grant — so open the default first, then re-pick
+  const label = (stream.getVideoTracks()[0]?.label || '').toLowerCase();
+  const want = _camWant();
+  if (VIRTUAL_CAM.test(label) || (want && !label.includes(want))) {
+    const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+    const pick = (want && cams.find((d) => d.label.toLowerCase().includes(want)))
+      || cams.find((d) => d.label && !VIRTUAL_CAM.test(d.label));
+    if (pick) {
+      stream.getTracks().forEach((t) => t.stop());
+      stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: pick.deviceId }, ...base }, audio: false });
+    }
+  }
+  return stream;
+}
+
+let _camGen = 0;          // bumped by releaseTracking(): a camera still opening is dropped
+let _want = null;         // what the running patch uses — trackTick only runs those models
+
 async function ensureCamera() {
   if (_video) return _video;
   if (!_videoLoading) _videoLoading = (async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 } }, audio: false });
+    const gen = _camGen;
+    const stream = await openCamera();
+    if (gen !== _camGen) { stream.getTracks().forEach((t) => t.stop()); return null; }   // released meanwhile
     const v = document.createElement('video');
     v.muted = true; v.playsInline = true; v.srcObject = stream;
     await v.play();
@@ -97,6 +127,21 @@ export function ensureTracking(want) {
     ).catch((e) => _warn('segmentation unavailable (camera or model)', e));
   }
 }
+
+// The running patch no longer uses the camera: stop the webcam (its light goes off) and
+// idle the trackers. Loaded models are kept, so a later patch starts again quickly.
+export function releaseTracking() {
+  _camGen++;
+  if (_video) {
+    const s = _video.srcObject;
+    if (s) s.getTracks().forEach((t) => t.stop());
+    _video.srcObject = null;
+  }
+  _video = null; _videoLoading = null;
+  if (_state !== 'blocked') _state = 'off';
+}
+// which trackers the running patch reads (from the compile's usage flags)
+export function setTrackingWant(want) { _want = want || null; }
 
 export const trackingReady = () => !!(_video && (_hand || _pose || _seg || _face));
 export const trackingVideo = () => _video;                 // for the GL camera overlay
@@ -187,10 +232,12 @@ export function trackTick(nowMs, cw, ch) {
   }
   const out = {};
   try {
-    if (_hand) out.hands = processHands(_hand.detectForVideo(_video, ts), sx, sy);
-    if (_pose) out.pose = processPose(_pose.detectForVideo(_video, ts), sx, sy);
-    if (_face) out.face = processFace(_face.detectForVideo(_video, ts), sx, sy);
-    if (_seg) {
+    // only the trackers this patch reads (a model loaded by an earlier patch idles)
+    const w = _want || {};
+    if (_hand && w.hands) out.hands = processHands(_hand.detectForVideo(_video, ts), sx, sy);
+    if (_pose && w.pose) out.pose = processPose(_pose.detectForVideo(_video, ts), sx, sy);
+    if (_face && w.face) out.face = processFace(_face.detectForVideo(_video, ts), sx, sy);
+    if (_seg && w.seg) {
       // callback form: the MPMask is only valid inside — getAsFloat32Array copies it out.
       // Selfie segmenter emits person confidence; some builds emit [background, person].
       _seg.segmentForVideo(_video, ts, (res) => {

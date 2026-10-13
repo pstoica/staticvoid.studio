@@ -8,7 +8,7 @@
 import { DSL } from './pattern.js';
 import { GLRenderer } from './gl/renderer.js';
 import { ensureRapier, rapierReady, PhysWorld } from './physics.js';
-import { ensureTracking, trackingReady, trackingVideo, trackingState, trackTick, setTrackingFlip, getTrackingFlip } from './hands.js';
+import { ensureTracking, releaseTracking, setTrackingWant, trackingReady, trackingVideo, trackingState, trackTick, setTrackingFlip, getTrackingFlip } from './hands.js';
 import { ensureMic, micTick, micState, micStateValues } from './mic.js';
 import { ensureSpeech, stopSpeech, speechTick, speechState, speechLocal, speechDebug, installLocal, setSpeechLag, setSpeechPace, setSpeechMode } from './speech.js';
 import { createEditor } from './editor.js';
@@ -151,6 +151,7 @@ let bgSource = DEFAULT_BG; // raw bg arg (string/number/pattern/osc), resolved e
 const DEFAULT_PERSP = 2.6; // 3D-tilt camera distance, glyph radii (matches the historical hardcoded pinhole)
 let perspSource = DEFAULT_PERSP; // raw persp() arg, resolved each frame like bg (0 = orthographic)
 let perspVal = DEFAULT_PERSP;    // this frame's resolved value (read by drawShape3D; sent to the GL renderer)
+let camReleaseTimer = 0;  // pending webcam release (see run): cancelled if the camera is wanted again
 let camSource = 0;         // raw cam() opacity arg (0 = no webcam backdrop), reset each run, patternable
 let camShown = false;      // whether the cam() backdrop currently owns the GL camera overlay
 let lastTrackState = 'off'; // last surfaced camera/tracking state (toast on transitions)
@@ -253,7 +254,13 @@ function run() {
     else stopSpeech();                       // …and let it go when the patch stops asking
     errBar.textContent = '';
     errBar.classList.remove('show');
-    if (tw.hands || tw.pose || tw.cam || tw.seg || tw.face) {
+    setTrackingWant(tw);
+    const wantsCamera = tw.hands || tw.pose || tw.cam || tw.seg || tw.face;
+    // release the webcam once no patch uses it — after a grace period, so live-editing
+    // (a line briefly gone while typing) doesn't flicker the camera off and on
+    clearTimeout(camReleaseTimer);
+    if (!wantsCamera && trackingState() !== 'off') camReleaseTimer = setTimeout(releaseTracking, 3000);
+    if (wantsCamera) {
       ensureTracking(tw);
       // if the camera is already known-blocked, say so on every run — otherwise the patch
       // just draws nothing (gates closed, signals 0) with no clue why. (This used to be set
@@ -405,6 +412,7 @@ function spawn(value, onset) {
     spawnCycle: cycle,         // global cycle at spawn → osc().drift() (synced) reads this
     gid: v._gid || 0,          // group layer id (0 = ungrouped, drawn to main canvas)
     fx: v._fx || null,         // group effect params (e.g. { pixelate })
+    parents: v._parents || null, // enclosing groups, innermost → outermost: [{ gid, fx }]
     echoFam: v._echoFam || 0,  // echo() family (0 = not an echo layer); gid is its frozen generation
     echoCap: v._echoCap || 0,  // max generations to keep for this family
     layer: v._layer || null,   // $(...) layer name (null = ungrouped) → live mute/solo
@@ -1509,7 +1517,7 @@ function tick(dt) {
   // so a layer effect (pixelate) can be applied before compositing. `vis` excludes
   // muted / non-soloed layers.
   if (USE_GL) {
-    glr.render({ live: vis, minDim, resolve: glResolve, evalGlobal, elapsed, W, H, cycle, showClock, traceMode, persp: perspVal });
+    glr.render({ live: vis, minDim, resolve: glResolve, evalGlobal, elapsed, W, H, cycle, showClock, traceMode, persp: perspVal, groupFx: activeGroupFx });
   } else {
     const buckets = new Map();   // gid -> particle[]
     for (const p of vis) {

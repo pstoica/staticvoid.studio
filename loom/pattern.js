@@ -605,15 +605,21 @@ const _ballId = (id) => {                                          // 0/1/2 · "
 const _ball = (id) => _jug.balls[_ballId(id)];
 // normalise the INCOMING id too (the feed sends "ball_A"/"ball_B"…) so it matches the lowercased
 // key ballX("b") looks up — otherwise "ball_B" is stored but "ball_b" is read and never found.
-const _mkBall = (id) => { const k = _ballId(id); return _jug.balls[k] || (_jug.balls[k] = { x: 0.5, y: 0.5, seen: 0, still: 0, thr: 0, cat: 0, tap: 0, flight: 0, mag: 0, spin: 0, tiltx: 0, tilty: 0, held: 0, shake: 0 }); };
+const _mkBall = (id) => { const k = _ballId(id); return _jug.balls[k] || (_jug.balls[k] = { x: 0.5, y: 0.5, seen: 0, still: 0, thr: 0, cat: 0, tap: 0, flight: 0, mag: 0, spin: 0, tiltx: 0, tilty: 0, held: 0, shake: 0, apx: 0, apexH: 0, lx: 0.5, ly: 0.5, l0: 0, l1: 0 }); };
 function _jugInput(m) {                                            // one feed message; switch on type, ignore unknown
   if (!m || typeof m !== 'object') return;
   if (m.type === 'balls' && m.coords) {
     for (const id in _jug.balls) _jug.balls[id].seen = 0;          // clear; only ids present this frame re-flag
     const st = m.stationary || {};
     for (const id in m.coords) { const c = m.coords[id], b = _mkBall(id); b.x = +c[0]; b.y = +c[1]; b.seen = 1; b.still = st[id] ? 1 : 0; }
-  } else if (m.type === 'throw') { _mkBall(m.name).thr = 1; }
-  else if (m.type === 'catch') { const b = _mkBall(m.name); b.cat = 1; b.flight = +m.flight || 0; }
+  } else if (m.type === 'throw') { const b = _mkBall(m.name); b.thr = 1; b.l1 = 0; }
+  else if (m.type === 'catch') { const b = _mkBall(m.name); b.cat = 1; b.flight = +m.flight || 0;
+    if (m.x != null) { b.lx = +m.x; b.ly = +m.y; }                // where it actually came down
+    b.l1 = 0; }                                                     // landing() ramp done
+  else if (m.type === 'apex')  { const b = _mkBall(m.name); b.apx = 1; b.apexH = +m.height || 0;
+    if (m.land_x != null) {                                         // vision feed: predicted landing
+      const now = performance.now() / 1000;
+      b.lx = +m.land_x; b.ly = +m.land_y; b.l0 = now; b.l1 = now + Math.max(0.01, +m.land_in || 0); } }
   else if (m.type === 'tap')   { const b = _mkBall(m.name); b.mag = +m.magnitude || 0; b.tap = Math.min(1, b.mag / 30); }
   else if (m.type === 'imu')   { const b = _mkBall(m.name), g = m.gyro || [0, 0, 0], a = m.accel || [0, 0, 0];
     b.spin = Math.min(1, Math.hypot(g[0], g[1], g[2]) / 35); b.tiltx = (a[0] || 0) / 9.8; b.tilty = (a[1] || 0) / 9.8; }
@@ -624,7 +630,7 @@ function _jugInput(m) {                                            // one feed m
 }
 // decay the throw/catch/tap pulses each frame (driven from the tick loop) — a flash to 1 that
 // falls to ~0 over ~0.4s, so an event reads as a discrete trigger on controls and FX alike.
-function _jugDecay(dt) { const k = Math.exp(-dt * 6); for (const id in _jug.balls) { const b = _jug.balls[id]; b.thr *= k; b.cat *= k; b.tap *= k; b.shake *= k; } }
+function _jugDecay(dt) { const k = Math.exp(-dt * 6); for (const id in _jug.balls) { const b = _jug.balls[id]; b.thr *= k; b.cat *= k; b.tap *= k; b.shake *= k; b.apx *= k; } }
 const _jval = (id, f, def) => { const b = _ball(id); return b ? b[f] : def; };
 function ballX(id)    { return signal(() => { const x = _jval(id, 'x', 0.5); return _jug.flipX ? 1 - x : x; }); }
 function ballY(id)    { return signal(() => _jval(id, 'y', 0.5)); }
@@ -640,6 +646,20 @@ function gyro(id)     { return signal(() => _jval(id, 'spin', 0)); }
 // shaken(id): decaying 0..1 pulse on a deliberate shake, amplitude scaled by shake intensity.
 function held(id)     { return signal(() => _jval(id, 'held', 0)); }
 function shaken(id)   { return signal(() => _jval(id, 'shake', 0)); }
+// Vision trajectories (host camera on): the top of each arc, and where/when it comes down.
+// apexed(id): decaying pulse at the apex. apexHeight(id): that throw's rise above release
+// (frame heights, held). landX/landY(id): predicted landing spot, known from the apex on
+// (then the actual catch spot). landing(id): 0→1 ramp from apex to the predicted catch,
+// 0 otherwise — anticipate the catch: grow a target, swell, aim particles at landX/landY.
+function apexed(id)     { return signal(() => _jval(id, 'apx', 0)); }
+function apexHeight(id) { return signal(() => _jval(id, 'apexH', 0)); }
+function landX(id)      { return signal(() => { const x = _jval(id, 'lx', 0.5); return _jug.flipX ? 1 - x : x; }); }
+function landY(id)      { return signal(() => _jval(id, 'ly', 0.5)); }
+function landing(id)    { return signal(() => { const b = _ball(id); if (!b || !b.l1) return 0;
+  // a catch message ends the ramp; if none comes (dropped, missed, left frame), fall back
+  // to 0 shortly after the predicted catch instead of sticking at 1 until the next apex
+  const now = performance.now() / 1000; if (now >= b.l1 + 0.25) return 0; if (now >= b.l1) return 1;
+  return Math.max(0, Math.min(1, (now - b.l0) / (b.l1 - b.l0))); }); }
 
 // ── hand + pose tracking (MediaPipe webcam), as signals ───────────────────────────
 // The camera as a native input. main.js/hands.js own MediaPipe + the webcam (both
@@ -1143,7 +1163,19 @@ class Group {
     const extra = this._echo
       ? { _gid: this._gen, _fx: fx, _echoFam: this._gid, _echoCap: this._echo }
       : { _gid: this._gid, _fx: fx };
-    return this._pat.query(s).map((h) => hap(h.whole, h.part, Object.assign({}, h.value, extra)));
+    // Nesting: a glyph already tagged by an inner group keeps that group as its own layer
+    // and records this one as an enclosing parent (innermost → outermost). The renderer
+    // runs the inner group's FX, composites the result INTO this group's layer, then runs
+    // this group's FX on the whole — so group(group(a).pixelate(), b).glow() pixelates a
+    // and glows both. (Overwriting _gid here used to drop every inner FX chain silently.)
+    return this._pat.query(s).map((h) => {
+      const v = h.value;
+      if (v && typeof v === 'object' && v._gid) {
+        const parents = (v._parents || []).concat([{ gid: extra._gid, fx }]);
+        return hap(h.whole, h.part, Object.assign({}, v, { _parents: parents }));
+      }
+      return hap(h.whole, h.part, Object.assign({}, v, extra));
+    });
   }
 }
 // build an EMBEDDED fx chain for feedback's loop arg: `f => f.hue(0.02).blur(1.5)` gets a
@@ -1451,6 +1483,11 @@ function reify(arg) {
   // inert value — which silently drew NOTHING for the single-child forms, group(physics(...))
   // and $("name", physics(...)). Pass it through as the pattern it behaves like.
   if (arg instanceof Physics) return arg;
+  // group() is duck-typed the same way (query() + FX verbs, not a Pattern subclass), so the
+  // same trap applied: $("name", group(...)) and a single-child group(group(...)) wrapped the
+  // Group object itself as one inert value — a frozen default glyph per cycle, carrying the
+  // group's FX, instead of the group's actual contents.
+  if (arg instanceof Group) return arg;
   if (typeof arg === 'string') return mini(arg);
   return pure(arg);
 }
@@ -1508,7 +1545,7 @@ export const DSL = {
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white, stripes, checker,
   mouseX, mouseY, mouseDown, _setPointer,
   cc, gate, vel, note, pc, bend, onNote, dev, _midiInput, _midiFrame,
-  ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, flight, gyro, _jug, _jugInput, _jugDecay,
+  ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, apexed, apexHeight, landX, landY, landing, flight, gyro, _jug, _jugInput, _jugDecay,
   fingerX, fingerY, fingerZ, fingerUp, fingersUp, pinch, palmX, palmY, handSeen, handNear, poseX, poseY, poseSeen,
   cam, _setCamSink, _handInput, _poseInput, _faceInput, _micInput, _resetTracking, _getTracking,
   gx, gy, near, dist, _setGlyphPos,

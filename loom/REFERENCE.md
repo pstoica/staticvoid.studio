@@ -676,6 +676,10 @@ glyph's onset (a trail), live as an FX/physics param.
 | `thrown(id)` `caught(id)` `tapped(id)` | a throw / catch / tap, as a **decaying pulse** (flashes to 1, falls to 0 over ~0.4 s) | `0..1` |
 | `shaken(id)` | a deliberate **shake**, as a decaying pulse; amplitude scales with shake intensity | `0..1` |
 | `held(id)` | `1` while the ball is **held still** (latched by hold/active gestures, not decayed) — a mode you can hold a visual on | `0` / `1` |
+| `apexed(id)` | the **top of the arc** as a decaying pulse (vision feed) | `0..1` |
+| `apexHeight(id)` | that throw's rise above the release, held until the next apex | frame heights |
+| `landX(id)` `landY(id)` | **where the ball will come down** — predicted from the apex on, then the actual catch spot | `0..1` |
+| `landing(id)` | ramps **0→1 from the apex to the predicted catch**, `0` otherwise — anticipate the catch | `0..1` |
 | `flight(id)` | last catch's airtime, **held** until the next catch | seconds |
 | `gyro(id)` | on-ball spin (IMU), if streaming | `0..1` |
 
@@ -692,6 +696,9 @@ stack(
 )
 // throw → a burst of stars while airborne; spin drives the hue
 physics(shape("star*5").color(gyro("a")), { gravity: thrown("a").range(0, 3) })
+// the catch, before it happens: a ring closes in on where ball A will land
+shape("ring*2").x(landX("a")).y(landY("a")).size(landing("a").range(0.12, 0.02))
+  .weight(0.003).opacity(landing("a")).decay(0.2)
 ```
 
 **Off by default** (Loom is also a public web app — it won't dial `ws://localhost` from every

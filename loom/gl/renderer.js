@@ -1308,21 +1308,39 @@ export class GLRenderer {
     if (!live.length) { this._pruneGroups(null); drawOverlay(); return; }
 
     const ungrouped = [];
-    const groups = new Map();   // gid → { parts, fx }, in first-seen (age) order
+    // gid → { parts, fx, parent, kids }, in first-seen (age) order. A glyph's own group is
+    // its innermost; p.parents lists the enclosing groups (innermost → outermost), which
+    // become a tree: each group renders its glyphs + its children's finished layers, runs
+    // its FX chain, and hands the result to its parent (or the screen, for a root).
+    const groups = new Map();
+    const gfx = state && state.groupFx;                  // live fx per gid (edits apply live)
+    const ensure = (gid, fx) => {
+      let g = groups.get(gid);
+      if (!g) groups.set(gid, g = { parts: [], fx, parent: 0, kids: [] });
+      return g;
+    };
     for (const p of live) {
-      if (p.gid) { let g = groups.get(p.gid); if (!g) groups.set(p.gid, g = { parts: [], fx: p.fx }); g.parts.push(p); }
-      else ungrouped.push(p);
+      if (!p.gid) { ungrouped.push(p); continue; }
+      let g = ensure(p.gid, p.fx), child = p.gid;
+      g.parts.push(p);
+      if (p.parents) for (const par of p.parents) {
+        const pg = ensure(par.gid, (gfx && gfx.get(par.gid)) || par.fx);
+        if (!g.parent) { g.parent = par.gid; pg.kids.push(child); }
+        g = pg; child = par.gid;
+      }
     }
 
     if (ungrouped.length) this._drawGlyphs(ungrouped, null);
 
-    for (const [gid, g] of groups) {
-      const rt = this._getGroupRT(gid);
-      this._drawGlyphs(g.parts, rt.a);
-      this._chainParts = g.parts;      // meshfill reads the group's live glyphs as control points
-      const tex = this._applyChain(rt, g.fx);
-      this._composite(tex, g.fx);
-    }
+    const all = (g) => g.kids.reduce((acc, k) => acc.concat(all(groups.get(k))), g.parts);
+    const layer = (gid) => {             // render one group's finished layer → texture
+      const g = groups.get(gid), rt = this._getGroupRT(gid);
+      this._drawGlyphs(g.parts, rt.a);   // clears the target, then its own glyphs
+      for (const k of g.kids) this._composite(layer(k), null, rt.a);
+      this._chainParts = g.kids.length ? all(g) : g.parts;   // meshfill control points
+      return this._applyChain(rt, g.fx);
+    };
+    for (const [gid, g] of groups) if (!g.parent) this._composite(layer(gid), g.fx);
     this._pruneGroups(groups);
     drawOverlay();   // clock sweep / trace on top of all the art
   }
@@ -1987,7 +2005,7 @@ export class GLRenderer {
     this.renderer.setRenderTarget(null);
   }
   // composite a (premultiplied) group texture onto the screen, premultiplied-over
-  _composite(tex /*, fx */) {
+  _composite(tex, _fx, target = null) {   // target: the screen, or a parent group's layer
     const mat = this.fx.copy;
     mat.uniforms.tMap.value = tex;
     mat.blending = THREE.CustomBlending; mat.blendEquation = THREE.AddEquation;
@@ -1995,7 +2013,7 @@ export class GLRenderer {
     mat.blendSrcAlpha = THREE.OneFactor; mat.blendDstAlpha = THREE.OneMinusSrcAlphaFactor;
     mat.transparent = true;
     this.fsMesh.material = mat;
-    this.renderer.setRenderTarget(null);
+    this.renderer.setRenderTarget(target);
     this.renderer.render(this.fsScene, this.camera);
   }
   _pruneGroups(activeGroups) {
