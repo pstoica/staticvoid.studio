@@ -830,10 +830,55 @@
         }
       }
 
+      // marble reveal: the field, rasterized one texel per cell and upscaled
+      // with smoothing, masks an undarkened copy of the background marble —
+      // rings light up the veins underneath, and the dots sit on top
+      var REVEAL = 0.55;     // 0 = dots only, 1 = full-strength marble under rings
+      var marble = null, lowCv = document.createElement('canvas'), lowCtx = lowCv.getContext('2d'), lowImg = null;
+      (function () {
+        var img = new Image();
+        img.onload = function () { marble = img; };
+        img.src = '/tile1.jpg';
+      })();
+      // match the CSS background: tiled at native size, centered on the viewport
+      // (iOS fallback uses a single cover-fit copy instead)
+      var COVER = CSS.supports('-webkit-touch-callout', 'none');
+      function drawMarble(W, H) {
+        var iw = marble.naturalWidth, ih = marble.naturalHeight;
+        if (COVER) {
+          var k = Math.max(W / iw, H / ih);
+          ctx.drawImage(marble, (W - iw * k) / 2, (H - ih * k) / 2, iw * k, ih * k);
+          return;
+        }
+        var ox = ((W - iw) / 2) % iw, oy = ((H - ih) / 2) % ih;
+        if (ox > 0) ox -= iw;
+        if (oy > 0) oy -= ih;
+        for (var y = oy; y < H; y += ih) for (var x = ox; x < W; x += iw) ctx.drawImage(marble, x, y);
+      }
+
       function render(now) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, cv.width, cv.height);
         var drift = now * 0.00003, lit = 0;
+        if (marble && REVEAL > 0) {
+          if (!lowImg || lowImg.width !== cols || lowImg.height !== rows) {
+            lowCv.width = cols; lowCv.height = rows;
+            lowImg = lowCtx.createImageData(cols, rows);
+          }
+          var px = lowImg.data;
+          for (var j = 0; j < cols * rows; j++) {
+            var m = (glow[j] - THRESH) / 0.45;                           // quiet cells stay fully masked
+            px[j * 4 + 3] = m <= 0 ? 0 : (Math.min(1, m) * REVEAL * 255) | 0;   // rgb unused; alpha = mask
+          }
+          lowCtx.putImageData(lowImg, 0, 0);
+          var W = cv.clientWidth, H = cv.clientHeight;
+          ctx.imageSmoothingEnabled = true;
+          // cells are centered at x*GRID+HALF, so the texel grid lines up 1:1
+          ctx.drawImage(lowCv, 0, 0, cols * GRID, rows * GRID);
+          ctx.globalCompositeOperation = 'source-in';
+          drawMarble(W, H);
+          ctx.globalCompositeOperation = 'source-over';
+        }
         for (var y = 0; y < rows; y++) for (var x = 0; x < cols; x++) {
           var i = y * cols + x, a = glow[i];
           if (a <= THRESH) continue;
