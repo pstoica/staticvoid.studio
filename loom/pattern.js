@@ -354,6 +354,32 @@ class Pattern {
     const c = typeof cond === 'string' ? mini(cond) : cond;
     return this.fmap((v) => Object.assign({}, v, { hold: c }));
   }
+  // sustain(): hold while THIS glyph's own key is down. A glyph from onNote() remembers the
+  // press that spawned it, so in a chord each note lets go on its own (.hold(gate()) waits for
+  // every key). Outside onNote() there's no key to remember, so it falls back to gate().
+  sustain() { return this.fmap((v) => Object.assign({}, v, { hold: { __sustain: 1 } })); }
+  // onRelease(pat): when this glyph lets go (its hold drops, or right after the attack if it
+  // has none), spawn one cycle of `pat` where the glyph is at that moment. The child takes the
+  // glyph's colour unless it sets its own, and note()/vel() still read the glyph's key.
+  //   onNote(0, "star").sustain().onRelease(shape("ring").size(0.08).decay(0.5))
+  onRelease(pat) { const p = reify(pat); return this.fmap((v) => Object.assign({}, v, { _onRel: p })); }
+  // slew(rise, fall): smooth a LIVE signal in real time — it eases up toward the input over
+  // ~`rise` seconds and back down over ~`fall`. An envelope for effects: gate().slew(0.05, 2)
+  // swells on a press and tails off for 2 s after release instead of snapping. Stateful, so
+  // it's meant for FX / physics params (sampled once at a glyph's onset it's just a value).
+  slew(rise = 0.1, fall = rise) {
+    const src = this; let y = null, last = 0;
+    return signal((t) => {
+      let x = 0;
+      for (const h of src.query(span(t, t))) if (h.value != null) { x = +h.value || 0; break; }
+      const now = _now();
+      if (y == null) { y = x; last = now; return y; }
+      const dt = Math.min(0.25, now - last); last = now;
+      const tau = Math.max(1e-3, (x > y ? rise : fall) / 3);   // ~95% of the way in rise/fall seconds
+      y += (x - y) * (1 - Math.exp(-dt / tau));
+      return y;
+    });
+  }
   // id(key): make this glyph an addressable OBJECT (see OBJECTS.md). The first onset
   // carrying a key spawns its glyph; every later onset with the SAME key RE-TARGETS that
   // glyph in place instead of spawning another — sprung fields glide (their motion state
@@ -505,11 +531,14 @@ const mouseDown = signal(() => _pointer.down);
 // the juggling balls, each on its own channel with its own CCs) map cleanly to channels. Being
 // signals, they obey the frozen/live rule: frozen at a glyph's onset (spawn a glyph per note),
 // live as an FX/physics param.
-const _mkMidiState = () => ({ cc: {}, notes: {}, bend: {}, pending: [], frame: [] });
+const _mkMidiState = () => ({ cc: {}, notes: {}, press: {}, bend: {}, hit: {}, pending: [], frame: [], pendingOff: [], frameOff: [] });
 const _midi = _mkMidiState();   // OMNI: merged across every input device
 _midi.dev = {};                 // per-device states, keyed by the input port's name (for dev())
+const _now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+let _midiSeq = 0;               // one id per MIDI message, shared by the omni + device copies of it
 function _midiInput(status, d1, d2, dev) {
   const type = status & 0xf0, ch = (status & 0x0f) + 1;          // 1..16
+  const t = _now(), seq = ++_midiSeq;
   // fan the message into the OMNI state and (when the port is named) that device's own state
   const states = dev ? [_midi, _midi.dev[dev] || (_midi.dev[dev] = _mkMidiState())] : [_midi];
   for (const st of states) {
@@ -518,10 +547,17 @@ function _midiInput(status, d1, d2, dev) {
       (st.cc[0] || (st.cc[0] = {}))[d1] = d2;
     } else if (type === 0x90 && d2 > 0) {                         // note on
       (st.notes[ch] || (st.notes[ch] = new Map())).set(d1, d2);
-      st.pending.push({ ch, note: d1, vel: d2 });                // queue the note-on for onNote()
+      // this press's identity + start time — .sustain() holds on THIS press, onRelease() reads heldFor
+      (st.press[ch] || (st.press[ch] = new Map())).set(d1, { seq, t, vel: d2 });
+      st.hit[ch] = st.hit[0] = { t, vel: d2 };                    // noteHit()
+      st.pending.push({ ch, note: d1, vel: d2, seq, on: true });  // queue the note-on for onNote()
       if (st.pending.length > 256) st.pending.shift();           // cap (e.g. clock paused)
     } else if (type === 0x80 || (type === 0x90 && d2 === 0)) {    // note off (or note-on vel 0)
       if (st.notes[ch]) st.notes[ch].delete(d1);
+      const pr = st.press[ch] && st.press[ch].get(d1);
+      if (pr) st.press[ch].delete(d1);
+      st.pendingOff.push({ ch, note: d1, vel: pr ? pr.vel : 0, held: pr ? t - pr.t : 0, seq, on: false });
+      if (st.pendingOff.length > 256) st.pendingOff.shift();
     } else if (type === 0xE0) {                                   // pitch bend (14-bit → -1..1)
       const v = (((d2 << 7) | d1) - 8192) / 8192;
       st.bend[ch] = v; st.bend[0] = v;
@@ -536,15 +572,78 @@ const _lastHeld = (st, ch) => { const m = _held(st, ch); let e = null; if (m) fo
 // sentinel when nothing matches yet → the signals just read 0.
 const _EMPTY_MIDI = _mkMidiState();
 const _devState = (name) => { const n = String(name).toLowerCase(); for (const k in _midi.dev) if (k.toLowerCase().includes(n)) return _midi.dev[k]; return _EMPTY_MIDI; };
+
+// ── per-note context ──
+// A chord arrives as several note-ons in ONE frame. The tick loop queries the patch once per
+// MIDI event that frame (_midiFocus(seq)), and onNote()/onRelease() emit only the focused event,
+// so while it's focused note()/vel()/pc()/heldFor() read THAT event instead of "the last key
+// held" — each chord note lands at its own pitch, and .sustain() knows which key it belongs to.
+let _focus = 0, _focusObj = null;
+// focus a frame event by its seq, or pin a remembered event (an .onRelease child reads its
+// parent's key long after that event's frame has gone)
+function _midiFocus(f) {
+  if (f && typeof f === 'object') { _focusObj = f; _focus = f.seq; }
+  else { _focusObj = null; _focus = f || 0; }
+}
+function _midiSeqs() {   // this frame's MIDI event ids (note-ons and note-offs), in arrival order
+  return _midi.frame.concat(_midi.frameOff).map((e) => e.seq).sort((a, b) => a - b);
+}
+const _focusEv = (st, ch) => {
+  if (!_focus) return null;
+  if (_focusObj) return !ch || _focusObj.ch === ch ? _focusObj : null;
+  for (const e of st.frame) if (e.seq === _focus) return !ch || e.ch === ch ? e : null;
+  for (const e of st.frameOff) if (e.seq === _focus) return !ch || e.ch === ch ? e : null;
+  return null;
+};
+function _midiFocusEv() { return _focusEv(_midi, 0); }
+// the focused press is still down (same press, not a later re-strike of the same key)
+function _pressHeld(e) {
+  const pr = e && _midi.press[e.ch] && _midi.press[e.ch].get(e.note);
+  return pr && pr.seq === e.seq ? 1 : 0;
+}
+
+// note names → MIDI numbers, middle C = C4 = 60 ("C4", "F#3", "Bb2"; numbers pass through)
+const _NOTE_PC = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 };
+function _noteNum(n) {
+  if (typeof n === 'number') return n;
+  const m = /^([a-gA-G])([#b]?)(-?\d+)$/.exec(String(n).trim());
+  if (!m) return +n || 0;
+  return _NOTE_PC[m[1].toLowerCase()] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0) + (+m[3] + 1) * 12;
+}
+
 // signal/source builders bound to a state-resolver `get` (() => state). The bare signals resolve
 // to the OMNI state; dev(name) rebinds them to a single device's state.
 const _ccSig = (get, num, ch) => signal(() => { const st = get(); return ((st.cc[ch] && st.cc[ch][num]) || 0) / 127; });
 const _gateSig = (get, ch) => signal(() => (_held(get(), ch) ? 1 : 0));
-const _velSig = (get, ch) => signal(() => { const e = _lastHeld(get(), ch); return e ? e[1] / 127 : 0; });
-const _noteSig = (get, ch) => signal(() => { const e = _lastHeld(get(), ch); return e ? e[0] / 127 : 0; });
-const _pcSig = (get, ch) => signal(() => { const e = _lastHeld(get(), ch); return e ? (e[0] % 12) / 12 : 0; });
+const _velSig = (get, ch) => signal(() => { const st = get(), f = _focusEv(st, ch); if (f) return f.vel / 127; const e = _lastHeld(st, ch); return e ? e[1] / 127 : 0; });
+const _noteSig = (get, ch) => signal(() => { const st = get(), f = _focusEv(st, ch); if (f) return f.note / 127; const e = _lastHeld(st, ch); return e ? e[0] / 127 : 0; });
+const _pcSig = (get, ch) => signal(() => { const st = get(), f = _focusEv(st, ch); if (f) return (f.note % 12) / 12; const e = _lastHeld(st, ch); return e ? (e[0] % 12) / 12 : 0; });
 const _bendSig = (get, ch) => signal(() => get().bend[ch] || 0);
-const _onNoteSrc = (get, ch, shape) => new Pattern((s) => get().frame.filter((e) => !ch || e.ch === ch).map(() => hap({ begin: s.begin, end: s.end }, s, { shape: String(shape) })));
+// key(n, ch?): 1 while that one key is down — n is a MIDI number or a name ("C4" = 60)
+const _keySig = (get, n, ch) => { const k = _noteNum(n); return signal(() => {
+  const st = get();
+  if (ch) return st.notes[ch] && st.notes[ch].has(k) ? 1 : 0;
+  for (const c in st.notes) if (st.notes[c].has(k)) return 1;
+  return 0;
+}); };
+// noteHit(ch?, decay?): a 0..1 flash on every note-on (height = velocity), falling off over ~decay s
+const _hitSig = (get, ch, decay) => signal(() => {
+  const h = get().hit[ch]; if (!h) return 0;
+  return (h.vel / 127) * Math.exp(-(_now() - h.t) * 3 / Math.max(1e-3, decay));
+});
+// heldFor(ch?): seconds the key was down. In onRelease() it's the press that just ended; as a
+// live signal, how long the current (most recent) key has been held, 0 when none is.
+const _heldForSig = (get, ch) => signal(() => {
+  const st = get(), f = _focusEv(st, ch);
+  if (f) return f.on ? 0 : f.held;
+  let best = null;
+  for (const c in st.press) if (!ch || +c === ch) for (const pr of st.press[c].values()) if (!best || pr.t > best.t) best = pr;
+  return best ? _now() - best.t : 0;
+});
+const _evSrc = (list) => (get, ch, shape) => new Pattern((s) => get()[list]
+  .filter((e) => (!ch || e.ch === ch) && (!_focus || e.seq === _focus))
+  .map(() => hap({ begin: s.begin, end: s.end }, s, { shape: String(shape), _mev: 1 })));
+const _onNoteSrc = _evSrc('frame'), _onReleaseSrc = _evSrc('frameOff');
 const _OMNI = () => _midi;
 function cc(num, ch = 0) { return _ccSig(_OMNI, num, ch); }
 function gate(ch = 0) { return _gateSig(_OMNI, ch); }
@@ -554,11 +653,17 @@ function note(ch = 0) { return _noteSig(_OMNI, ch); }
 // same value across octaves. Pair with palette().at(pc(ch)) for octave-independent colour.
 function pc(ch = 0) { return _pcSig(_OMNI, ch); }
 function bend(ch = 0) { return _bendSig(_OMNI, ch); }
+function key(n, ch = 0) { return _keySig(_OMNI, n, ch); }
+function noteHit(ch = 0, decay = 0.4) { return _hitSig(_OMNI, ch, decay); }
+function heldFor(ch = 0) { return _heldForSig(_OMNI, ch); }
 // onNote(ch, shape): an EVENT source — emits exactly ONE glyph per MIDI note-on (not a sampled
 // stream like gate). The tick loop calls _midiFrame() once per frame to snapshot that frame's
 // note-ons into the frame buffer, so the source is pure within the frame (re-queries / multiple
 // layers see the same events). Capture pitch/velocity by chaining .y(note(ch)).size(vel(ch)).
 function onNote(ch = 0, shape = 'dot') { return _onNoteSrc(_OMNI, ch, shape); }
+// onRelease(ch, shape): the same, one glyph per note-OFF. note()/vel() read the released key
+// (vel = how hard it was struck), heldFor() how long it was down.
+function onRelease(ch = 0, shape = 'dot') { return _onReleaseSrc(_OMNI, ch, shape); }
 // dev(name): OPT-IN scoping of the MIDI signals to one input device — `name` is a case-insensitive
 // substring of the port name. The bare signals stay OMNI (all devices), so this never changes
 // existing patches; it just lets two controllers on the SAME channel stay separable:
@@ -572,12 +677,17 @@ function dev(name) {
     note: (ch = 0) => _noteSig(get, ch),
     pc: (ch = 0) => _pcSig(get, ch),
     bend: (ch = 0) => _bendSig(get, ch),
+    key: (n, ch = 0) => _keySig(get, n, ch),
+    noteHit: (ch = 0, decay = 0.4) => _hitSig(get, ch, decay),
+    heldFor: (ch = 0) => _heldForSig(get, ch),
     onNote: (ch = 0, shape = 'dot') => _onNoteSrc(get, ch, shape),
+    onRelease: (ch = 0, shape = 'dot') => _onReleaseSrc(get, ch, shape),
   };
 }
 function _midiFrame() {
-  _midi.frame = _midi.pending; _midi.pending = [];
-  for (const k in _midi.dev) { const st = _midi.dev[k]; st.frame = st.pending; st.pending = []; }
+  const snap = (st) => { st.frame = st.pending; st.pending = []; st.frameOff = st.pendingOff; st.pendingOff = []; };
+  snap(_midi);
+  for (const k in _midi.dev) snap(_midi.dev[k]);
 }
 
 // ── juggling feed (WebSocket ball tracking), as signals ───────────────────────────
@@ -994,6 +1104,15 @@ const isOsc = (a) => a != null && typeof a === 'object' && a.__osc !== undefined
 function env(attack = 0.1, decay = 1, easeIn, easeOut) {
   return makeOsc({ env: { a: attack, d: decay, ei: easeIn, eo: easeOut }, lo: 0, hi: 1 });
 }
+// adsr(a, d, s, r): attack → decay → SUSTAIN level while the glyph is held → release, as a
+// signal for any param. It follows the glyph's own hold (.sustain() / .hold()), so a held note
+// sits at `s` and the release starts when the key lifts — not on a fixed timer like env().
+function adsr(a = 0.02, d = 0.2, s = 0.6, r = 0.5) {
+  return makeOsc({ adsr: { a, d, s, r }, lo: 0, hi: 1 });
+}
+// released(s): 0 while the glyph is held, then ramps 0→1 over `s` seconds once it lets go —
+// colour shifts, growth or drift that only happens after release.
+function released(s = 1) { return makeOsc({ rel: s, lo: 0, hi: 1 }); }
 
 // ── spring: a STATEFUL value modifier ────────────────────────────────────────────
 // Unlike a signal/osc (pure functions of time, frozen or live) a spring has state —
@@ -1564,7 +1683,8 @@ export const DSL = {
   $: layer, _resetLayers, _getLayers, _resetPhysics, _physReg, _resetIds, _getIdKeys,
   sine, cosine, saw, isaw, tri, square, rand, perlin, fbm, brown, gauss, white, stripes, checker,
   mouseX, mouseY, mouseDown, _setPointer,
-  cc, gate, vel, note, pc, bend, onNote, dev, _midiInput, _midiFrame,
+  cc, gate, vel, note, pc, bend, key, noteHit, heldFor, onNote, onRelease, dev, _midiInput, _midiFrame,
+  _midiFocus, _midiSeqs, _midiFocusEv, _pressHeld,
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, apexed, apexHeight, landX, landY, landing, flight, gyro, accel, speed, _jug, _jugInput, _jugDecay,
   fingerX, fingerY, fingerZ, fingerUp, fingersUp, pinch, palmX, palmY, handSeen, handNear, poseX, poseY, poseSeen,
   cam, _setCamSink, _handInput, _poseInput, _faceInput, _micInput, _resetTracking, _getTracking,
@@ -1573,6 +1693,6 @@ export const DSL = {
   mouthOpen, smile, browRaise, mouthX, mouthY, faceX, faceY, faceSeen,
   mic, micLow, micMid, micHigh, micBand, micHit,
   level, band, low, mid, high, hit, _audio, _audioInput, _audioDecay,
-  hasOnset, span, isOsc, isSpring, ease, EASE,
+  hasOnset, span, isOsc, isSpring, ease, EASE, adsr, released,
   _groupFx, _resetGroups, _echoGroups, PALETTES,
 };

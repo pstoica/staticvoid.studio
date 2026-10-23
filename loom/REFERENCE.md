@@ -387,6 +387,7 @@ stack(
 | `bounce` | restitution `0..1` (wall + body bounciness) |
 | `drag` | linear/angular damping (air resistance); higher = floatier |
 | `vel` | initial speed of each body (random direction; `1` ≈ a full-screen/sec burst) |
+| `velSpread` | `0..1` — randomize each body's starting speed: `1` = anywhere from `0` up to `vel`, `0.5` = between half and full |
 | `spin` | initial random angular velocity (tumble) |
 
 **Force-fields** push the bodies each frame (on top of gravity), for emergent / organic
@@ -449,6 +450,8 @@ filled, outlined, or both. All four are patterns, so `.fill("1 0")`,
 | `.attack(s, curve)` | shape the fade-**in** with an easing curve, e.g. `.attack(0.3, "outBack")` |
 | `.decay(s, curve)` | shape the fade-**out**, e.g. `.decay(2, "inOutSine")` (curve names: see *Easing* above) |
 | `.hold(cond)` | **sustain**: while `cond` is truthy (`>0.5`) the envelope parks at the top of its attack (full presence); the decay runs from release. `cond` is **live** (re-sampled every frame): `.hold(gate(1))` sustains while a key is down, `.hold(mouseDown)` while pressed, `.hold(1)` until clear. Re-holding mid-decay snaps back to full |
+| `.sustain()` | hold while **this glyph's own key** is down. A glyph from `onNote()` remembers the press that spawned it, so in a chord each note lets go on its own (`.hold(gate())` waits for every key). Re-striking the same key starts a new glyph rather than reviving the old one. Outside `onNote()` it falls back to `gate()` |
+| `.onRelease(pat)` | when the glyph lets go (its hold drops, or right after the attack if it has none), spawn one cycle of `pat` **where the glyph is at that moment**. The child takes the glyph's colour and group unless it sets its own, and `note()`/`vel()` read the glyph's key: `.onRelease(shape("ring").size(0.08).decay(0.4))` |
 
 The optional second arg shapes that envelope segment with an easing curve instead of a
 straight line. The envelope drives per-glyph **alpha** (`0..1`), so overshooting curves
@@ -465,6 +468,19 @@ signal would freeze at onset) and composes with `.range()`, `.add()`, `.spring()
 ```js
 shape("bong").size(env(0.2, 1, "outBack").range(0.05, 0.25))   // size pops in, then settles
 shape("ring").weight(env(0.3, 0.8).range(0.002, 0.02))         // a line that swells then thins
+```
+
+**`adsr(a, d, s, r)`** is the full envelope as a signal: up to `1` over `a` s, down to the
+sustain level `s` over `d` s, **sits at `s` while the glyph is held** (`.sustain()` / `.hold()`),
+then falls to `0` over `r` s from the moment it lets go. Unlike `env()` it follows the hold, not a
+fixed timer. **`released(s)`** is `0` while the glyph is held, then ramps `0→1` over `s` seconds
+after release, for things that only happen once a key lifts.
+
+```js
+onNote(0, "star").sustain()
+  .size(adsr(0.02, 0.2, 0.6, 0.8).range(0.01, 0.06))   // punch, settle, shrink after release
+  .color(palette("ice").at(released(0.8)))              // colour walks once it lets go
+  .decay(0.8)
 ```
 
 For **opacity**, prefer `.decay(s, curve)` above — it shapes the lifetime fade directly. Alpha
@@ -630,6 +646,9 @@ Live MIDI input as signals (Web MIDI — Chrome/Edge; Loom hooks every input it 
 | `note(ch?)` | pitch of the last note pressed | `0..1` (the note number ÷127) |
 | `pc(ch?)` | **pitch class** — the note within its octave (`note % 12`) | `0..1`, same value per note-name across octaves |
 | `bend(ch?)` | pitch-bend wheel | `-1..1` (centred at `0`) |
+| `key(n, ch?)` | `1` while that one key is down. `n` is a MIDI number or a name, middle C = `"C4"` = `60` (`"F#3"`, `"Bb2"`) | `0` / `1` |
+| `noteHit(ch?, decay?)` | a flash on every note-on, height = velocity, falling off over ~`decay` s (default `0.4`) | `0..1` |
+| `heldFor(ch?)` | seconds the key has been held (most recent key). Inside `onRelease()`: how long the released key was down | seconds |
 
 `pc` gives octave-independent colour: `palette("rainbow").at(pc(1))` paints every C the same hue, every G another. **Live colour from a note:** an `osc`'s `.range()` bounds may be signals, captured (frozen) at the glyph's onset while the waveform stays live — so `palette("rainbow").at(osc(0.5).range(pc(1), pc(1).add(0.08)))` shimmers live *around* the note's pitch hue. (Putting a signal *directly* in `.color()` freezes it; the osc is what keeps it moving.)
 
@@ -657,8 +676,25 @@ where `cc`/`gate`/`note`/`vel` are *signals* sampled at clock slots (a held note
 `gate` spawns a whole stream, not one stamp). Style each stamp by chaining the signals, which are
 captured at the glyph's onset (= the moment the note arrived): `onNote(1, "circle").y(note(1)
 .range(0.9, 0.1)).size(vel(1).range(0.02, 0.12)).color(palette("rainbow").at(note(1)))`. `ch` is
-1–16 (0 = any); a chord spawns one glyph per note. This is the accurate way to draw "one mark per
-note" from a live sequence.
+1–16 (0 = any); a chord spawns one glyph per note, and **inside `onNote()` the signals read that
+glyph's own note**, so each chord note lands at its own pitch and velocity. This is the accurate way
+to draw "one mark per note" from a live sequence.
+
+**`onRelease(ch, shape)`** is the same for note-**offs**: one glyph per released key, where `note()`
+/ `vel()` read that key (`vel` = how hard it was struck) and `heldFor()` how long it was down —
+`onRelease(0, "ring").x(note()).size(heldFor().range(0.02, 0.3)).decay(0.6)`.
+
+**Keys and effects.** FX and physics params read signals live, so the keyboard drives effects
+directly. `key()` makes it a switchboard, `noteHit()` flashes on every hit, and **`.slew(rise,
+fall)`** smooths any live signal in real time (seconds to rise / fall), so an effect swells in
+and tails off instead of snapping:
+
+```js
+group(...)
+  .glow(gate().slew(0.05, 2).range(0.1, 0.8))          // bloom on press, 2 s tail after release
+  .feedback(key("C2").slew(0.3, 3).range(0, 0.95))     // hold low C for trails
+  .rgbshift(noteHit().range(0, 0.02))                   // a kick of colour split per note
+```
 
 ### Juggling feed (`ballX` / `ballY` / `thrown` / `caught` / `tapped` / …)
 

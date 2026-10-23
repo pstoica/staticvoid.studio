@@ -17,7 +17,7 @@ import { autocompletion } from '@codemirror/autocomplete';
 const FN = new Set(['shape', 's', 'n', 'polygon', 'polyline', 'stack', 'cat', 'slowcat', 'fastcat', 'seq', 'sequence', 'timecat',
   'pure', 'silence', 'run', 'range', 'mini', 'euclid', 'fast', 'slow', 'rev', 'choose', 'irand', 'pick', 'iff', 'osc', 'env',
   'stripes', 'checker',
-  'palette', 'bg', 'persp', 'cam', 'group', 'echo', 'spring', 'physics', 'slider', 'cc', 'gate', 'vel', 'note', 'pc', 'bend', 'onNote', 'dev',
+  'palette', 'bg', 'persp', 'cam', 'group', 'echo', 'spring', 'physics', 'slider', 'cc', 'gate', 'vel', 'note', 'pc', 'bend', 'key', 'noteHit', 'heldFor', 'onNote', 'onRelease', 'dev', 'adsr', 'released',
   'ballX', 'ballY', 'ballSeen', 'moving', 'thrown', 'caught', 'tapped', 'held', 'shaken', 'flight', 'gyro', 'accel', 'speed', 'apexed', 'apexHeight', 'landX', 'landY', 'landing',
   'fingerX', 'fingerY', 'fingerZ', 'fingerUp', 'fingersUp', 'pinch', 'palmX', 'palmY', 'handSeen', 'handNear', 'poseX', 'poseY', 'poseSeen',
   'mouthOpen', 'smile', 'browRaise', 'mouthX', 'mouthY', 'faceX', 'faceY', 'faceSeen',
@@ -32,7 +32,7 @@ const METHOD = new Set(['fast', 'slow', 'rev', 'every', 'iter', 'palindrome', 'j
   'rotateX', 'rotateY', 'spin', 'blend', 'alpha', 'opacity', 'pan', 'jitter', 'fill', 'stroke', 'weight',
   'outline', 'shade', 'pixelate', 'blur', 'glow', 'meshfill', 'radiance', 'feedback', 'trails', 'silhouette', 'hue', 'brightness', 'contrast', 'saturate',
   'negative', 'invert', 'displace', 'kaleido', 'mirror', 'cap', 'join', 'open', 'vertex', 'attack', 'decay',
-  'life', 'hold', 'id', 'n', 'stencil', 'set', 'spread', 'phase', 'rate', 'quantize', 'ease', 'segment', 'seg', 'sample', 'spring',
+  'life', 'hold', 'sustain', 'onRelease', 'slew', 'id', 'n', 'stencil', 'set', 'spread', 'phase', 'rate', 'quantize', 'ease', 'segment', 'seg', 'sample', 'spring',
   'gt', 'gte', 'lt', 'lte', 'between', 'drift', 'free', 'sync', 'falloff',
   'tile', 'dots', 'halftone', 'rgbshift', 'rgb', 'posterize', 'dither', 'scanlines', 'slice', 'lens',
   'scale', 'move', 'turn', 'aspect', 'hidden']);
@@ -51,7 +51,7 @@ const C_FN = [
   ['polyline', 'open polygon'], ['choose', 'random pick per onset'], ['irand', 'random int 0..k-1'],
   ['pick', 'index a list by a 0..1 signal'], ['iff', 'branch on a condition'],
   ['osc', 'live oscillator over a glyph\'s life — osc(rate, shape)'],
-  ['env', 'attack/decay envelope as a signal'], ['spring', 'stateful chase toward a target'],
+  ['env', 'attack/decay envelope as a signal'], ['adsr', 'attack/decay/sustain/release as a signal, follows the glyph\'s hold'], ['released', '0 while held, then 0→1 after release'], ['spring', 'stateful chase toward a target'],
   ['palette', 'colour ramp — palette("neon").at(saw)'], ['bg', 'background colour (patternable)'],
   ['persp', '3D-tilt camera; persp(0) = orthographic'], ['cam', 'webcam behind the glyphs'],
   ['group', 'render a layer to its own buffer for FX'], ['echo', 'accumulate layers on re-run'],
@@ -78,6 +78,8 @@ const C_SIG = [
   ['cc', 'MIDI CC — cc(num, ch)'], ['gate', '1 while a note is held'], ['vel', 'note velocity'],
   ['note', 'note pitch 0..1'], ['pc', 'pitch class (octave-independent)'], ['bend', 'pitch bend'],
   ['onNote', 'one glyph per note-on — onNote(ch, shape)'], ['dev', 'scope MIDI to one device'],
+  ['onRelease', 'one glyph per note-off — onRelease(ch, shape)'], ['heldFor', 'seconds the key was held'],
+  ['key', '1 while one key is down — key("C4") or key(60)'], ['noteHit', 'a flash on every note-on, height = velocity'],
   ['mic', 'microphone loudness'], ['micLow', 'mic bass'], ['micMid', 'mic body'], ['micHigh', 'mic air'],
   ['micBand', 'one of 24 FFT bands'], ['micHit', 'mic transient pulse'],
   ['spoken', 'a glyph per SPOKEN WORD, drawn as that word'], ['said', 'pulse when you say that word'],
@@ -109,6 +111,9 @@ const C_METHOD = [
   ['open', 'arc/line gap'], ['vertex', 'dot at each vertex'], ['cap', 'line ends'], ['join', 'corners'],
   ['attack', 'fade-in seconds'], ['decay', 'fade-out / lifetime'], ['life', 'alias for decay'],
   ['hold', 'SUSTAIN while a condition is true — .hold(gate(1))'],
+  ['sustain', 'hold while THIS note\'s key is down (per note in a chord)'],
+  ['onRelease', 'spawn a pattern where the glyph is when it lets go'],
+  ['slew', 'smooth a live signal — .slew(rise, fall) in seconds'],
   ['id', 'ONE addressable object; later onsets re-target it in place (sprung fields glide)'],
   ['n', 'pick a drawn pack frame (patternable)'], ['stencil', '1 = recolour by luminance'],
   ['burst', 'n simultaneous copies, phases fanned'],
@@ -445,7 +450,7 @@ const sliderPlugin = ViewPlugin.fromClass(class {
 // the call-style ones (cc(7,1), vel(1), ballX("a")…) via window.loom.sig(name, …args).
 const liveBadges = new Set();
 let liveRAF = 0;
-const BOOL_SIGS = new Set(['mouseDown', 'gate', 'ballSeen', 'moving', 'fingerUp', 'handSeen', 'poseSeen']);   // shown as ●/○, not a number
+const BOOL_SIGS = new Set(['mouseDown', 'gate', 'key', 'ballSeen', 'moving', 'fingerUp', 'handSeen', 'poseSeen']);   // shown as ●/○, not a number
 function badgeValue(el) {
   const name = el.dataset.sig;
   const L = typeof window !== 'undefined' && window.loom;

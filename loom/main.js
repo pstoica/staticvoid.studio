@@ -329,8 +329,28 @@ function spawnPoly(v, onset) {
   }
 }
 
+// .onRelease(pat): one cycle of `pat`, spawned now at where glyph `p` is. Its own x/y/colour win
+// if set; otherwise it lands on the glyph and takes its colour. note()/vel() read the glyph's key.
+function spawnRelease(p) {
+  const nx = W ? p.x / W : 0.5, ny = H ? p.y / H : 0.5, c0 = Math.floor(cycle);
+  if (p.press) DSL._midiFocus(p.press);
+  try {
+    for (const h of p.onRel.query(DSL.span(c0, c0 + 1))) {
+      if (!DSL.hasOnset(h)) continue;
+      const v = { ...h.value };
+      if (v.x == null && v.radius == null && v.gridX == null) v.x = nx;
+      if (v.y == null && v.radius == null && v.gridY == null) v.y = ny;
+      if (v.color == null && typeof p.color === 'string') v.color = p.color;
+      if (v._gid == null) { v._gid = p.gid; v._fx = p.fx; v._parents = p.parents; v._layer = p.layer; }
+      spawn(v, cycle);
+    }
+  } catch (e) { /* a bad release pattern shouldn't kill the loop */ }
+  DSL._midiFocus(0);
+}
+
 function spawn(value, onset) {
   const v = value || {};
+  _curGlyph = null;   // a newborn glyph is held/unreleased as far as adsr()/released() go
   if (v._poly) { spawnPoly(v, onset); return; }
   const minDim = Math.min(W, H);
   // onset phase drives the default ring angle / grid cell / palette hue / osc spread.
@@ -355,7 +375,12 @@ function spawn(value, onset) {
     springs.push({ field: f, target: sd.target, k: sd.k, d: sd.d, x: x0, v: 0 });
     sprInit[f] = x0;
   }
-  const baseNum = (f, def) => (sprInit[f] != null ? sprInit[f] : numAt(v[f] != null ? v[f] : def, 0, phase));
+  // an osc's signal params (osc().range(vel(), …)) are frozen first, else numAt NaNs on the raw
+  // Pattern — invisible on a normal glyph (the live mod redraws it), but a physics body built
+  // from a NaN size never shows up at all
+  const baseNum = (f, def) => (sprInit[f] != null ? sprInit[f]
+    : isOsc(v[f]) ? numAt({ __osc: freezeOscParams(v[f].__osc, onset) }, 0, phase)
+    : numAt(v[f] != null ? v[f] : def, 0, phase));
 
   // position inputs may be numbers or live oscillators, recomputed each frame
   // only when one is an osc/spring; otherwise the spawn position stands. A physics body
@@ -411,6 +436,9 @@ function spawn(value, onset) {
     ageCycles: 0,              // age in CYCLES, accumulated per frame → tempo-synced oscs survive a live cps change
     envAge: 0,                 // the ENVELOPE's clock: tracks age, but parks at `attack` while held (sustain)
     hold: v.hold != null ? v.hold : null,   // live sustain condition (signal/osc/pattern/number), sampled per frame
+    press: null,               // .sustain(): the MIDI press this glyph belongs to (held while it's down)
+    relAt: null,               // age (s) when the glyph let go — adsr()/released() read it; null while held
+    onRel: v._onRel || null,   // .onRelease(pat): spawned where the glyph is when it lets go
     attack: v.attack != null ? v.attack : 0.06,
     // fade-out seconds; default ~1 cycle. The master slider is baked in HERE so
     // each glyph keeps the decay it was born with.
@@ -452,6 +480,12 @@ function spawn(value, onset) {
       p.sprite = spriteIdFor(p.shape);
     }
     if (p.sprite && v.color == null) p.color = '#ffffff';
+  }
+  // .sustain(): hold on the press that spawned this glyph (from onNote); no press → any key
+  if (p.hold && p.hold.__sustain) {
+    const ev = DSL._midiFocusEv();
+    if (ev && ev.on) { p.press = ev; p.hold = 1; }
+    else p.hold = DSL.gate();
   }
   // torus family: the raymarched tube radius rides the outline control (a fraction of the
   // size, so it scales), and .weight() sets it absolutely — both already live-patternable.
@@ -600,6 +634,7 @@ const _curl2 = (x, y) => {                       // ∇×φ in 2D = (∂φ/∂y,
 // the glyph currently being resolved, normalized 0..1 — set by glResolve/drawGlyph before
 // they evaluate that glyph's mods, so near()/dist() can measure from where it is RIGHT NOW.
 const _curPos = { x: 0.5, y: 0.5 };
+let _curGlyph = null;   // ...and the glyph itself, for adsr()/released() (its hold/release state)
 function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
   // every parameter may itself be an oscillator → cross-modulation (FM via rate,
   // PM via phase, AM via range lo/hi). gp = the glyph's onset phase. The osc's running
@@ -661,7 +696,24 @@ function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
     }
     return r0;
   }
-  if (d.env) {
+  if (d.adsr || d.rel != null) {
+    // follow the glyph's own hold: relAt is null while it's held (or still in its attack)
+    const g = _curGlyph, relAt = g ? g.relAt : null;
+    const lvl = (t) => {                                  // the held part of the curve at age t
+      if (!d.adsr) return 0;
+      const a = numAt(d.adsr.a, age, gp, st, ageC, stC), de = numAt(d.adsr.d, age, gp, st, ageC, stC), s = numAt(d.adsr.s, age, gp, st, ageC, stC);
+      if (t < a) return a > 0 ? t / a : 1;
+      if (t < a + de) return 1 - (1 - s) * (de > 0 ? (t - a) / de : 1);
+      return s;
+    };
+    if (d.adsr) {
+      const r = numAt(d.adsr.r, age, gp, st, ageC, stC);
+      v = relAt == null ? lvl(age) : lvl(relAt) * Math.max(0, 1 - (r > 0 ? (age - relAt) / r : 1));
+    } else {
+      const s = numAt(d.rel, age, gp, st, ageC, stC);
+      v = relAt == null ? 0 : Math.min(1, s > 0 ? (age - relAt) / s : 1);
+    }
+  } else if (d.env) {
     // attack/decay envelope keyed to the glyph's REAL-time age (seconds): 0→1 over `a`,
     // then 1→0 over `de`, each segment optionally Penner-eased. Animates over the glyph's
     // life like an osc; routes into any param. (alpha is also × the lifetime envelope.)
@@ -731,6 +783,8 @@ function freezeOscParams(o, onset) {
   for (const k of ['rate', 'lo', 'hi', 'phase', 'spread', 'drift']) if (r[k] != null) r[k] = fp(r[k]);
   if (r.ops) r.ops = r.ops.map(([op, x]) => [op, fp(x)]);
   if (r.env) r.env = { ...r.env, a: fp(r.env.a), d: fp(r.env.d) };   // env(attack, decay) bounds may be per-glyph signals
+  if (r.adsr) r.adsr = { a: fp(r.adsr.a), d: fp(r.adsr.d), s: fp(r.adsr.s), r: fp(r.adsr.r) };
+  if (r.rel != null) r.rel = fp(r.rel);
   return r;
 }
 // resolve an oscillator-driven colour: through a palette if attached, else as hue
@@ -861,7 +915,7 @@ const JOIN_ID = { miter: 0, round: 1, bevel: 2 };  // polygon corners (default m
 function glResolve(p, minDim, out) {
   const age = p.age, ageC = p.ageCycles, stC = p.spawnCycle;
   let sizePx = p.size, rotTurns = p.rotTurns, rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline, shade = p.shade, color = null;
-  if (p.mods) { _curPos.x = W ? p.x / W : 0.5; _curPos.y = H ? p.y / H : 0.5; }
+  if (p.mods) { _curPos.x = W ? p.x / W : 0.5; _curPos.y = H ? p.y / H : 0.5; _curGlyph = p; }
   if (p.mods) for (const m of p.mods) {
     const val = evalOsc(m.osc, age, p.phase, p.spawnT, ageC, stC);
     if (m.field === 'size') sizePx = val * minDim;
@@ -1177,7 +1231,7 @@ function drawGlyph(g, p, minDim) {
   const age = p.age, ageC = p.ageCycles, stC = p.spawnCycle;
   let sizePx = p.size, color = p.color, rotTurns = p.rotTurns,
       rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline;
-  if (p.mods) { _curPos.x = W ? p.x / W : 0.5; _curPos.y = H ? p.y / H : 0.5; }
+  if (p.mods) { _curPos.x = W ? p.x / W : 0.5; _curPos.y = H ? p.y / H : 0.5; _curGlyph = p; }
   if (p.mods) for (const m of p.mods) {
     const val = evalOsc(m.osc, age, p.phase, p.spawnT, ageC, stC);
     if (m.field === 'size') sizePx = val * minDim;
@@ -1354,13 +1408,23 @@ function tick(dt) {
     }
     // query the pattern for the slice of time that just elapsed; spawn onsets.
     try {
-      const haps = pattern.query(DSL.span(prev, cycle));
-      for (const h of haps) {
-        if (DSL.hasOnset(h) && h.whole.begin >= prev - 1e-9 && h.whole.begin < cycle) {
-          spawn(h.value, h.whole.begin);
+      // one pass per MIDI event this frame (a chord = several), focused on that event so
+      // onNote/onRelease emit just it and note()/vel() read it; later passes only keep the
+      // MIDI-sourced glyphs, so everything else still spawns once
+      const seqs = DSL._midiSeqs();
+      const passes = seqs.length ? seqs : [0];
+      for (let i = 0; i < passes.length; i++) {
+        DSL._midiFocus(passes[i]);
+        const haps = pattern.query(DSL.span(prev, cycle));
+        for (const h of haps) {
+          if (i > 0 && !(h.value && h.value._mev)) continue;
+          if (DSL.hasOnset(h) && h.whole.begin >= prev - 1e-9 && h.whole.begin < cycle) {
+            spawn(h.value, h.whole.begin);
+          }
         }
       }
     } catch (e) { /* a bad pattern shouldn't kill the loop */ }
+    DSL._midiFocus(0);
   }
 
   const minDim = Math.min(W, H);
@@ -1394,8 +1458,14 @@ function tick(dt) {
     // the envelope's own clock: identical to age for ordinary glyphs, but while a .hold()
     // condition is truthy it PARKS at the top of the attack (sustain at full presence);
     // release resumes the decay. Re-holding mid-decay snaps back to full (v1, OBJECTS.md).
-    if (p.hold != null && p.envAge + dt >= p.attack && evalGlobal(p.hold, cycle, elapsed) > 0.5) p.envAge = p.attack;
+    const heldNow = p.hold != null && p.envAge + dt >= p.attack
+      && (p.press ? DSL._pressHeld(p.press) : evalGlobal(p.hold, cycle, elapsed) > 0.5);
+    if (heldNow) { p.envAge = p.attack; p.relAt = null; }
     else p.envAge += dt;
+    if (!heldNow && p.relAt == null && p.envAge >= p.attack) {   // it just let go
+      p.relAt = p.age;
+      if (p.onRel) spawnRelease(p);
+    }
     if (p.envAge >= p.attack + p.decay) {             // expired → drop (and free its body + id)
       if (p.body && p.pid) { const wd = physWorlds.get(p.pid); if (wd) wd.remove(p.body); p.body = null; }
       if (p.objId && objects.get(p.objId) === p) objects.delete(p.objId);
@@ -1475,7 +1545,9 @@ function tick(dt) {
       if (!p.pid || p.body) continue;
       const wd = physWorlds.get(p.pid); if (!wd) continue;
       const opts = activePhys.get(p.pid) || {};
-      const speed = evalGlobal(opts.vel != null ? opts.vel : 0, cycle, elapsed) * minDim;   // vel 1 ≈ minDim px/s
+      // vel 1 ≈ minDim px/s; velSpread 0..1 knocks each body's speed down by up to that fraction (random per body)
+      const spread = Math.max(0, Math.min(1, evalGlobal(opts.velSpread != null ? opts.velSpread : 0, cycle, elapsed)));
+      const speed = evalGlobal(opts.vel != null ? opts.vel : 0, cycle, elapsed) * minDim * (1 - spread * Math.random());
       const a = Math.random() * TAU;
       const av = evalGlobal(opts.spin != null ? opts.spin : 0, cycle, elapsed) * (Math.random() - 0.5) * 2 * TAU;
       const drag = Math.max(0, evalGlobal(opts.drag != null ? opts.drag : 0.05, cycle, elapsed));
