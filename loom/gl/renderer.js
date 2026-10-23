@@ -650,6 +650,28 @@ void main() {
 // the same contain-fit + selfie-mirror mapping as the tracking signals, so the mask sits
 // exactly on the person in the cam() image. uMode > 0 keeps INSIDE the person, < 0 keeps
 // everything outside. Premultiplied in/out, so a plain multiply masks colour + alpha.
+// mask: multiply a layer by another LAYER's output (see MASKING.md). The group RTs are
+// PREMULTIPLIED (the composite operator is One / OneMinusSrcAlpha), which settles the
+// design doc's open question about the luma formula: s.rgb is already × alpha, so a
+// transparent region is already black and raw luma is alpha-aware. Multiplying by s.a
+// again would square the alpha and eat soft edges, so luma mode uses it raw.
+const MASK_FRAG = `
+precision highp float;
+uniform sampler2D tMap;
+uniform sampler2D tMask;
+uniform float uMode;       // 0 = luma (brightness shows through) · 1 = alpha (coverage)
+uniform float uInvert;     // 1 = the source becomes a hole instead of a window
+uniform float uAmount;     // 0 = unmasked, 1 = fully masked (patternable fade-in)
+varying vec2 vUv;
+void main() {
+  vec4 c = texture2D(tMap, vUv);
+  vec4 s = texture2D(tMask, vUv);
+  float m = uMode > 0.5 ? s.a : dot(s.rgb, vec3(0.2126, 0.7152, 0.0722));
+  m = clamp(m, 0.0, 1.0);
+  if (uInvert > 0.5) m = 1.0 - m;
+  gl_FragColor = c * mix(1.0, m, clamp(uAmount, 0.0, 1.0));
+}`;
+
 const SILHOUETTE_FRAG = `
 precision highp float;
 uniform sampler2D tMap;
@@ -1124,6 +1146,8 @@ export class GLRenderer {
       feedback: fsMat(FEEDBACK_FRAG, { tMap: { value: null }, tHist: { value: null }, uFade: { value: 0.92 }, uZoom: { value: 1 }, uRot: { value: 0 }, uAspect: { value: 1 } }),
       grade: fsMat(GRADE_FRAG, { tMap: { value: null }, uHue: { value: 0 }, uBright: { value: 1 }, uContrast: { value: 1 }, uSat: { value: 1 } }),
       negative: fsMat(NEGATIVE_FRAG, { tMap: { value: null }, uAmount: { value: 1 } }),
+      mask: fsMat(MASK_FRAG, { tMap: { value: null }, tMask: { value: null },
+        uMode: { value: 0 }, uInvert: { value: 0 }, uAmount: { value: 1 } }),
       silhouette: fsMat(SILHOUETTE_FRAG, { tMap: { value: null }, tMask: { value: null }, uMode: { value: 1 }, uFlip: { value: 1 }, uScale: { value: new THREE.Vector2(1, 1) } }),
       displace: fsMat(DISPLACE_FRAG, { tMap: { value: null }, uAmount: { value: 0.02 }, uScale: { value: 3 }, uTime: { value: 0 } }),
       kaleido: fsMat(KALEIDO_FRAG, { tMap: { value: null }, uSlices: { value: 6 } }),
@@ -1154,7 +1178,8 @@ export class GLRenderer {
     this.fsMesh.frustumCulled = false;
     this.fsScene.add(this.fsMesh);
 
-    this.groupRTs = new Map();   // gid → { a, b, w, h } ping-pong targets
+    this.groupRTs = new Map();   // gid (or '$layer' for a bare bus) → { a, b, w, h } ping-pong
+    this._buses = new Map();     // layer name → this frame's finished texture (masking)
 
     this._scratch = { x: 0, y: 0, r: 0, rot: 0, rotX: 0, rotY: 0, rgb: [1, 1, 1], alpha: 1, weight: 1, open: 0, shape: 0, fill: 1, stroke: 0, blend: 'source-over' };
   }
@@ -1345,25 +1370,78 @@ export class GLRenderer {
     // layer keep the old order: bare first, then groups.
     const order = (state && state.layerOrder) || null;
     const li = (name) => (order && name != null && order.has(name) ? order.get(name) : -1);
-    const units = [];                    // [layer index, kind (0 bare, 1 group), payload]
+    const units = [];                    // [layer index, kind (0 bare, 1 group), payload, layer name]
     const bare = new Map();
     for (const p of ungrouped) {
       const k = li(p.layer);
       let list = bare.get(k);
-      if (!list) { bare.set(k, list = []); units.push([k, 0, list]); }
+      if (!list) { bare.set(k, list = []); units.push([k, 0, list, p.layer == null ? null : p.layer]); }
       list.push(p);
     }
     for (const [gid, g] of groups) {
       if (g.parent) continue;
       const first = g.parts[0] || all(g)[0];
-      units.push([li(first && first.layer), 1, gid]);
+      units.push([li(first && first.layer), 1, gid, (first && first.layer) || null]);
     }
     units.sort((u, v) => u[0] - v[0] || u[1] - v[1]);   // stable: ties keep first-seen order
-    for (const [, kind, payload] of units) {
-      if (kind === 0) this._drawGlyphs(payload, null);
-      else this._composite(layer(payload), groups.get(payload).fx);
+
+    // ── buses (MASKING.md phase 0) ────────────────────────────────────────────────
+    // Any layer NAMED by a .mask() anywhere is rendered to a texture before anything is
+    // composited, so a mask works regardless of which layer is stacked first. Lazy by
+    // design: a layer nobody references keeps the old straight-to-screen path and costs
+    // no VRAM. (A cycle — two layers masking each other — resolves one frame late, since
+    // the second one reads the first's texture from this pass.)
+    const meta = (state && state.layerMeta) || null;
+    const lmeta = (name) => (meta && name != null ? meta.get(name) : null) || null;
+    const needed = new Set();
+    const addRefs = (fx) => { if (fx && fx.chain) for (const e of fx.chain) if (e.type === 'mask' && e.src != null) needed.add(String(e.src)); };
+    for (const [, g] of groups) addRefs(g.fx);
+    if (meta) for (const [, m] of meta) if (m && m.mask && m.mask.src != null) needed.add(String(m.mask.src));
+
+    this._buses = new Map();
+    const busKeys = new Set();
+    const cache = new Map();
+    const unitTex = (u) => {             // render one unit to a texture
+      const [, kind, payload, name] = u;
+      if (cache.has(u)) return cache.get(u);
+      let tex;
+      if (kind === 1) tex = layer(payload);
+      else {                             // bare glyphs need an RT of their own to be sampled
+        const key = '$' + name;
+        busKeys.add(key);
+        const rt = this._getGroupRT(key);
+        this._drawGlyphs(payload, rt.a);
+        const m = lmeta(name);
+        tex = m && m.mask ? this._applyChain(rt, { chain: [m.mask] }) : rt.a.texture;
+      }
+      cache.set(u, tex);
+      return tex;
+    };
+    for (const u of units) if (u[3] != null && needed.has(u[3])) this._buses.set(u[3], unitTex(u));
+    // A referenced layer with nothing alive this frame (its glyphs decayed between spawns)
+    // must still publish a TRANSPARENT texture, so it masks to nothing — exactly as a fully
+    // transparent source would. Without this it published no bus at all, the mask step fell
+    // through as a pass, and the masked layer flashed fully open every time its stencil
+    // blinked. A name that matches no layer at all still passes through, so a typo shows you
+    // your art rather than a black screen.
+    for (const name of needed) {
+      if (this._buses.has(name) || !(order && order.has(name))) continue;
+      const key = '$' + name;
+      busKeys.add(key);
+      const rt = this._getGroupRT(key);
+      this._drawGlyphs([], rt.a);                     // clears the target to transparent
+      this._buses.set(name, rt.a.texture);
     }
-    this._pruneGroups(groups);
+
+    for (const u of units) {
+      const [, kind, payload, name] = u;
+      const m = lmeta(name);
+      const g = kind === 1 ? groups.get(payload) : null;
+      if ((m && m.hidden) || (g && g.fx && g.fx.hidden)) continue;   // rendered, not shown
+      if (kind === 0 && !cache.has(u) && !(m && m.mask)) { this._drawGlyphs(payload, null); continue; }
+      this._composite(unitTex(u), g && g.fx);
+    }
+    this._pruneGroups(groups, busKeys);
     drawOverlay();   // clock sweep / trace on top of all the art
   }
 
@@ -1887,6 +1965,17 @@ export class GLRenderer {
         if (amount <= 0.0) continue;                   // off
         const m = this.fx.negative; m.uniforms.uAmount.value = amount;
         this._blit(m, read.texture, write); swap();
+      } else if (t === 'mask') {
+        // the source layer's finished texture, published by the bus pass in render()
+        const src = this._buses && this._buses.get(String(e.src));
+        const amount = this._num(e.amount == null ? 1 : e.amount, 1);
+        if (!src || amount <= 0) continue;             // unknown name / off → pass through
+        const m = this.fx.mask;
+        m.uniforms.tMask.value = src;
+        m.uniforms.uMode.value = e.mode === 'alpha' ? 1 : 0;
+        m.uniforms.uInvert.value = this._num(e.invert, 0) > 0.5 ? 1 : 0;
+        m.uniforms.uAmount.value = amount;
+        this._blit(m, read.texture, write); swap();
       } else if (t === 'silhouette') {
         silhIdx++;
         const mode = this._num(e.mode, 1);
@@ -2096,12 +2185,16 @@ export class GLRenderer {
     this.renderer.setRenderTarget(target);
     this.renderer.render(this.fsScene, this.camera);
   }
-  _pruneGroups(activeGroups) {
-    for (const gid of [...this.groupRTs.keys()]) {
-      if (!activeGroups || !activeGroups.has(gid)) {
-        this._disposeRT(this.groupRTs.get(gid));
-        this.groupRTs.delete(gid);
-      }
+  // Drop render targets nothing is using any more. Numeric keys are group ids; string keys
+  // ('$name') are bare-layer bus RTs, live only while something still references them.
+  _pruneGroups(activeGroups, busKeys) {
+    for (const key of [...this.groupRTs.keys()]) {
+      const live = typeof key === 'string'
+        ? !!(busKeys && busKeys.has(key))
+        : !!(activeGroups && activeGroups.has(key));
+      if (live) continue;
+      this._disposeRT(this.groupRTs.get(key));
+      this.groupRTs.delete(key);
     }
   }
 

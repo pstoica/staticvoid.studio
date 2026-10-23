@@ -907,6 +907,48 @@ a mouth. `dist(x, y)` is the raw distance if you want to shape the falloff yours
 is measured with the aspect corrected, so the falloff is a circle on screen, not an ellipse.
 Everything on the osc side composes: `.range()`, `.ease()`, `.gt()`, `.quantize()`, `.spring()`.
 
+### Masking (`.mask` / `.hidden`)
+
+One layer can **cut out** another. `.mask(name)` shows a layer only where the layer called
+`name` is bright; `.hidden()` marks a layer as a stencil — it still renders (so it can be
+sampled) but is never drawn to screen.
+
+```js
+stack(
+  $("hole", shape("circle").size(0.3).x(mouseX).y(mouseY)).hidden(),
+  $("art",  shape("bong*40").color(palette("rainbow").at(saw))).mask("hole"),
+)
+```
+
+The field shows only through the circle, and the circle follows your cursor — a window you
+drag around the image. Both verbs work on a `$`-layer *or* a `group()`:
+
+| form | effect |
+| --- | --- |
+| `.mask(name)` | show only where `name` is bright (**luma** — the default) |
+| `.mask(name, "alpha")` | show only where `name` is **opaque**, however dark it is |
+| `.mask(name, { invert: true })` | the source becomes a **hole** instead of a window |
+| `.mask(name, { amount: mouseX })` | fade the masking itself in — `0` unmasked, `1` full |
+| `.hidden()` | render but don't composite — how you mark a stencil layer |
+
+**luma vs alpha** is a real distinction, not a formality: a dark-but-opaque source masks
+*fully* in `alpha` and to *almost nothing* in `luma`. Use `luma` when you want a gradient to
+give you a soft edge for free, `alpha` when you want a shape's coverage regardless of colour.
+
+On a `group()`, `.mask()` is an ordinary step in the FX chain, so **where you write it
+matters** — last masks the finished look, earlier masks the glyphs and lets a later `.blur()`
+bleed past the mask's edge:
+
+```js
+group(src).mask("hole").blur(6)    // soft spill beyond the window
+group(src).blur(6).mask("hole")    // hard-edged window onto a blurred image
+```
+
+The source may be written *after* its target — referenced layers are rendered before anything
+is composited, so stacking order doesn't constrain you. Two layers masking each other resolves
+one frame late rather than breaking. A layer nobody references costs nothing extra; masking
+allocates buffers only for the layers actually involved.
+
 ### Comparisons
 
 A comparison turns a continuous signal into a hard **`0/1`**, which is exactly what the

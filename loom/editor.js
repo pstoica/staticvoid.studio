@@ -35,7 +35,7 @@ const METHOD = new Set(['fast', 'slow', 'rev', 'every', 'iter', 'palindrome', 'j
   'life', 'hold', 'sustain', 'onRelease', 'slew', 'id', 'n', 'stencil', 'set', 'spread', 'phase', 'rate', 'quantize', 'ease', 'segment', 'seg', 'sample', 'spring',
   'gt', 'gte', 'lt', 'lte', 'between', 'drift', 'free', 'sync', 'falloff',
   'tile', 'dots', 'halftone', 'rgbshift', 'rgb', 'posterize', 'dither', 'scanlines', 'slice', 'lens',
-  'scale', 'move', 'turn', 'aspect', 'hidden']);
+  'scale', 'move', 'turn', 'aspect', 'hidden', 'mask']);
 
 // ── autocomplete ────────────────────────────────────────────────────────────────
 // The API is wide enough that remembering it is the main friction, so completion

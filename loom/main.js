@@ -123,6 +123,7 @@ new ResizeObserver(resize).observe(activeCanvas);
 // ── the pattern + clock ──────────────────────────────────────────────────────────
 let pattern = DSL.silence;
 let activeLayerOrder = null;     // $ layer name → stacking index (null: no $ layers)
+let activeLayerMeta = null;      // $ layer name → { mask, hidden } (masking; see MASKING.md)
 let activeGroupFx = new Map();   // gid → fx for the running patch; live glyphs read their group's CURRENT fx
 const physWorlds = new Map();    // pid → PhysWorld (lazy; one rapier2d world per physics() group)
 let activePhys = new Map();      // pid → opts for the running patch (params resolved per frame)
@@ -201,9 +202,12 @@ function compile(code) {
   if (layers.length) {
     activeLayers = layers.map((l) => l.name);
     activeLayerOrder = new Map(activeLayers.map((n, i) => [n, i]));   // $ order = stacking order
+    activeLayerMeta = new Map(layers.filter((l) => l.mask || l.hidden)
+      .map((l) => [l.name, { mask: l.mask || null, hidden: !!l.hidden }]));
     return layers.length === 1 ? layers[0].pat : DSL.stack(...layers.map((l) => l.pat));
   }
   activeLayers = [];
+  activeLayerMeta = null;
   activeLayerOrder = null;
   if (!result || typeof result.query !== 'function') throw new Error('expression did not evaluate to a pattern');
   return result;
@@ -1602,7 +1606,7 @@ function tick(dt) {
   // so a layer effect (pixelate) can be applied before compositing. `vis` excludes
   // muted / non-soloed layers.
   if (USE_GL) {
-    glr.render({ live: vis, minDim, resolve: glResolve, evalGlobal, elapsed, W, H, cycle, showClock, traceMode, persp: perspVal, groupFx: activeGroupFx, layerOrder: activeLayerOrder });
+    glr.render({ live: vis, minDim, resolve: glResolve, evalGlobal, elapsed, W, H, cycle, showClock, traceMode, persp: perspVal, groupFx: activeGroupFx, layerOrder: activeLayerOrder, layerMeta: activeLayerMeta });
   } else {
     const buckets = new Map();   // gid -> particle[]
     for (const p of vis) {
@@ -1701,6 +1705,24 @@ function renderLayerChips() {
 
 // ── presets ───────────────────────────────────────────────────────────────────────
 const PRESETS = {
+  // masking: a layer marked .hidden() is never drawn, it only cuts the layer that names it.
+  // Drag the cursor — the window moves with you.
+  'mask': `stack(
+  bg("#05050c"),
+  $("hole",
+    shape("circle").size(osc(0.2).range(0.18, 0.34)).x(mouseX).y(mouseY)
+      .color("#ffffff").id("h").hold(1)
+  ).hidden(),
+  $("art",
+    shape("dot*120").grid(12).size(0.03)
+      .color(palette("rainbow").at(gx()))
+      .decay(0.4)
+  ).mask("hole"),
+  $("ghost",
+    shape("dot*120").grid(12).size(0.03)
+      .color("#1b1b2a").decay(0.4)
+  ).mask("hole", { invert: true })
+)`,
   // three juggling balls, three temperaments. Each ball owns a group(), so its character is
   // physics AND effects, not just colour: A rises and burns (negative gravity + turbulence,
   // bloom on every throw), B hangs in a cold vortex it smears through (attract+swirl around

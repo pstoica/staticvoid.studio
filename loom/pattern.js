@@ -1194,6 +1194,7 @@ let _echoGen = 0;               // monotonic generation id for echo() layers (NO
 const _groupFx = new Map();
 const _echoGroups = [];         // {fam, cap} for echo() groups in the current compile
 function _resetGroups() { _gid = 0; _groupFx.clear(); _echoGroups.length = 0; }
+const MASK_LITERAL = new Set(['src', 'mode']);   // identifiers, not patternable values
 class Group {
   constructor(pat) { this._pat = reify(pat); this._gid = ++_gid; this._fx = { chain: [] }; _groupFx.set(this._gid, this._fx); }
   // Each effect appends to an ordered chain; the renderer runs them in call order
@@ -1203,10 +1204,25 @@ class Group {
   // `_fx.pixelate` so the legacy Canvas2D renderer still applies it.
   // string params are mini-notation, like any control arg → reify to a pattern
   // (sampled at the current cycle by the renderer). Numbers/oscs/patterns pass through.
+  // String params are mini-notation so any FX amount can be patterned — EXCEPT the few that
+  // are identifiers rather than values. mask's `src` names a layer and its `mode` is a
+  // literal luma/alpha; reifying those turned them into empty Patterns and the mask silently
+  // did nothing (silhouette's `mode`, by contrast, is a number and stays patternable).
   _push(fx) {
-    for (const k in fx) if (k !== 'type' && typeof fx[k] === 'string') fx[k] = mini(fx[k]);
+    const lit = fx.type === 'mask' ? MASK_LITERAL : null;
+    for (const k in fx) {
+      if (k === 'type' || (lit && lit.has(k))) continue;
+      if (typeof fx[k] === 'string') fx[k] = mini(fx[k]);
+    }
     this._fx.chain.push(fx); return this;
   }
+  // mask(src, opts): multiply this group by the named layer's output. Pushed like any FX,
+  // so it runs at the point you write it — put it last to mask the finished look, or early
+  // to mask the glyphs and let a later blur bleed past the edge.
+  mask(src, opts) { return this._push(_maskDesc(src, opts)); }
+  // hidden(): render to the group's buffer (so it stays sampleable as a mask source) but do
+  // not composite it to screen.
+  hidden(on = true) { this._fx.hidden = !!on; return this; }
   pixelate(n) { this._fx.pixelate = n; return this._push({ type: 'pixelate', block: n }); }      // block size, px
   blur(n = 4) { return this._push({ type: 'blur', radius: n }); }                                  // gaussian radius, px
   // glow(amount, reach): light BLEEDS from the layer's content — glyphs illuminate the
@@ -1447,6 +1463,19 @@ function dist(x, y) {
 let _layers = [];
 function _resetLayers() { _layers = []; }
 function _getLayers() { return _layers; }
+// mask(src, opts): show this layer only where the layer named `src` is bright (luma, the
+// default) or opaque (alpha). See MASKING.md. opts may be a bare mode string, or
+// { mode, invert, amount } — invert turns the source into a hole instead of a window, and
+// amount (patternable) fades the whole masking in, so `.mask("hole", { amount: mouseX })`
+// wipes between masked and unmasked.
+function _maskDesc(src, opts) {
+  const o = typeof opts === 'string' ? { mode: opts } : (opts || {});
+  return { type: 'mask', src: String(src),
+    mode: o.mode === 'alpha' ? 'alpha' : 'luma',
+    invert: o.invert ? 1 : 0,
+    amount: o.amount == null ? 1 : (typeof o.amount === 'string' ? mini(o.amount) : o.amount) };
+}
+
 function layer(name, pat) {
   if (pat === undefined) { pat = name; name = null; }      // $(pattern) — anonymous
   const p = reify(pat);
@@ -1458,7 +1487,14 @@ function layer(name, pat) {
   // layer they belong to — that's what lets the renderer mute/solo a layer live.
   const tagged = new Pattern((s) => p.query(s).map((h) =>
     hap(h.whole, h.part, (h.value && typeof h.value === 'object') ? Object.assign({}, h.value, { _layer: nm }) : h.value)));
-  _layers.push({ name: nm, pat: tagged });
+  const entry = { name: nm, pat: tagged };
+  _layers.push(entry);
+  // .mask()/.hidden() on a $-layer are LAYER metadata, not value transforms, so they hang
+  // off the registry entry and return the pattern unchanged. They must be called directly
+  // on the $(...) result — chaining a combinator first makes a new pattern that is no
+  // longer this layer's handle.
+  Object.defineProperty(tagged, 'mask', { value(src, opts) { entry.mask = _maskDesc(src, opts); return this; } });
+  Object.defineProperty(tagged, 'hidden', { value(on = true) { entry.hidden = !!on; return this; } });
   return tagged;                                           // a lone $(...) still evaluates to the (tagged) pattern
 }
 
