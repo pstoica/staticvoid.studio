@@ -124,8 +124,10 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
 
   **Those effects already have the right shape.** Both are grid wave sims (not
   Navier–Stokes fluid): a `Float32Array` field with `stamp(x, y, amp)` as the *only* input,
-  a fixed-rate `tick()`, and a separate `render()` (staticvoid → canvas, patrickstoica →
-  SVG). That is almost exactly Loom's own contract — `main.js` already runs a fixed-step
+  a fixed-rate `tick()`, and a separate `render()`. (They happen to draw to canvas and to
+  SVG respectively, but that is incidental — the *visual* is the point, not the output
+  format; a module would render however Loom wants it to.) That is almost exactly Loom's
+  own contract — `main.js` already runs a fixed-step
   clock and keeps draw separate from state. A module interface of
   `{ init(w,h), tick(dt), render(target), params }` would fit both without rewriting either.
 
