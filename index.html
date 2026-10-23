@@ -842,7 +842,7 @@
       })();
       // match the CSS background: tiled at native size, centered on the viewport
       // (iOS fallback uses a single cover-fit copy instead)
-      var COVER = CSS.supports('-webkit-touch-callout', 'none');
+      var COVER = CSS.supports('-webkit-touch-callout', 'none'), marblePat = null;
       function drawMarble(W, H) {
         var iw = marble.naturalWidth, ih = marble.naturalHeight;
         if (COVER) {
@@ -850,10 +850,13 @@
           ctx.drawImage(marble, (W - iw * k) / 2, (H - ih * k) / 2, iw * k, ih * k);
           return;
         }
-        var ox = ((W - iw) / 2) % iw, oy = ((H - ih) / 2) % ih;
-        if (ox > 0) ox -= iw;
-        if (oy > 0) oy -= ih;
-        for (var y = oy; y < H; y += ih) for (var x = ox; x < W; x += iw) ctx.drawImage(marble, x, y);
+        // one fill with a repeating pattern: under source-in, each separate
+        // drawImage would erase everything outside itself, keeping only the
+        // last tile
+        if (!marblePat) marblePat = ctx.createPattern(marble, 'repeat');
+        marblePat.setTransform(new DOMMatrix([1, 0, 0, 1, (W - iw) / 2, (H - ih) / 2]));
+        ctx.fillStyle = marblePat;
+        ctx.fillRect(0, 0, W, H);
       }
 
       function render(now) {
