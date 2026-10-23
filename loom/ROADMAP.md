@@ -114,6 +114,29 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
   + flat quiet sliders for speed/decay; demoted cycle readout; ⌘. hide-all-chrome with a toast;
   editor live value-badges for the pointer/MIDI/juggling signals (envelope-smoothed).
 
+## Next major milestone — split Loom into its own project
+
+*(Patrick, 2026-10-23.)* Loom currently rides inside the staticvoid.studio Vite
+multi-page site as two of five entries (`loom/index.html`, `loom/draw/index.html` in
+`vite.config.js`), sharing one repo, one build and one deploy with the marketing site,
+the omnichord and tic-tac-toe. It has outgrown that: the heavy deps (three, rapier,
+mediapipe, codemirror) are Loom-only, and every Loom commit redeploys the whole site.
+
+**The one genuinely destructive detail: `localStorage` is per-ORIGIN.** Everything a user
+has made lives there — `loom.presets` (saved patches), `loom.shapepacks` (everything drawn
+in the pixel editor), `loom.code` (the current patch), plus `loom.clock`, `loom.side`,
+`loom.sidetab`, `loom.camLabel`, `loom.feedShow`, `loom.epilepsy`. Moving
+`staticvoid.studio/loom` → `loom.staticvoid.studio` (or any new domain) **orphans all of
+it** — the data isn't deleted, it's just unreachable from the new origin, which looks
+identical to deletion from the user's side. So a split needs an export/import path, or a
+one-time migration page served from the OLD origin that hands the data over (postMessage
+from an iframe on the old origin is the usual trick). Decide this BEFORE moving, not after.
+
+Other things in scope, none of them hard: `loom-room/` is already a standalone Cloudflare
+Worker with its own wrangler config, so it moves as-is; the draw editor's QR/room host
+field points at it by URL. Keep a redirect from the old path. The root site keeps none of
+Loom's deps, so the dependency split is clean.
+
 ## Backlog / jot-down (not now)
 
 - **Custom visual modules.** *(Patrick, 2026-10-23 — jotted, not scoped.)* Open the
