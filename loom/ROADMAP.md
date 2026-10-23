@@ -116,6 +116,39 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
 
 ## Backlog / jot-down (not now)
 
+- **Custom visual modules.** *(Patrick, 2026-10-23 — jotted, not scoped.)* Open the
+  architecture so a totally custom visual — e.g. the wave-ripple sims on
+  `patrickstoica.com` and this site's own `index.html` — can plug in as a module and be
+  driven by Loom's signals (MIDI especially). Two findings that make this less speculative
+  than it sounds:
+
+  **Those effects already have the right shape.** Both are grid wave sims (not
+  Navier–Stokes fluid): a `Float32Array` field with `stamp(x, y, amp)` as the *only* input,
+  a fixed-rate `tick()`, and a separate `render()` (staticvoid → canvas, patrickstoica →
+  SVG). That is almost exactly Loom's own contract — `main.js` already runs a fixed-step
+  clock and keeps draw separate from state. A module interface of
+  `{ init(w,h), tick(dt), render(target), params }` would fit both without rewriting either.
+
+  **Loom has one seam and one wall.**
+  - *Seam (cheap):* the group FX chain. `_fx.chain` is a list of `{type, ...params}` the
+    renderer walks as passes over a group's FBO (`_applyChain`). A module that is a
+    **post-process pass** — including a user-supplied GLSL string — is a new chain type
+    plus a verb, and needs no architectural work. Drawn shape packs already prove
+    user content can enter the render path at runtime.
+  - *Wall (not cheap):* a module that owns its own surface (canvas / SVG / its own sim, like
+    the ripples) is not a pass — it is a **layer source**. The renderer currently
+    interleaves draw-and-composite per group and only `group()`s get an RT, so there is
+    nowhere for a foreign surface to live in the stack. That is the *same* substrate gap
+    as MASKING.md Phase 0 (named buses + decouple draw from composite). **A module system
+    and layer-as-mask want the same foundation — worth building once, for both.**
+
+  **MIDI driving it is the easy half.** `cc()`/`note()`/`vel()`/`onNote()` are ordinary
+  signals, and module params would be ordinary params. The only genuinely new thing is
+  `stamp()`: an *event* input rather than a continuous one. Loom already has that idiom
+  (`onNote`, `spoken()` — frame-snapshotted event sources), so a module would want an
+  "on each event, call this with (x, y, amount)" hook alongside its value params.
+
+
 - **Per-param envelopes — `env()`.** ✅ **Done.** `env(attack, decay, easeIn?, easeOut?)` — an
   attack/decay envelope as an *age-driven signal* (osc-family, so it animates over the glyph's
   life), routable into any param and composing with `.range()`/`.add()`/`.spring()`. Implemented
