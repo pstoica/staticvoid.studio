@@ -182,17 +182,16 @@
       .links { animation: none; }                        /* hover = static per-link hue */
     }
     /* a distinct hue per link so each phases at its own offset (staggered) */
-    .links > div:nth-of-type(1) { --lh: 185; }   /* connect with us */
-    .links > div:nth-of-type(2) { --lh: 215; }   /* email */
-    .links > div:nth-of-type(3) { --lh: 265; }   /* aka patrick */
-    .links > div:nth-of-type(5) { --lh: 25; }    /* orbital harp */
-    .links > div:nth-of-type(6) { --lh: 305; }   /* air omnichord */
-    .links > div:nth-of-type(7) { --lh: 270; }   /* loom */
-    .links > div:nth-of-type(8) { --lh: 150; }   /* senseweave */
-    .links > div:nth-of-type(9) { --lh: 95; }    /* tic-tac-toe */
-    .links > div:nth-of-type(12) { --lh: 345; }  /* tiktok */
-    .links > div:nth-of-type(13) { --lh: 35; }   /* instagram */
-    .links > div:nth-of-type(14) { --lh: 5; }    /* youtube */
+    .links > div:nth-of-type(1) { --lh: 215; }   /* email */
+    .links > div:nth-of-type(2) { --lh: 265; }   /* aka patrick */
+    .links > div:nth-of-type(4) { --lh: 25; }    /* orbital harp */
+    .links > div:nth-of-type(5) { --lh: 305; }   /* air omnichord */
+    .links > div:nth-of-type(6) { --lh: 270; }   /* loom */
+    .links > div:nth-of-type(7) { --lh: 150; }   /* senseweave */
+    .links > div:nth-of-type(8) { --lh: 95; }    /* tic-tac-toe */
+    .links > div:nth-of-type(11) { --lh: 345; }  /* tiktok */
+    .links > div:nth-of-type(12) { --lh: 35; }   /* instagram */
+    .links > div:nth-of-type(13) { --lh: 5; }    /* youtube */
     /* video granulator (div 8) is WIP — grayed out, no link yet */
     /* video granulator is linked but WIP — stays gray even as a link / on hover */
     .links a.wip-app,
@@ -467,50 +466,16 @@
     @property --fr { syntax: "<length>"; inherits: false; initial-value: 28px; }
     .shorts { transition: --fl 0.35s ease, --fr 0.35s ease; }
 
-    /* gentle rainbow cursor trail — small dots that fade in, pulse a couple of
-       times, then fade out; hue walks the spectrum so the trail flows */
-    @property --dot-phase {
-      syntax: "<angle>";
-      inherits: false;
-      initial-value: 0deg;
-    }
-    /* all dots live inside a single container that carries the blend mode — one
-       compositing layer total instead of one per dot (big perf win) */
+    /* pixel ripple field — cursor and taps drop energy into a damped wave
+       sim on a coarse grid; drawn as square pixels on one canvas */
     #trail {
       position: fixed;      /* fixed = always clips to viewport, can never cause scrollbar */
       inset: 0;
-      overflow: hidden;
+      width: 100%;
+      height: 100%;
       pointer-events: none;
-      z-index: 9999;
+      z-index: -1;          /* behind content, above the marble background */
       mix-blend-mode: screen;
-    }
-    .cursor-dot {
-      position: absolute;
-      top: 0; left: 0;
-      width: 8px; height: 8px;
-      margin: -4px 0 0 -4px;
-      border-radius: 1px;                    /* always square now */
-      pointer-events: none;
-      background: oklch(0.87 0.2 calc(var(--dot-hue) + var(--dot-phase)));
-      /* simplified single-layer glow — cheaper, still lights up the marble */
-      box-shadow: 0 0 10px oklch(0.85 0.2 calc(var(--dot-hue) + var(--dot-phase)) / 0.7);
-      animation: dot-life 2.4s ease-out forwards, dot-cycle 2.4s linear forwards;
-      will-change: transform, opacity;
-    }
-    @keyframes dot-life {
-      0%   { opacity: 0;    transform: translate(var(--dot-x), var(--dot-y)) scale(0.2); }
-      12%  { opacity: 1;    transform: translate(var(--dot-x), var(--dot-y)) scale(1); }
-      30%  {                transform: translate(var(--dot-x), var(--dot-y)) scale(0.7); }
-      48%  {                transform: translate(var(--dot-x), var(--dot-y)) scale(1.1); }
-      66%  {                transform: translate(var(--dot-x), var(--dot-y)) scale(0.8); }
-      84%  { opacity: 0.45; transform: translate(var(--dot-x), var(--dot-y)) scale(1); }
-      100% { opacity: 0;    transform: translate(var(--dot-x), var(--dot-y)) scale(0.5); }
-    }
-    @keyframes dot-cycle {
-      to { --dot-phase: 560deg; }   /* hue keeps advancing through the dot's life (faster) */
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .cursor-dot { display: none; }
     }
 
     /* "NEW" badge — one solid color, rotating the oklch hue (constant L+C, so
@@ -558,9 +523,6 @@
     <p class="tagline">full-spectrum creative services</p>
 
     <div class="links">
-      <div>
-        <a href="https://cal.com/patrick-stoica-mypivj/30min" id="connect-link">connect with us</a>
-      </div>
       <div>
         <a href="mailto:hi@staticvoid.studio">hi@staticvoid.studio</a>
       </div>
@@ -796,147 +758,171 @@
       });
     })();
 
-    // cursor/touch trail
+    // pixel ripple field (sibling of patrickstoica.com's dot-grid ripples):
+    // a damped wave equation on a coarse grid. Cursor/taps add soft gaussian
+    // bumps that spread out as rings; each cell renders as a square pixel whose
+    // size steps with amplitude, so the rings read as chunky, quantized pixels.
     (function () {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      // single container — one compositing layer for all dots
-      var trail = document.createElement('div');
-      trail.id = 'trail';
-      document.body.appendChild(trail);
+      var cv = document.createElement('canvas');
+      cv.id = 'trail';
+      document.body.appendChild(cv);
+      var ctx = cv.getContext('2d');
 
-      var lastCell = '', hue = 0, GRID = 26;
-      var live = [];
-      function spawnDot(x, y) {
-        hue = (hue + 22) % 360;
-        var d = document.createElement('div');
-        d.className = 'cursor-dot';
-        d.style.setProperty('--dot-x', x + 'px');    /* viewport coords; trail is position:fixed */
-        d.style.setProperty('--dot-y', y + 'px');
-        d.style.setProperty('--dot-hue', hue + 'deg');
-        d.style.animationDuration = (1.7 + Math.random() * 1.0).toFixed(2) + 's';
-        d.addEventListener('animationend', function () { d.remove(); var i = live.indexOf(d); if (i >= 0) live.splice(i, 1); });
-        trail.appendChild(d);
-        live.push(d);
-        while (live.length > 48) live.shift().remove();
-      }
-      function gridSpawn(cx, cy) {   // snap to grid and spawn (viewport coords)
-        var gx = Math.round(cx / GRID) * GRID, gy = Math.round(cy / GRID) * GRID;
-        var cell = gx + ',' + gy;
-        if (cell === lastCell) return;
-        lastCell = cell;
-        spawnDot(gx, gy);
+      var GRID = 16, HALF = GRID / 2;
+      var C2 = 0.18;         // propagation (< 0.5 for stability; lower = slower rings)
+      var DAMP = 0.987;      // per-step damping
+      var GLOW = 0.955;      // per-step afterglow decay: pixels linger after the wave passes
+      var THRESH = 0.05;     // below this a cell is dark
+      var SIGMA = 1.6, SAT = 0.9;
+      var SIZES = [3, 4, 6, 7];   // dot diameter per amplitude step
+
+      var cols = 0, rows = 0, dpr = 1, u, uPrev, uNext, glow, tone;
+      function build() {
+        var W = cv.clientWidth, H = cv.clientHeight;
+        dpr = Math.min(2, window.devicePixelRatio || 1);
+        cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+        cols = Math.max(3, Math.ceil(W / GRID) + 1);
+        rows = Math.max(3, Math.ceil(H / GRID) + 1);
+        u = new Float32Array(cols * rows);
+        uPrev = new Float32Array(cols * rows);
+        uNext = new Float32Array(cols * rows);
+        glow = new Float32Array(cols * rows);
+        tone = new Int8Array(cols * rows);   // sign of the wave that last lit the cell
       }
 
-      // mouse trail (desktop)
+      // smooth bump at a fractional cell position; adds energy only where the
+      // field is quiet so repeated strokes can't pile up into noise
+      function stamp(fx, fy, amp) {
+        var r = Math.ceil(SIGMA * 2), x0 = Math.round(fx), y0 = Math.round(fy);
+        for (var y = y0 - r; y <= y0 + r; y++) {
+          if (y < 1 || y >= rows - 1) continue;
+          for (var x = x0 - r; x <= x0 + r; x++) {
+            if (x < 1 || x >= cols - 1) continue;
+            var d2 = (x - fx) * (x - fx) + (y - fy) * (y - fy);
+            var i = y * cols + x;
+            var du = amp * Math.exp(-d2 / (2 * SIGMA * SIGMA)) * Math.max(0, 1 - Math.abs(u[i]) / SAT);
+            u[i] += du; uPrev[i] += du;   // start at rest: one clean ring
+          }
+        }
+      }
+
+      var MUR = (Math.sqrt(C2) - 1) / (Math.sqrt(C2) + 1);  // absorbing edges
+      function tick() {
+        var x, y, i;
+        for (y = 1; y < rows - 1; y++) for (x = 1; x < cols - 1; x++) {
+          i = y * cols + x;
+          uNext[i] = (2 * u[i] - uPrev[i] + C2 * (u[i - 1] + u[i + 1] + u[i - cols] + u[i + cols] - 4 * u[i])) * DAMP;
+        }
+        for (x = 0; x < cols; x++) {
+          i = x; uNext[i] = u[i + cols] + MUR * (uNext[i + cols] - u[i]);
+          i = (rows - 1) * cols + x; uNext[i] = u[i - cols] + MUR * (uNext[i - cols] - u[i]);
+        }
+        for (y = 1; y < rows - 1; y++) {
+          i = y * cols; uNext[i] = u[i + 1] + MUR * (uNext[i + 1] - u[i]);
+          i = y * cols + cols - 1; uNext[i] = u[i - 1] + MUR * (uNext[i - 1] - u[i]);
+        }
+        var t = uPrev; uPrev = u; u = uNext; uNext = t;
+        // afterglow follows the wave up instantly, then fades slowly
+        for (i = 0; i < u.length; i++) {
+          var a = Math.abs(u[i]), g = glow[i] * GLOW;
+          if (a >= g) { glow[i] = a; tone[i] = u[i] > 0 ? 1 : -1; } else glow[i] = g;
+        }
+      }
+
+      function render(now) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        var drift = now * 0.00003, lit = 0;
+        for (var y = 0; y < rows; y++) for (var x = 0; x < cols; x++) {
+          var i = y * cols + x, a = glow[i];
+          if (a <= THRESH) continue;
+          lit++;
+          var step = Math.min(SIZES.length - 1, (a * 5) | 0);
+          var sz = SIZES[step];
+          // hue sweeps diagonally and slowly drifts; crests and troughs sit a
+          // third of the wheel apart so each ring reads as a two-tone band
+          var hue = (((x + y) / 18 + drift) * 360 + (tone[i] > 0 ? 0 : 120)) % 360;
+          ctx.globalAlpha = Math.min(0.75, 0.25 + a * 0.8);
+          ctx.fillStyle = 'oklch(0.84 0.17 ' + hue.toFixed(0) + ')';
+          var cx = x * GRID + HALF, cy = y * GRID + HALF;
+          ctx.beginPath();
+          ctx.arc(cx, cy, sz / 2, 0, 6.2832);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        return lit;
+      }
+
+      // fixed 60Hz sim, self-pausing when the field goes quiet
+      var STEP = 1000 / 60, acc = 0, lastT = 0, running = false, lastInput = 0, sparkTimer;
+      function loop(now) {
+        acc += Math.min(now - (lastT || now - STEP), STEP * 4);
+        lastT = now;
+        while (acc >= STEP) { tick(); acc -= STEP; }
+        if (render(now) > 0 || now - lastInput < 400) requestAnimationFrame(loop);
+        else { running = false; lastT = 0; acc = 0; ctx.clearRect(0, 0, cv.width, cv.height); scheduleSpark(); }
+      }
+      function start() {
+        if (running) return;
+        running = true;
+        clearTimeout(sparkTimer);
+        requestAnimationFrame(loop);
+      }
+      // occasional faint ripple somewhere in the upper part of the page
+      function scheduleSpark() {
+        clearTimeout(sparkTimer);
+        sparkTimer = setTimeout(function () {
+          stamp(Math.random() * cols, Math.random() * rows * 0.7, 0.45);
+          start();
+        }, 3000 + Math.random() * 5000);
+      }
+
+      function cell(e) { return { x: (e.clientX - HALF) / GRID, y: (e.clientY - HALF) / GRID }; }
+
+      // mouse wake (desktop): stamps evenly spaced along the path, so speed
+      // doesn't change how much energy goes in
+      var SPACING = 3.5, last = null, travel = 0;
       window.addEventListener('pointermove', function (e) {
         if (e.pointerType !== 'mouse') return;
-        gridSpawn(e.clientX, e.clientY);
+        var p = cell(e);
+        if (!last) { last = p; return; }
+        var dx = p.x - last.x, dy = p.y - last.y, dist = Math.hypot(dx, dy);
+        if (dist > 20) { last = p; travel = 0; return; }   // pointer jumped
+        for (var s = SPACING - travel; s <= dist; s += SPACING) stamp(last.x + dx * s / dist, last.y + dy * s / dist, 0.2);
+        travel = (travel + dist) % SPACING;
+        last = p;
+        lastInput = performance.now();
+        start();
       }, { passive: true });
+      document.addEventListener('pointerleave', function () { last = null; });
 
-      // tap: stamp a random symmetrical pixel-sprite at the tap point
-      var SPRITES = [
-        // plus
-        [[0,-1],[0,1],[-1,0],[1,0],[0,0]],
-        // X
-        [[-1,-1],[1,-1],[-1,1],[1,1],[0,0]],
-        // asterisk (+ and X)
-        [[0,-1],[0,1],[-1,0],[1,0],[-1,-1],[1,-1],[-1,1],[1,1]],
-        // arrow up  ▲
-        [[0,-2],[-1,-1],[0,-1],[1,-1],[0,0]],
-        // arrow right  ▶
-        [[2,0],[1,-1],[1,0],[1,1],[-1,0],[0,0]],
-        // heart-ish  ♥
-        [[-1,-1],[1,-1],[-2,0],[-1,0],[0,0],[1,0],[2,0],[-1,1],[0,1],[1,1],[0,2]],
-        // crown  ♛
-        [[-2,0],[-1,0],[0,0],[1,0],[2,0],[-2,-1],[0,-1],[2,-1],[-1,-2],[1,-2]],
-        // T-shape
-        [[-1,-1],[0,-1],[1,-1],[0,0],[0,1]],
-        // L-shape
-        [[0,-2],[0,-1],[0,0],[1,0]],
-        // Z-tetromino
-        [[-1,-1],[0,-1],[0,0],[1,0]],
-        // 2×2 block  ■
-        [[0,0],[1,0],[0,-1],[1,-1]],
-        // bracket  [
-        [[1,-2],[0,-2],[0,-1],[0,0],[0,1],[1,1]],
-        // diamond ring (4 cardinals)
-        [[0,-1],[0,1],[-1,0],[1,0]],
-        // long plus
-        [[0,-2],[0,-1],[0,1],[0,2],[-1,0],[1,0],[0,0]],
-        // zigzag  ∿
-        [[-2,0],[-1,-1],[0,0],[1,-1],[2,0]],
-      ];
+      // tap / click: one bigger drop
       window.addEventListener('pointerdown', function (e) {
-        var cx = e.clientX, cy = e.clientY;
-        var sprite = SPRITES[Math.floor(Math.random() * SPRITES.length)];
-        sprite.forEach(function (off) {
-          gridSpawn(cx + off[0] * GRID, cy + off[1] * GRID);
-        });
+        var p = cell(e);
+        stamp(p.x, p.y, 0.95);
+        lastInput = performance.now();
+        start();
       }, { passive: true });
 
-      // ambient trail — stray walk that wanders every few seconds (mobile + desktop)
-      var ax = window.innerWidth / 2, ay = window.innerHeight * 0.35;
-      var avx = 0, avy = 0;
-      function autoStep() {
-        avx += (Math.random() - 0.5) * 18 - avx * 0.06;
-        avy += (Math.random() - 0.5) * 12 - avy * 0.06;
-        ax = Math.max(GRID, Math.min(window.innerWidth - GRID, ax + avx));
-        ay = Math.max(GRID, Math.min(window.innerHeight * 0.9, ay + avy));
-        gridSpawn(ax, ay);   /* ambient uses viewport coords — trail is fixed */
-      }
-      function scheduleAuto() {
-        var steps = 0, maxSteps = 18;
-        var iv = setInterval(function () {
-          autoStep();
-          if (++steps >= maxSteps) { clearInterval(iv); setTimeout(scheduleAuto, 4000 + Math.random() * 5000); }
-        }, 60);
-      }
-      setTimeout(scheduleAuto, 2500);
+      build();
+      setTimeout(function () { stamp(cols / 2, rows * 0.3, 0.8); start(); }, 600);
+      var rt;
+      window.addEventListener('resize', function () {
+        clearTimeout(rt);
+        rt = setTimeout(function () { build(); start(); }, 200);
+      });
     })();
 
-    // dynamic favicon: a 3x3 grid of big pastel "pixels" with gaps, driven like a little
-    // livecoding rig. It slowly cycles through a handful of "patches" — phasing sine
-    // oscillators, a snake tracing the grid, sweeping diagonal colour bands, pulsing rings —
-    // crossfading from one to the next so the grid keeps reinventing how it moves. Colour is
-    // an alternating warm/cool basketweave (rotating through the spectrum) that each patch can
-    // tint. A still frame is committed via scripts/gen-favicon.mjs.
+    // dynamic favicon: a 4x4 dot grid in the same family as the background
+    // ripple field. At rest it's a still diagonal rainbow of dots (the frame
+    // scripts/gen-favicon.mjs commits as public/favicon.png); while the tab is
+    // visible, "raindrops" land on random dots and send rings across the grid —
+    // dots swell and brighten as a ring passes.
     (function () {
-      var N = 64, M = 3, CELL = N / M;             // 3x3 grid -> 9 big ~21px pixels
-      var WARM = [350, 25, 48], COOL = [150, 200, 275];   // alternating warm / cool pastels
-      function hueFor(x, y, t) {                   // basketweave: warm & cool alternate per pixel
-        return (((x + y) & 1 ? COOL : WARM)[((x - y) % 3 + 3) % 3] + t * 10) % 360;
-      }
-
-      // each patch maps a pixel + time to [brightness 0..1, hue shift in degrees]
-      var PATH = [[0, 0], [1, 0], [2, 0], [2, 1], [1, 1], [0, 1], [0, 2], [1, 2], [2, 2]];  // boustrophedon
-      function pathPos(x, y) { for (var i = 0; i < 9; i++) if (PATH[i][0] === x && PATH[i][1] === y) return i; }
-
-      function mPhase(x, y, t) {                    // detuned sine partials beating (Reich phasing)
-        var p = x * 0.9 + y * 1.6;
-        var s = Math.sin(t * 0.50 + p) + Math.sin(t * 0.61 - p * 1.4) + Math.sin(t * 0.37 + (x - y) * 1.1);
-        return [0.5 + s * 0.26, 0];
-      }
-      function mSnake(x, y, t) {                    // a lit head + fading tail walking the path
-        var d = (((t * 1.3) % 9) - pathPos(x, y) + 9) % 9;
-        return [d < 3 ? 1 - d / 3 : 0, pathPos(x, y) * 40];          // tail tinted along its length
-      }
-      function mBands(x, y, t) {                    // diagonal colour bands sweeping across
-        var ph = x - y;                             // -2..2
-        return [0.5 + 0.5 * Math.sin(ph * 1.5 - t * 1.25), ((ph + 2) % 3) * 60];
-      }
-      function mRipple(x, y, t) {                   // rings pulsing out from the centre
-        var r = Math.sqrt((x - 1) * (x - 1) + (y - 1) * (y - 1));
-        return [0.5 + 0.5 * Math.sin(r * 2.4 - t * 1.6), r * 36];
-      }
-      var MODES = [mPhase, mSnake, mBands, mRipple], PERIOD = 7, FADE = 0.2;
-      function sample(x, y, t) {                    // hold each patch, then crossfade to the next
-        var u = t / PERIOD, k = Math.floor(u) % MODES.length, f = u - Math.floor(u);
-        var A = MODES[k](x, y, t);
-        if (f <= 1 - FADE) return A;
-        var B = MODES[(k + 1) % MODES.length](x, y, t);
-        var m = (f - (1 - FADE)) / FADE; m = m * m * (3 - 2 * m);    // smoothstep crossfade
-        return [A[0] + (B[0] - A[0]) * m, A[1] + (B[1] - A[1]) * m];
-      }
+      var N = 64, M = 4, CELL = N / M;
+      var R_REST = CELL * 0.27, R_PEAK = CELL * 0.48;   // dot radius at rest / under a ring
+      var SPEED = 2.0, WIDTH = 0.7, LIFE = 1.4;         // ring cells/s, thickness, decay (s)
 
       var cv = document.createElement('canvas');
       cv.width = cv.height = N;
@@ -944,120 +930,78 @@
       var link = document.querySelector('link[rel="icon"]') ||
                  document.head.appendChild(Object.assign(document.createElement('link'), { rel: 'icon' }));
 
-      function render(t) {
+      // amp: 0..1 per dot (null = rest frame); drift: slow hue rotation
+      function draw(amp, drift) {
         ctx.clearRect(0, 0, N, N);
-        ctx.shadowBlur = CELL * 0.18;              // soft glow on the bright pixels
         for (var y = 0; y < M; y++)
           for (var x = 0; x < M; x++) {
-            var s = sample(x, y, t);
-            var a = s[0] < 0.1 ? 0.1 : s[0] > 1 ? 1 : s[0];
-            var hue = (hueFor(x, y, t) + s[1]) % 360;
-            var lt = 74 + 5 * Math.sin(t * 0.8 + x * 1.1 + y * 0.7);
-            var col = 'hsl(' + hue.toFixed(1) + ' 85% ' + lt.toFixed(1) + '%)';
-            ctx.fillStyle = col; ctx.shadowColor = col; ctx.globalAlpha = a;
-            var x0 = Math.round(x * CELL), y0 = Math.round(y * CELL);
-            var w = Math.round((x + 1) * CELL) - x0, gap = 3;   // generous gaps between pixels
-            ctx.fillRect(x0 + gap, y0 + gap, w - 2 * gap, w - 2 * gap);
+            var a = amp ? amp[y * M + x] : 0.55;
+            var hue = (x + y) * 45 + 330 + drift + a * 50;
+            ctx.globalAlpha = 0.3 + 0.7 * a;
+            ctx.fillStyle = 'oklch(0.85 0.17 ' + (hue % 360).toFixed(1) + ')';
+            ctx.beginPath();
+            ctx.arc((x + 0.5) * CELL, (y + 0.5) * CELL, R_REST + (R_PEAK - R_REST) * a, 0, 6.2832);
+            ctx.fill();
           }
         ctx.globalAlpha = 1;
         link.href = cv.toDataURL('image/png');
       }
 
-      function drawX() {                           // static "X" shown while the tab is inactive
-        ctx.clearRect(0, 0, N, N);
-        ctx.shadowBlur = CELL * 0.18;
+      var drops = [], nextDrop = 0, amp = new Float32Array(M * M);
+      function frame(t) {
+        if (t >= nextDrop) {                         // land a new drop, biased toward the middle
+          var cx = Math.round(1.5 + (Math.random() + Math.random() - 1) * 1.8);
+          var cy = Math.round(1.5 + (Math.random() + Math.random() - 1) * 1.8);
+          drops.push({ x: cx, y: cy, t0: t });
+          if (drops.length > 4) drops.shift();
+          nextDrop = t + 0.8 + Math.random() * 0.9;
+        }
         for (var y = 0; y < M; y++)
           for (var x = 0; x < M; x++) {
-            var on = (x === y) || (x + y === M - 1);             // both diagonals -> an X
-            var hue = (x * 80 + y * 150) % 360;                  // spread the 5 lit cells across the spectrum
-            var col = 'hsl(' + hue.toFixed(1) + ' 85% 74%)';
-            ctx.fillStyle = col; ctx.shadowColor = col; ctx.globalAlpha = on ? 1 : 0.08;
-            var x0 = Math.round(x * CELL), y0 = Math.round(y * CELL);
-            var w = Math.round((x + 1) * CELL) - x0, gap = 3;
-            ctx.fillRect(x0 + gap, y0 + gap, w - 2 * gap, w - 2 * gap);
+            var sum = 0;
+            for (var k = 0; k < drops.length; k++) {
+              var d = drops[k], age = t - d.t0;
+              var off = Math.hypot(x - d.x, y - d.y) - age * SPEED;
+              sum += Math.exp(-off * off / WIDTH) * Math.exp(-age / LIFE);
+            }
+            amp[y * M + x] = Math.min(1, 0.15 + sum * 0.9);
           }
-        ctx.globalAlpha = 1;
-        link.href = cv.toDataURL('image/png');
+        draw(amp, t * 18);
       }
 
-      // animate while the tab is visible; freeze to a static X when it's inactive.
-      // (favicon encode is ~1ms, so the old 10fps interval was the bottleneck, not cost.)
+      // animate on rAF while visible (so it runs at the display rate and stops
+      // by itself in background tabs); show the still rest frame when hidden
       var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      var timer = null, clock = 0, last = null, speed = 1, target = 1;
-      // hovering the title eases the grid to 2x — the clock keeps accumulating, so
-      // only the rate changes and the patch position never jumps
+      var raf = 0, clock = 0, last = null, speed = 1, target = 1;
+      // hovering the title eases the rings to 2x — the clock keeps accumulating,
+      // so only the rate changes and nothing jumps
       var titleEl = document.querySelector('h1.title');
       if (titleEl) {
         titleEl.addEventListener('pointerenter', function () { target = 2; });
         titleEl.addEventListener('pointerleave', function () { target = 1; });
       }
+      function tickFav(now) {
+        if (last === null) last = now;
+        var dt = Math.min(100, now - last); last = now;
+        speed += (target - speed) * Math.min(1, dt / 130);
+        clock += dt / 1000 * speed;
+        frame(clock);
+        raf = requestAnimationFrame(tickFav);
+      }
       function active() {
-        if (timer) return;
-        if (reduce) { render(2); return; }                      // static grid, no animation
+        if (raf || reduce) return;
         last = null;
-        timer = setInterval(function () {
-          var now = performance.now();
-          if (last === null) last = now;
-          var dt = now - last; last = now;
-          speed += (target - speed) * Math.min(1, dt / 130);    // ease speed toward 1x / 2x
-          clock += dt / 1000 * speed;
-          render(clock);
-        }, 33);                                                  // ~30fps
+        raf = requestAnimationFrame(tickFav);
       }
       function inactive() {
-        if (timer) { clearInterval(timer); timer = null; }
-        drawX();
+        cancelAnimationFrame(raf); raf = 0;
+        draw(null, 0);
       }
       document.addEventListener('visibilitychange', function () {
         document.hidden ? inactive() : active();
       });
-      document.hidden ? inactive() : active();
-    })();
-  </script>
-
-  <!-- "connect with us" opens a self-contained modal holding the Cal.com inline embed -->
-  <style>
-    .cal-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
-    .cal-modal[hidden] { display: none; }
-    .cal-modal__backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.62); }
-    .cal-modal__box { position: relative; width: min(92vw, 1000px); height: auto; max-height: 86vh; min-height: 360px; overflow: auto; padding: 60px 18px 16px; background: #101012; border-radius: 14px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55); }
-    .cal-modal__close { position: absolute; top: 14px; right: 14px; z-index: 2; width: 32px; height: 32px; border: none; border-radius: 50%; background: rgba(255, 255, 255, 0.12); color: #fff; font-size: 20px; line-height: 1; cursor: pointer; }
-    .cal-modal__close:hover { background: rgba(255, 255, 255, 0.22); }
-    #my-cal-inline-30min { width: 100%; }
-  </style>
-  <div id="cal-modal" class="cal-modal" hidden>
-    <div class="cal-modal__backdrop" data-cal-close></div>
-    <div class="cal-modal__box" role="dialog" aria-modal="true" aria-label="Book a meeting">
-      <button class="cal-modal__close" data-cal-close aria-label="Close">&times;</button>
-      <div id="my-cal-inline-30min"></div>
-    </div>
-  </div>
-  <script type="text/javascript">
-    (function (C, A, L) { let p = function (a, ar) { a.q.push(ar); }; let d = C.document; C.Cal = C.Cal || function () { let cal = C.Cal; let ar = arguments; if (!cal.loaded) { cal.ns = {}; cal.q = cal.q || []; d.head.appendChild(d.createElement("script")).src = A; cal.loaded = true; } if (ar[0] === L) { const api = function () { p(api, arguments); }; const namespace = ar[1]; api.q = api.q || []; if (typeof namespace === "string") { cal.ns[namespace] = cal.ns[namespace] || api; p(cal.ns[namespace], ar); p(cal, ["initNamespace", namespace]); } else p(cal, ar); return; } p(cal, ar); }; })(window, "https://app.cal.com/embed/embed.js", "init");
-    Cal("init", "30min", { origin: "https://app.cal.com" });
-
-    (function () {
-      var link = document.getElementById('connect-link');
-      var modal = document.getElementById('cal-modal');
-      var loaded = false;
-      function open(e) {
-        if (e) e.preventDefault();
-        modal.hidden = false;
-        document.body.style.overflow = 'hidden';
-        if (!loaded) {                            // render the inline calendar on first open
-          loaded = true;
-          Cal.ns["30min"]("inline", {
-            elementOrSelector: "#my-cal-inline-30min",
-            config: { "layout": "month_view", "useSlotsViewOnSmallScreen": "true" },
-            calLink: "patrick-stoica-mypivj/30min"
-          });
-          Cal.ns["30min"]("ui", { "hideEventTypeDetails": false, "layout": "month_view", "theme": "dark" });
-        }
-      }
-      function close() { modal.hidden = true; document.body.style.overflow = ''; }
-      link.addEventListener('click', open);
-      modal.querySelectorAll('[data-cal-close]').forEach(function (el) { el.addEventListener('click', close); });
-      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) close(); });
+      draw(null, 0);
+      if (!document.hidden) active();
     })();
   </script>
 

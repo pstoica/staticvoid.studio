@@ -1,67 +1,64 @@
-// Regenerate public/favicon.png — a still frame of the animated favicon: a small grid
-// of big pastel "pixels" with gaps between them, colored as an alternating warm/cool
-// basketweave in the same palette as the runtime version in index.html. The runtime
-// version is generative (Conway's Life brightens/dims each pixel); this committed frame
-// is a clean, full-brightness grid for the deploy / first paint / link unfurls.
+// Regenerate public/favicon.png — the still "rest" frame of the animated favicon
+// in index.html: a 4x4 grid of round dots in a diagonal oklch rainbow. The
+// runtime version sends raindrop rings across the grid while the tab is visible;
+// this committed frame is what shows on first paint, in link unfurls, and in
+// background tabs. Keep the constants in sync with index.html.
 //
 //   node scripts/gen-favicon.mjs        (also: npm run favicon)
 //
-// Zero dependencies: draws into a float buffer (tile cores + soft glow, like the
-// canvas shadowBlur) and encodes a PNG by hand via the built-in zlib.
+// Zero dependencies: rasterizes antialiased circles into a buffer and encodes a
+// PNG by hand via the built-in zlib.
 
 import { deflateSync } from 'node:zlib';
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const N = 64, M = 3, CELL = N / M;
-const T = 0;                    // frozen frame (seconds)
-const GLOW = CELL * 0.18, GAP = 3;   // big gaps between pixels
-const WARM = [350, 25, 48], COOL = [150, 200, 275];   // alternating warm / cool pastels
-const hueFor = (x, y) => ((x + y) & 1 ? COOL : WARM)[((x - y) % 3 + 3) % 3] + T * 10;
+const N = 64, M = 4, CELL = N / M;
+const R_REST = CELL * 0.27, R_PEAK = CELL * 0.48;
+const A = 0.55;                                      // rest amplitude (matches draw(null))
 
-function hslToRgb(h, s, l) {    // h:deg, s/l:0..1 -> [r,g,b] 0..255
-  const k = n => (n + h / 30) % 12;
-  const a = s * Math.min(l, 1 - l);
-  const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
-  return [f(0), f(8), f(4)].map(v => v * 255);
+// oklch -> linear sRGB -> gamma-encoded 0..255 (clamped)
+function oklchToRgb(L, C, hDeg) {
+  const h = hDeg * Math.PI / 180, a = C * Math.cos(h), b = C * Math.sin(h);
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+  const l = l_ ** 3, m = m_ ** 3, s = s_ ** 3;
+  const lin = [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+  ];
+  return lin.map(v => {
+    v = Math.max(0, Math.min(1, v));
+    return 255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055);
+  });
 }
 
-// big pastel pixels on a 3x3 grid — every pixel bright, gaps between
-const tiles = [];
+const dots = [];
 for (let y = 0; y < M; y++)
   for (let x = 0; x < M; x++) {
-    const hue = hueFor(x, y);
-    const light = 74 + 5 * Math.sin(T * 0.8 + x * 1.1 + y * 0.7);
-    const [rr, gg, bb] = hslToRgb(hue, 0.85, light / 100);
-    const x0 = Math.round(x * CELL) + GAP, x1 = Math.round((x + 1) * CELL) - GAP;
-    const y0 = Math.round(y * CELL) + GAP, y1 = Math.round((y + 1) * CELL) - GAP;
-    tiles.push({ x0, y0, x1, y1, r: rr, g: gg, b: bb });
+    const hue = ((x + y) * 45 + 330 + A * 50) % 360;
+    dots.push({
+      cx: (x + 0.5) * CELL, cy: (y + 0.5) * CELL,
+      r: R_REST + (R_PEAK - R_REST) * A,
+      rgb: oklchToRgb(0.85, 0.17, hue),
+      alpha: 0.3 + 0.7 * A,
+    });
   }
 
-// per-pixel accumulation: opaque cores + additive (screen-ish) glow falloff
 const buf = Buffer.alloc(N * N * 4);
-for (let py = 0; py < N; py++) {
+for (let py = 0; py < N; py++)
   for (let px = 0; px < N; px++) {
-    let R = 0, G = 0, B = 0, A = 0;
     const x = px + 0.5, y = py + 0.5;
-    for (const t of tiles) {
-      let w;
-      if (x >= t.x0 && x < t.x1 && y >= t.y0 && y < t.y1) {
-        w = 1;                                          // core
-      } else {
-        const dx = Math.max(t.x0 - x, 0, x - t.x1);
-        const dy = Math.max(t.y0 - y, 0, y - t.y1);
-        w = Math.max(0, 1 - Math.hypot(dx, dy) / GLOW) ** 2 * 0.7;   // glow
-      }
-      if (w <= 0) continue;
-      R = Math.max(R, t.r * w); G = Math.max(G, t.g * w); B = Math.max(B, t.b * w);
-      A = Math.min(255, A + w * 255);
+    for (const d of dots) {
+      const cov = Math.max(0, Math.min(1, d.r - Math.hypot(x - d.cx, y - d.cy) + 0.5));
+      if (cov <= 0) continue;
+      const i = (py * N + px) * 4;                   // dots never overlap: write directly
+      buf[i] = Math.round(d.rgb[0]); buf[i + 1] = Math.round(d.rgb[1]);
+      buf[i + 2] = Math.round(d.rgb[2]); buf[i + 3] = Math.round(255 * d.alpha * cov);
     }
-    const i = (py * N + px) * 4;
-    buf[i] = Math.round(R); buf[i + 1] = Math.round(G);
-    buf[i + 2] = Math.round(B); buf[i + 3] = Math.round(A);
   }
-}
 
 // --- minimal PNG encoder (RGBA, no filter) ---
 function chunk(type, data) {
