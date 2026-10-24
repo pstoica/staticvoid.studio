@@ -652,6 +652,24 @@ function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
   // run through freezeOscParams (it only freezes rate/lo/hi/phase/spread/drift), so a pointer
   // or fingertip target stays live — freezing it would pin the heat map to wherever the mouse
   // happened to be when the glyph was born.
+  // live(signal): re-read a signal every frame instead of using its frozen onset value.
+  // `src` is deliberately not in freezeOscParams' key list, so it stays a live Pattern.
+  if (d.shape === 'live') {
+    let v0 = +evalGlobal(d.src, cycle, elapsed);
+    if (!Number.isFinite(v0)) v0 = 0;
+    const lo0 = numAt(d.lo, age, gp, st, ageC, stC), hi0 = numAt(d.hi, age, gp, st, ageC, stC);
+    if (d.ease) v0 = applyEase(d.ease, v0);
+    let r0 = lo0 + v0 * (hi0 - lo0);
+    if (d.ops) for (const [op, x] of d.ops) {
+      if (op === 'bt') { const l = numAt(x[0], age, gp, st, ageC, stC), h = numAt(x[1], age, gp, st, ageC, stC); r0 = r0 >= l && r0 <= h ? 1 : 0; continue; }
+      const y = numAt(x, age, gp, st, ageC, stC);
+      r0 = op === '*' ? r0 * y : op === '+' ? r0 + y : op === '-' ? r0 - y : op === '/' ? r0 / y
+        : op === 'q' ? Math.round(r0 * y) / y
+        : op === '>' ? (r0 > y ? 1 : 0) : op === '>=' ? (r0 >= y ? 1 : 0)
+        : op === '<' ? (r0 < y ? 1 : 0) : op === '<=' ? (r0 <= y ? 1 : 0) : r0;
+    }
+    return r0;
+  }
   if (d.shape === 'near' || d.shape === 'dist') {
     const tx = +evalGlobal(d.nx, cycle, elapsed) || 0;
     const ty = +evalGlobal(d.ny, cycle, elapsed) || 0;
@@ -1705,6 +1723,50 @@ function renderLayerChips() {
 
 // ── presets ───────────────────────────────────────────────────────────────────────
 const PRESETS = {
+  // 24 bars, each ONE held glyph whose size is read live every frame. The naive version
+  // respawns the glyphs to re-sample the mic (signals freeze at onset), which costs a spawn
+  // per update and retriggers the envelope — laggy and jittery. live() removes the churn;
+  // .spring() gives the bars weight so they fall instead of twitching.
+  'spectrum': `group(
+  bg("#05050c"),
+  stack(...[...Array(24)].map((_, i) =>
+    shape("square").x((i + 0.5) / 24).y(0.5)
+      .id("b" + i).hold(1)
+      .size(live(micBand(i)).range(0.004, 0.11).spring(120, 15))
+      .color(palette("rainbow").at(i / 24))
+  ))
+).glow(live(micHit()).range(0.05, 0.8), 0.6)`,
+
+  // impulse, not spectrum: every transient throws a ring that expands and fades. Closer to
+  // a drop in water than to a bar graph — .gate() with hysteresis so one hit makes one ring.
+  'ripples': `group(
+  bg("#04040a"),
+  shape("ring*16").x(rand).y(rand)
+    .gate(micHit().gt(0.25, 0.1))
+    .size(osc(0.5, "saw").free().range(0.01, 0.55))
+    .weight(0.004)
+    .alpha(osc(0.5, "saw").free().range(0.9, 0))
+    .color(palette("ice").at(rand))
+    .decay(2)
+).glow(0.35, 0.7)`,
+
+  // mask + meshfill: the colour field exists everywhere, but you only see it through the
+  // window — and the window is the sound. Drag the mouse to move it.
+  'mask field': `stack(
+  bg("#05050c"),
+  $("win",
+    shape("circle").x(mouseX).y(mouseY)
+      .id("w").hold(1)
+      .size(live(mic()).range(0.12, 0.44).spring(60, 12))
+      .color("#ffffff")
+  ).hidden(),
+  $("field",
+    group(
+      shape("dot*10").fast(2).x(rand).y(rand)
+        .size(0.012).color(palette("rainbow").at(rand)).decay(6)
+    ).meshfill(0.85, 12, 0.35, 2)
+  ).mask("win")
+)`,
   // masking: a layer marked .hidden() is never drawn, it only cuts the layer that names it.
   // Drag the cursor — the window moves with you.
   'mask': `stack(

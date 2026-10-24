@@ -1405,7 +1405,26 @@ export class GLRenderer {
       const [, kind, payload, name] = u;
       if (cache.has(u)) return cache.get(u);
       let tex;
-      if (kind === 1) tex = layer(payload);
+      if (kind === 1) {
+        tex = layer(payload);
+        // A layer-level .mask() on a layer whose content is a group — $("art", group(...))
+        // .mask("hole") — has no chain of its own to live in, so apply it to the group's
+        // finished texture here. Without this the mask silently did nothing for that form.
+        const lm = lmeta(name);
+        const msrc = lm && lm.mask && this._buses.get(String(lm.mask.src));
+        if (msrc) {
+          const key = '$' + name;
+          busKeys.add(key);
+          const rt = this._getGroupRT(key);
+          const mat = this.fx.mask;
+          mat.uniforms.tMask.value = msrc;
+          mat.uniforms.uMode.value = lm.mask.mode === 'alpha' ? 1 : 0;
+          mat.uniforms.uInvert.value = this._num(lm.mask.invert, 0) > 0.5 ? 1 : 0;
+          mat.uniforms.uAmount.value = this._num(lm.mask.amount == null ? 1 : lm.mask.amount, 1);
+          this._blit(mat, tex, rt.a);
+          tex = rt.a.texture;
+        }
+      }
       else {                             // bare glyphs need an RT of their own to be sampled
         const key = '$' + name;
         busKeys.add(key);

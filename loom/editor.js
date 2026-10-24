@@ -21,7 +21,7 @@ const FN = new Set(['shape', 's', 'n', 'polygon', 'polyline', 'stack', 'cat', 's
   'ballX', 'ballY', 'ballSeen', 'moving', 'thrown', 'caught', 'tapped', 'held', 'shaken', 'flight', 'gyro', 'accel', 'speed', 'apexed', 'apexHeight', 'landX', 'landY', 'landing',
   'fingerX', 'fingerY', 'fingerZ', 'fingerUp', 'fingersUp', 'pinch', 'palmX', 'palmY', 'handSeen', 'handNear', 'poseX', 'poseY', 'poseSeen',
   'mouthOpen', 'smile', 'browRaise', 'mouthX', 'mouthY', 'faceX', 'faceY', 'faceSeen',
-  'mic', 'micLow', 'micMid', 'micHigh', 'micBand', 'micHit', 'gx', 'gy', 'near', 'dist',
+  'mic', 'micLow', 'micMid', 'micHigh', 'micBand', 'micHit', 'gx', 'gy', 'near', 'dist', 'live',
   'text', 'spoken', 'said', 'spoke', 'saying', 'heard',
   'level', 'band', 'low', 'mid', 'high', 'hit', '$']);
 const SIG = new Set(['sine', 'cosine', 'saw', 'isaw', 'tri', 'square', 'rand', 'perlin', 'fbm', 'brown',
@@ -73,6 +73,7 @@ const C_SIG = [
   ['white', 'alias of rand — white noise'],
   ['mouseX', 'pointer x'], ['mouseY', 'pointer y'], ['mouseDown', '1 while pressed'],
   ['gx', "this glyph's own x at birth — colour/size by where it landed"], ['gy', "this glyph's own y at birth"],
+  ['live', 'read a SIGNAL every frame instead of freezing it at onset — live(micBand(3)).range(..)'],
   ['near', 'LIVE closeness of this glyph to a point (default the cursor) — a heat map. 4th arg = field shape: square|diamond|cross|ring|star|noise|n-gon'],
   ['dist', 'LIVE distance of this glyph to a point — near() inverted, unclamped'],
   ['cc', 'MIDI CC — cc(num, ch)'], ['gate', '1 while a note is held'], ['vel', 'note velocity'],

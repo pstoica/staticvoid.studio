@@ -1439,6 +1439,24 @@ function gy() { return signal(() => _gpos.y); }
 //   <number> a regular n-gon: near(0.4, 6) via near(x, y, 0.4, 6) — 3 = triangle, 6 = hex
 // .phase(t) ROTATES the field (turns), and it is patternable like any osc param, so
 // near("square").phase(saw.slow(8)) is a slowly turning box of light.
+
+// live(signal): make any SIGNAL update per frame instead of freezing at the glyph's onset.
+//
+// Signals (mic, tracking, MIDI, mouse) are sampled once when a glyph spawns — that's what
+// makes a trail of glyphs each remember where the hand was. For audio-reactive work you
+// usually want the opposite: ONE glyph whose size or colour tracks the sound continuously.
+// Without this the only way to get that is to respawn the glyph many times a second, which
+// costs a spawn per update and re-triggers the envelope each time — the "laggy and jittery
+// spectrum" problem.
+//
+// live() wraps the signal as an osc-family value, which the renderer re-evaluates every
+// frame per glyph, so a single held glyph follows the signal smoothly and costs nothing:
+//   shape("square").id("b").hold(1).size(live(micBand(3)).range(0.01, 0.1))
+// Everything on the osc side composes: .range() .ease() .spring() .gt() .quantize().
+// .spring() is the good one here — live(mic()).spring(90, 14) gives the bar weight and
+// stops it twitching on every sample.
+function live(sig) { return makeOsc({ shape: 'live', rate: 0, lo: 0, hi: 1, phase: 0, src: reify(sig) }); }
+
 function near(x, y, radius = 0.4, form) {
   // near("square") / near("star", 0.3): a leading string is the FORM, target defaults to the
   // pointer — the common case should not need two undefineds to reach the interesting argument.
@@ -1724,7 +1742,7 @@ export const DSL = {
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, apexed, apexHeight, landX, landY, landing, flight, gyro, accel, speed, _jug, _jugInput, _jugDecay,
   fingerX, fingerY, fingerZ, fingerUp, fingersUp, pinch, palmX, palmY, handSeen, handNear, poseX, poseY, poseSeen,
   cam, _setCamSink, _handInput, _poseInput, _faceInput, _micInput, _resetTracking, _getTracking,
-  gx, gy, near, dist, _setGlyphPos,
+  gx, gy, near, dist, live, _setGlyphPos,
   text, spoken, said, spoke, saying, heard, _speechInput, _speechFrame, _speechDecay,
   mouthOpen, smile, browRaise, mouthX, mouthY, faceX, faceY, faceSeen,
   mic, micLow, micMid, micHigh, micBand, micHit,

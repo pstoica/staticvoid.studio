@@ -949,6 +949,27 @@ is composited, so stacking order doesn't constrain you. Two layers masking each 
 one frame late rather than breaking. A layer nobody references costs nothing extra; masking
 allocates buffers only for the layers actually involved.
 
+### Live signals (`live`)
+
+Signals **freeze at onset** — a glyph samples `mic()` or `fingerX()` once, when it spawns.
+That's what makes a trail of glyphs each remember where the sound or the hand was, and it is
+usually right. For audio-reactive work it usually isn't: you want *one* glyph whose size or
+colour follows the sound continuously.
+
+Without `live()` the only way to get that is to respawn the glyph many times a second, which
+costs a spawn per update and retriggers the envelope on each one — a spectrum built that way
+is both laggy and jittery.
+
+```js
+shape("square").id("b").hold(1)                   // ONE glyph, spawned once
+  .size(live(micBand(3)).range(0.01, 0.1))        // …that tracks band 3 every frame
+```
+
+`live(sig)` wraps any signal as an osc-family value, re-read per glyph per frame, so the
+whole osc side composes: `.range()`, `.ease()`, `.gt()`, `.quantize()`, and especially
+`.spring()` — `live(mic()).range(0, 1).spring(120, 15)` gives a bar weight so it falls
+instead of twitching on every sample.
+
 ### Comparisons
 
 A comparison turns a continuous signal into a hard **`0/1`**, which is exactly what the
