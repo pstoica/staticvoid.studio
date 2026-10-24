@@ -949,6 +949,30 @@ is composited, so stacking order doesn't constrain you. Two layers masking each 
 one frame late rather than breaking. A layer nobody references costs nothing extra; masking
 allocates buffers only for the layers actually involved.
 
+### One sweep over a glyph's life (`life`)
+
+`life()` is how far a glyph is through its **own** life — `0` at birth, `1` as it dies.
+
+The tempting way to sweep a value across a lifetime is a free oscillator whose period you
+match to `.decay()` by hand. That match is a lie. A glyph's real lifetime is
+`decay / cps * masterDecay` **seconds**, while a `.free()` osc runs in real seconds — so the
+two desync the moment the tempo changes or the master decay slider moves, and a saw that
+wraps mid-life snaps from `1` straight back to `0`. That snap is the hard pop at the head of
+a trail.
+
+```js
+.size(life().range(0.05, 0.22))                   // grows once, never wraps
+.alpha(life().range(0.35, 0))                     // fades once
+.size(life().ease("outCubic").range(0.05, 0.22))  // fast, then drifting
+```
+
+Measured at tempo `0.3` (glyph alive ~10 s, saw period 4 s): `life()` gives one clean ramp
+with zero snap-backs; `osc(0.25,"saw").free()` snaps back twice inside the same life.
+
+It's osc-family, so it's live per frame and composes with `.ease()`, `.range()`, `.spring()`
+and the comparisons. `.hold()` parks it — a held glyph sits where it is and only resumes
+once it lets go.
+
 ### Live signals (`live`)
 
 Signals **freeze at onset** — a glyph samples `mic()` or `fingerX()` once, when it spawns.

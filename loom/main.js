@@ -654,6 +654,26 @@ function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
   // happened to be when the glyph was born.
   // live(signal): re-read a signal every frame instead of using its frozen onset value.
   // `src` is deliberately not in freezeOscParams' key list, so it stays a live Pattern.
+  // life(): normalized progress through this glyph's own envelope, immune to cps / the master
+  // decay slider / .hold() — the thing a hand-matched free osc only approximates.
+  if (d.shape === 'life') {
+    const g = _curGlyph;
+    const total = g ? (g.attack || 0) + (g.decay || 0) : 0;
+    let v0 = g && total > 0 ? g.envAge / total : 0;
+    v0 = v0 < 0 ? 0 : v0 > 1 ? 1 : v0;
+    if (d.ease) v0 = applyEase(d.ease, v0);
+    const lo0 = numAt(d.lo, age, gp, st, ageC, stC), hi0 = numAt(d.hi, age, gp, st, ageC, stC);
+    let r0 = lo0 + v0 * (hi0 - lo0);
+    if (d.ops) for (const [op, x] of d.ops) {
+      if (op === 'bt') { const l = numAt(x[0], age, gp, st, ageC, stC), h = numAt(x[1], age, gp, st, ageC, stC); r0 = r0 >= l && r0 <= h ? 1 : 0; continue; }
+      const y = numAt(x, age, gp, st, ageC, stC);
+      r0 = op === '*' ? r0 * y : op === '+' ? r0 + y : op === '-' ? r0 - y : op === '/' ? r0 / y
+        : op === 'q' ? Math.round(r0 * y) / y
+        : op === '>' ? (r0 > y ? 1 : 0) : op === '>=' ? (r0 >= y ? 1 : 0)
+        : op === '<' ? (r0 < y ? 1 : 0) : op === '<=' ? (r0 <= y ? 1 : 0) : r0;
+    }
+    return r0;
+  }
   if (d.shape === 'live') {
     let v0 = +evalGlobal(d.src, cycle, elapsed);
     if (!Number.isFinite(v0)) v0 = 0;

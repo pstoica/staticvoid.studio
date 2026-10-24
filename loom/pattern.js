@@ -1455,6 +1455,24 @@ function gy() { return signal(() => _gpos.y); }
 // Everything on the osc side composes: .range() .ease() .spring() .gt() .quantize().
 // .spring() is the good one here — live(mic()).spring(90, 14) gives the bar weight and
 // stops it twitching on every sample.
+
+// life(): how far this glyph is through its OWN life — 0 at birth, 1 as it dies.
+//
+// The obvious way to sweep a value across a glyph's lifetime is a free osc whose period you
+// match to .decay() by hand. That match is a lie: a glyph's real lifetime is
+// `decay / cps * masterDecay` seconds, while a .free() osc runs in real seconds, so the two
+// desync the moment you change the tempo or touch the decay slider — and a saw that wraps
+// mid-life snaps from 1 back to 0, which is the hard pop at the head of the tail.
+//
+// life() reads the glyph's own envelope clock instead, so it is exactly one sweep no matter
+// the tempo, the master decay, or how long the glyph was held:
+//   .size(life().range(0.05, 0.22))     grows once, never wraps
+//   .alpha(life().range(0.35, 0))       fades once
+//   .size(life().ease("outCubic").range(0.05, 0.22))   fast then drifting
+// Being osc-family it is live per frame, and .hold() parks it at the sustain point — a held
+// glyph sits where it is and only resumes once you let go.
+function life() { return makeOsc({ shape: 'life', rate: 0, lo: 0, hi: 1, phase: 0 }); }
+
 function live(sig) { return makeOsc({ shape: 'live', rate: 0, lo: 0, hi: 1, phase: 0, src: reify(sig) }); }
 
 function near(x, y, radius = 0.4, form) {
@@ -1742,7 +1760,7 @@ export const DSL = {
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, apexed, apexHeight, landX, landY, landing, flight, gyro, accel, speed, _jug, _jugInput, _jugDecay,
   fingerX, fingerY, fingerZ, fingerUp, fingersUp, pinch, palmX, palmY, handSeen, handNear, poseX, poseY, poseSeen,
   cam, _setCamSink, _handInput, _poseInput, _faceInput, _micInput, _resetTracking, _getTracking,
-  gx, gy, near, dist, live, _setGlyphPos,
+  gx, gy, near, dist, live, life, _setGlyphPos,
   text, spoken, said, spoke, saying, heard, _speechInput, _speechFrame, _speechDecay,
   mouthOpen, smile, browRaise, mouthX, mouthY, faceX, faceY, faceSeen,
   mic, micLow, micMid, micHigh, micBand, micHit,
