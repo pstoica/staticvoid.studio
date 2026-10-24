@@ -949,6 +949,18 @@ is composited, so stacking order doesn't constrain you. Two layers masking each 
 one frame late rather than breaking. A layer nobody references costs nothing extra; masking
 allocates buffers only for the layers actually involved.
 
+### Lifetime controls take signals too
+
+`.attack(s)` and `.decay(s, curve)` are **sampled once at onset**, so each glyph keeps the
+lifetime it was born with — but the value may be a number, an osc **or a signal**, which makes
+per-glyph variety easy:
+
+```js
+.decay(rand.range(1, 5))              // every glyph lives a different length
+.decay(rand.range(2, 6), "inOutSine") // …and fades out on a curve
+.attack(perlin.range(0.1, 1))         // births ease in by varying amounts
+```
+
 ### One sweep over a glyph's life (`life`)
 
 `life()` is how far a glyph is through its **own** life — `0` at birth, `1` as it dies.

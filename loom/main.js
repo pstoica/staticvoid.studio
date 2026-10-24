@@ -382,6 +382,20 @@ function spawn(value, onset) {
   // an osc's signal params (osc().range(vel(), …)) are frozen first, else numAt NaNs on the raw
   // Pattern — invisible on a normal glyph (the live mod redraws it), but a physics body built
   // from a NaN size never shows up at all
+  // attack/decay are baked at onset — each glyph keeps the lifetime it was born with — but
+  // they used to be read RAW, so an osc or a signal went straight into `x / cps` and came
+  // out NaN: .decay(rand.range(2,6)) silently produced glyphs that never drew. Resolve them
+  // the way every other onset-sampled control is resolved.
+  const onsetNum = (x, def) => {
+    if (x == null) return def;
+    if (isOsc(x)) return numAt({ __osc: freezeOscParams(x.__osc, onset) }, 0, phase);
+    if (x instanceof DSL.Pattern) {
+      for (const h of x.query(DSL.span(onset, onset))) if (h.value != null) return +h.value;
+      return def;
+    }
+    const n = +x;
+    return Number.isFinite(n) ? n : def;
+  };
   const baseNum = (f, def) => (sprInit[f] != null ? sprInit[f]
     : isOsc(v[f]) ? numAt({ __osc: freezeOscParams(v[f].__osc, onset) }, 0, phase)
     : numAt(v[f] != null ? v[f] : def, 0, phase));
@@ -443,10 +457,10 @@ function spawn(value, onset) {
     press: null,               // .sustain(): the MIDI press this glyph belongs to (held while it's down)
     relAt: null,               // age (s) when the glyph let go — adsr()/released() read it; null while held
     onRel: v._onRel || null,   // .onRelease(pat): spawned where the glyph is when it lets go
-    attack: v.attack != null ? v.attack : 0.06,
+    attack: onsetNum(v.attack, 0.06),
     // fade-out seconds; default ~1 cycle. The master slider is baked in HERE so
     // each glyph keeps the decay it was born with.
-    decay: ((v.decay != null ? v.decay : 1.0) / cps) * decayScale,
+    decay: (onsetNum(v.decay, 1.0) / cps) * decayScale,
     // optional Penner curve names for the attack/decay envelope segments (else linear)
     attackEase: v.attackEase || null,
     decayEase: v.decayEase || null,
@@ -1743,6 +1757,28 @@ function renderLayerChips() {
 
 // ── presets ───────────────────────────────────────────────────────────────────────
 const PRESETS = {
+  // concentric rings from two drifting sources, each expanding exactly once over its own
+  // life. life() rather than a free saw: a saw only lines up with the lifetime at one tempo
+  // and one master-decay setting, and wraps into a hard snap at any other.
+  'ripples 2': `group(
+  bg("#03040c"),
+  shape("ring*5")
+    .x(osc(0.07,"perlin").drift(0.2).range(0.25,0.75))
+    .y(osc(0.09,"perlin").drift(0.3).range(0.3,0.7))
+    .size(life().ease("outCubic").range(0.01, 0.6))
+    .weight(life().range(0.014, 0.0008))
+    .alpha(life().range(0.6, 0))
+    .color(palette("ice").at(life().range(0.1, 0.9)))
+    .decay(4, "inOutSine"),
+  shape("ring*3")
+    .x(osc(0.05,"perlin").drift(0.4).range(0.3,0.7))
+    .y(osc(0.06,"perlin").drift(0.1).range(0.35,0.65))
+    .size(life().ease("outCubic").range(0.02, 0.95))
+    .weight(life().range(0.01, 0.0005))
+    .alpha(life().range(0.35, 0))
+    .color(palette("ember").at(life().range(0.2, 0.8)))
+    .decay(rand.range(5, 9), "inOutSine")
+).glow(0.5, 0.85)`,
   // 24 bars, each ONE held glyph whose size is read live every frame. The naive version
   // respawns the glyphs to re-sample the mic (signals freeze at onset), which costs a spawn
   // per update and retriggers the envelope — laggy and jittery. live() removes the churn;
