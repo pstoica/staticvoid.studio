@@ -7,7 +7,7 @@
 // Phase 2 (inline slider widgets) builds on this — it just adds decorations + a parser.
 
 import { EditorState } from '@codemirror/state';
-import { EditorView, keymap, Decoration, ViewPlugin, WidgetType, highlightActiveLine, hoverTooltip } from '@codemirror/view';
+import { EditorView, keymap, Decoration, ViewPlugin, WidgetType, highlightActiveLine, hoverTooltip, tooltips } from '@codemirror/view';
 import { history, historyKeymap, defaultKeymap, indentWithTab, toggleComment } from '@codemirror/commands';
 import { StreamLanguage, HighlightStyle, syntaxHighlighting, indentUnit } from '@codemirror/language';
 import { Tag } from '@lezer/highlight';
@@ -226,7 +226,7 @@ const loomHover = hoverTooltip((view, pos) => {
   const doc = DOC.get(word);
   if (!doc) return null;
   return {
-    pos: line.from + a, end: line.from + b, above: true,
+    pos: line.from + a, end: line.from + b,
     create() {
       const dom = document.createElement('div');
       dom.className = 'cm-loomdoc';
@@ -302,7 +302,7 @@ const loomHighlight = HighlightStyle.define([
 // old #code rule, a dark text-shadow halo for legibility over busy art (the CM analog of the
 // old per-line hugging box, which doesn't map to CM's block lines while wrapping).
 const loomTheme = EditorView.theme({
-  '.cm-tooltip': { border: '1px solid rgba(255,255,255,.14)', borderRadius: '8px',
+  '.cm-tooltip': { zIndex: '40', border: '1px solid rgba(255,255,255,.14)', borderRadius: '8px',
     background: 'rgba(18,18,26,.97)', color: 'var(--ink)', boxShadow: '0 8px 28px rgba(0,0,0,.45)',
     backdropFilter: 'blur(6px)' },
   '.cm-tooltip.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--mono)', fontSize: '13px', maxHeight: '17em' },
@@ -543,6 +543,9 @@ export function createEditor(parent, opts = {}) {
       loomTheme,
       sliderPlugin,
       liveSigPlugin,
+      // into <body>, not the editor: the toolbar is z-index 7 in its own stacking context, so
+      // a tooltip parented inside the editor paints UNDERNEATH it however high its z-index.
+      tooltips({ parent: document.body, position: 'fixed' }),
       autocompletion({ override: [loomComplete], activateOnTyping: true, maxRenderedOptions: 30 }),
       loomHover,
       runKeys,
