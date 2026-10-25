@@ -167,7 +167,72 @@ const EASE_NAMES = ['linear', 'inSine', 'outSine', 'inOutSine', 'inQuad', 'outQu
   'inCubic', 'outCubic', 'inOutCubic', 'inQuart', 'outQuart', 'inOutQuart', 'inExpo', 'outExpo',
   'inOutExpo', 'inBack', 'outBack', 'inOutBack', 'inElastic', 'outElastic', 'inOutElastic',
   'inBounce', 'outBounce', 'inOutBounce'];
-const opt = (list, type) => list.map(([label, detail]) => ({ label, type, detail }));
+// Signatures and ranges, kept separate from the descriptions so an entry can gain one
+// without rewriting its line. Shown in the completion list after the name and on the first
+// line of the hover card. Ranges are the DOCUMENTED ones (REFERENCE.md), not guesses; `?`
+// marks an optional argument. A name with no entry here simply shows its description.
+const HINT = {
+  // ── sources ──
+  shape: '("circle*8")', s: '("circle*8")', text: '("hold my beer")', n: '(i)',
+  stack: '(...pats)', cat: '(...pats)', seq: '(...pats)', run: '(k)', pure: '(v)',
+  euclid: '(hits, steps, pat)', polygon: '([pts])', polyline: '([pts])',
+  choose: '(...vals)', irand: '(k)', pick: '([list], sig)', iff: '(cond, a, b)',
+  bg: '("#101820")', cam: '(opacity 0..1)', persp: '(dist · 0 = ortho)',
+  group: '(...pats)', echo: '(group, n)', physics: '(pat, opts)', $: '("name", pat)',
+  slider: '(value, min?, max?, default?)', stripes: '(n)', checker: '(cols, rows?)',
+  // ── signals ──
+  osc: '(rate, "sine|saw|tri|square|rand|perlin|fbm")', env: '(attack s, decay s, easeIn?, easeOut?)',
+  spring: '(target, stiffness≈120, damping≈14)', palette: '("neon").at(0..1)',
+  live: '(signal) → live per frame',
+  near: '(x?, y?, radius 0..1, form?) → 0..1', dist: '(x?, y?) → 0..~1',
+  gx: '() → 0..1 at birth', gy: '() → 0..1 at birth',
+  cc: '(num, ch 1..16)', gate: '(ch) MIDI   ·   .gate(condition) keeps events', vel: '(ch) → 0..1', note: '(ch) → 0..1',
+  pc: '(ch) → 0..1', bend: '(ch) → -1..1', key: '("C4" | 60, ch?)', onNote: '(ch, "circle")',
+  onRelease: '(ch, "ring")', noteHit: '(ch?, decay s) → 0..1', heldFor: '(ch?) → seconds',
+  adsr: '(a s, d s, sustain 0..1, r s)', released: '(s) → 0..1',
+  mic: '() → 0..1', micLow: '() → 0..1', micMid: '() → 0..1', micHigh: '() → 0..1',
+  micBand: '(0..23) → 0..1', micHit: '() → 0..1 pulse',
+  mouthOpen: '() → 0..1', smile: '() → 0..1', browRaise: '() → 0..1',
+  fingerX: '(0..4 thumb→pinky, hand?)', fingerY: '(0..4, hand?)', fingerZ: '(0..4, hand?)',
+  fingerUp: '(0..4, hand?) → 0/1', fingersUp: '(hand?) → 0..5', pinch: '(hand?) → 0..1',
+  palmX: '(hand?)', palmY: '(hand?)', handSeen: '(hand?) → 0/1',
+  poseX: '("nose"|"rwrist"…)', poseY: '("nose"|"rwrist"…)',
+  ballX: '("a")', ballY: '("a")', thrown: '("a") → 0..1 pulse', caught: '("a") → 0..1 pulse',
+  spoken: '(shape?) → one glyph per word', said: '("word") → 0..1 pulse',
+  // ── controls ──
+  size: '(0..1 of min(w,h) · default 0.06)', x: '(0..1)', y: '(0..1)',
+  radius: '(0..0.5 typical)', angle: '(turns · 1 = full circle)', grid: '(cols, rows?, order?)',
+  rotate: '(turns)', rotateX: '(turns)', rotateY: '(turns)', spin: '(turns/second)',
+  alpha: '(0..1)', opacity: '(0..1)', pan: '(0..1 · .5 = centre)', jitter: '(0..0.1 typical)',
+  weight: '(0..0.1 of min(w,h))', outline: '(fraction of radius)', shade: '(0..1)',
+  open: '(0..1)', blend: '("lighter"|"screen"|"multiply")', cap: '("round"|"butt"|"square")',
+  join: '("round"|"miter"|"bevel")', fill: '(0/1)', stroke: '(0/1)', vertex: '(0/1)',
+  attack: '(seconds, curve?)', decay: '(seconds, curve?)',
+  // two senses share this name: the signal life() and the .life(s) alias for .decay(s)
+  life: '() → 0..1 across the glyph\'s life   ·   .life(seconds) = alias for .decay',
+  hold: '(condition)', id: '("key")', stencil: '(0..1)', burst: '(n, spread?)',
+  // ── transforms ──
+  fast: '(n)', slow: '(n)', every: '(n, f)', iter: '(n)', jux: '(f)', superimpose: '(f)',
+  off: '(cycles, f)', degradeBy: '(0..1)', sometimesBy: '(0..1, f)', when: '(cond, f)',
+  early: '(cycles)', late: '(cycles)', range: '(lo, hi)', quantize: '(n steps)',
+  segment: '(n/cycle)', seg: '(n/cycle)', sample: '(n/cycle)', ease: '("outExpo")',
+  spread: '(n)', phase: '(turns)', rate: '(n)', drift: '(per second)', free: '(rate in Hz)',
+  falloff: '(k · 1 = default, >1 tighter)', slew: '(rise s, fall s)',
+  gt: '(trip, release?)', gte: '(trip, release?)', lt: '(trip, release?)', lte: '(trip, release?)',
+  between: '(lo, hi)',
+  // ── group FX ──
+  pixelate: '(block px)', blur: '(radius px)', glow: '(amount 0..1, reach 0..1)',
+  meshfill: '(amount 0..1, k 1..32, warp?, sharp 0.5..4)', radiance: '(amount, reach)',
+  feedback: '(fade 0..1, zoom≈1, rot, loopFx?)', trails: '(fade 0..1, loopFx?)',
+  silhouette: '(1 inside | -1 outside, snap?)', mask: '("layer", { mode, invert, amount })',
+  hidden: '(on = true)', hue: '(turns)', brightness: '(n)', contrast: '(n)', saturate: '(n)',
+  kaleido: '(wedges)', mirror: '(0/1)', tile: '(n)', dots: '(size)', rgbshift: '(amount)',
+  posterize: '(levels ≥2)', dither: '(levels ≥2)', scanlines: '(0..1)', lens: '(amount)',
+  scale: '(n)', move: '(x, y)', turn: '(turns)', aspect: '(ratio)',
+};
+
+const opt = (list, type) => list.map(([label, detail]) =>
+  ({ label, type, detail: HINT[label] ? HINT[label] + '  ' + detail : detail }));
 const words = (list, type, detail) => list.map((label) => ({ label, type, detail }));
 
 // argument sets that only make sense inside a particular call's string
@@ -234,8 +299,13 @@ const loomHover = hoverTooltip((view, pos) => {
       const head = document.createElement('div');
       head.className = 'ld-head';
       const n = document.createElement('span'); n.className = 'ld-name'; n.textContent = word;
+      head.append(n);
+      if (HINT[word]) {                      // signature / expected range, if we have one
+        const sg = document.createElement('span'); sg.className = 'ld-sig'; sg.textContent = HINT[word];
+        head.append(sg);
+      }
       const k = document.createElement('span'); k.className = 'ld-kind'; k.textContent = doc.kind;
-      head.append(n, k);
+      head.append(k);
       const d = document.createElement('div'); d.className = 'ld-detail'; d.textContent = doc.detail;
       dom.append(head, d);
       return { dom };
@@ -315,7 +385,8 @@ const loomTheme = EditorView.theme({
   '.cm-completionDetail': { marginLeft: '1.1em', fontStyle: 'normal', opacity: '.62', fontSize: '12px' },
   '.cm-completionIcon': { display: 'none' },
   '.cm-loomdoc': { padding: '7px 10px', maxWidth: '30em', fontFamily: 'var(--mono)' },
-  '.cm-loomdoc .ld-head': { display: 'flex', alignItems: 'baseline', gap: '.6em', marginBottom: '3px' },
+  '.cm-loomdoc .ld-head': { display: 'flex', alignItems: 'baseline', gap: '.55em', marginBottom: '4px', flexWrap: 'wrap' },
+  '.cm-loomdoc .ld-sig': { color: '#8fd3ff', fontSize: '12px', opacity: '.95' },
   '.cm-loomdoc .ld-name': { color: '#ffd166', fontWeight: '600', fontSize: '13px' },
   '.cm-loomdoc .ld-kind': { fontSize: '10.5px', letterSpacing: '.06em', textTransform: 'uppercase', opacity: '.45' },
   '.cm-loomdoc .ld-detail': { fontSize: '12.5px', lineHeight: '1.55', opacity: '.85' },
