@@ -332,6 +332,14 @@ class Pattern {
   weight(a)  { return this.set('weight', a); }   // stroke width, absolute (fraction of min(w,h))
   outline(a) { return this.set('outline', a); }  // stroke width relative to the shape's radius (scales with size)
   shade(a)   { return this.set('shade', a); }     // 3D shapes: 0 flat/unlit (default), 1 faceted lighting
+  // soft(n): per-glyph DEFOCUS — widens the glyph's own antialias band, n as a fraction of
+  // its radius so it scales with the glyph. 0 = crisp (default), ~0.3 hazy, 1+ a smear.
+  // It is a per-frame scalar like .size(), so it takes oscs / live() / near() / age() —
+  // which is what makes depth of field work:
+  //   .soft(near(mouseX, mouseY, 0.4).range(0.5, 0))   sharp under the cursor, blurred away
+  //   .soft(age().range(0, 0.6))                        glyphs defocus as they age
+  // WebGL only: the Canvas2D fallback draws these crisp (it has no cheap per-shape blur).
+  soft(a)    { return this.set('soft', a); }
   cap(a)    { return this.set('cap', a); }   // line ends: 'round' | 'butt' | 'square'
   join(a)   { return this.set('join', a); }  // corners:   'round' | 'miter' | 'bevel'
   rotateX(a){ return this.set('rotateX', a); }  // tilt around horizontal axis (turns)
@@ -1456,7 +1464,7 @@ function gy() { return signal(() => _gpos.y); }
 // .spring() is the good one here — live(mic()).spring(90, 14) gives the bar weight and
 // stops it twitching on every sample.
 
-// life(): how far this glyph is through its OWN life — 0 at birth, 1 as it dies.
+// age(): how far this glyph is through its OWN life — 0 at birth, 1 as it dies.
 //
 // The obvious way to sweep a value across a glyph's lifetime is a free osc whose period you
 // match to .decay() by hand. That match is a lie: a glyph's real lifetime is
@@ -1471,7 +1479,10 @@ function gy() { return signal(() => _gpos.y); }
 //   .size(life().ease("outCubic").range(0.05, 0.22))   fast then drifting
 // Being osc-family it is live per frame, and .hold() parks it at the sustain point — a held
 // glyph sits where it is and only resumes once you let go.
-function life() { return makeOsc({ shape: 'life', rate: 0, lo: 0, hi: 1, phase: 0 }); }
+function age() { return makeOsc({ shape: 'life', rate: 0, lo: 0, hi: 1, phase: 0 }); }
+// `life` was this signal's first name, which collided with the older .life(s) alias for
+// .decay(s). Kept working so existing patches don't break; age() is the name to use.
+const life = age;
 
 function live(sig) { return makeOsc({ shape: 'live', rate: 0, lo: 0, hi: 1, phase: 0, src: reify(sig) }); }
 
@@ -1760,7 +1771,7 @@ export const DSL = {
   ballX, ballY, ballSeen, moving, thrown, caught, tapped, held, shaken, apexed, apexHeight, landX, landY, landing, flight, gyro, accel, speed, _jug, _jugInput, _jugDecay,
   fingerX, fingerY, fingerZ, fingerUp, fingersUp, pinch, palmX, palmY, handSeen, handNear, poseX, poseY, poseSeen,
   cam, _setCamSink, _handInput, _poseInput, _faceInput, _micInput, _resetTracking, _getTracking,
-  gx, gy, near, dist, live, life, _setGlyphPos,
+  gx, gy, near, dist, live, age, life, _setGlyphPos,
   text, spoken, said, spoke, saying, heard, _speechInput, _speechFrame, _speechDecay,
   mouthOpen, smile, browRaise, mouthX, mouthY, faceX, faceY, faceSeen,
   mic, micLow, micMid, micHigh, micBand, micHit,

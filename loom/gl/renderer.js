@@ -124,7 +124,9 @@ const QUAD_IDX = new Uint16Array([0, 1, 2, 0, 2, 3]);
 // instance attributes: name → component count
 const IATTRS = {
   iPos: 2, iRadius: 1, iRot: 1, iRotX: 1, iRotY: 1, iColor: 4, iAlpha: 1,   // iColor.a = 3D shade (packed; we're at the 16-attribute limit)
-  iWeight: 1, iOpen: 1, iShape: 1, iFill: 1, iStroke: 1, iVertex: 1, iCap: 1, iJoin: 1,
+  // At WebGL's 16-attribute limit, so cap+join share one slot (both are 0..2 enums) to make
+  // room for iSoft. iColor.a already smuggles the 3D shade for the same reason.
+  iWeight: 1, iOpen: 1, iShape: 1, iFill: 1, iStroke: 1, iVertex: 1, iCapJoin: 1, iSoft: 1,
 };
 const TRACE_CAP = 8192;         // max points in the trace polyline
 
@@ -146,15 +148,16 @@ in float iShape;         // shape id
 in float iFill;          // 0/1
 in float iStroke;        // 0/1
 in float iVertex;        // 0/1 — dot at each vertex
-in float iCap;           // line/cross caps: 0 round, 1 butt, 2 square
-in float iJoin;          // polygon corners: 0 miter, 1 round, 2 bevel
+in float iCapJoin;       // packed: cap (0 round, 1 butt, 2 square) + join (0 miter, 1 round, 2 bevel) * 4
+in float iSoft;          // per-glyph edge softness in px — widens the AA band = defocus
 out vec2 vLocal;            // shape-space coordinate, px (un-rotated)
-out float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha;
+out float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha, vSoft;
 out float vRot, vRotX, vRotY, vShade;   // angles + 3D shade forwarded to the fragment
 out vec3 vColor;
 void main() {
   vR = iRadius; vWeight = iWeight; vOpen = iOpen; vShape = iShape;
-  vFill = iFill; vStroke = iStroke; vVertex = iVertex; vCap = iCap; vJoin = iJoin; vAlpha = iAlpha; vColor = iColor.rgb;
+  vFill = iFill; vStroke = iStroke; vVertex = iVertex; vAlpha = iAlpha; vColor = iColor.rgb;
+  vCap = mod(iCapJoin, 4.0); vJoin = floor(iCapJoin / 4.0); vSoft = iSoft;
   vRot = iRot; vRotX = iRotX; vRotY = iRotY; vShade = iColor.a;
   // 3D raymarched shapes (id >= 11): a screen-aligned billboard sized to the
   // bounding sphere; the tumble happens inside the fragment raymarch.
@@ -165,7 +168,7 @@ void main() {
     gl_Position = vec4(2.0 * P3.x / uResolution.x - 1.0, 1.0 - 2.0 * P3.y / uResolution.y, 0.0, 1.0);
     return;
   }
-  float pad = iWeight * 0.5 + 2.0;          // stroke half-width + AA margin
+  float pad = iWeight * 0.5 + 2.0 + iSoft;  // stroke half-width + AA margin + softness bleed
   // a line's length scales with open ((1-open)*r), and open can exceed 1 (e.g.
   // .open(5) draws a streak 4x the radius) — size the quad to contain it.
   float reach = (int(iShape + 0.5) == 9) ? abs(1.0 - iOpen) * iRadius : iRadius;
@@ -207,7 +210,7 @@ precision highp float;
 #define PI 3.14159265359
 #define TAU 6.28318530718
 in vec2 vLocal;
-in float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha;
+in float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha, vSoft;
 in float vRot, vRotX, vRotY, vShade;
 in vec3 vColor;
 out vec4 fragColor;
@@ -412,7 +415,7 @@ void main(){
   // AA half-width from the SDF's screen-space gradient: ~1px when flat, but grows
   // when the glyph is tilted near edge-on so grazing sides soften instead of
   // breaking into a dashed/chopped stair-step.
-  float aa = clamp(fwidth(d), 0.5, 16.0);
+  float aa = clamp(fwidth(d) + vSoft, 0.5, 256.0);   // vSoft widens the edge = defocus
   float cov;
   if (capped) {                          // line/cross: d is the thickened stroke → fill it
     cov = vStroke * (1.0 - smoothstep(-aa, aa, d));
@@ -1181,7 +1184,7 @@ export class GLRenderer {
     this.groupRTs = new Map();   // gid (or '$layer' for a bare bus) → { a, b, w, h } ping-pong
     this._buses = new Map();     // layer name → this frame's finished texture (masking)
 
-    this._scratch = { x: 0, y: 0, r: 0, rot: 0, rotX: 0, rotY: 0, rgb: [1, 1, 1], alpha: 1, weight: 1, open: 0, shape: 0, fill: 1, stroke: 0, blend: 'source-over' };
+    this._scratch = { x: 0, y: 0, r: 0, soft: 0, rot: 0, rotX: 0, rotY: 0, rgb: [1, 1, 1], alpha: 1, weight: 1, open: 0, shape: 0, fill: 1, stroke: 0, blend: 'source-over' };
   }
 
   _getGroupRT(gid) {
@@ -1493,8 +1496,8 @@ export class GLRenderer {
         a.iFill[count] = out.fill;
         a.iStroke[count] = out.stroke;
         a.iVertex[count] = out.vertex;
-        a.iCap[count] = out.cap;
-        a.iJoin[count] = out.join;
+        a.iCapJoin[count] = out.cap + out.join * 4;
+        a.iSoft[count] = out.soft;
         count++;
       }
       if (!count) continue;

@@ -961,9 +961,9 @@ per-glyph variety easy:
 .attack(perlin.range(0.1, 1))         // births ease in by varying amounts
 ```
 
-### One sweep over a glyph's life (`life`)
+### One sweep over a glyph's life (`age`)
 
-`life()` is how far a glyph is through its **own** life — `0` at birth, `1` as it dies.
+`age()` is how far a glyph is through its **own** life — `0` at birth, `1` as it dies.
 
 The tempting way to sweep a value across a lifetime is a free oscillator whose period you
 match to `.decay()` by hand. That match is a lie. A glyph's real lifetime is
@@ -973,17 +973,45 @@ wraps mid-life snaps from `1` straight back to `0`. That snap is the hard pop at
 a trail.
 
 ```js
-.size(life().range(0.05, 0.22))                   // grows once, never wraps
-.alpha(life().range(0.35, 0))                     // fades once
-.size(life().ease("outCubic").range(0.05, 0.22))  // fast, then drifting
+.size(age().range(0.05, 0.22))                   // grows once, never wraps
+.alpha(age().range(0.35, 0))                     // fades once
+.size(age().ease("outCubic").range(0.05, 0.22))  // fast, then drifting
 ```
 
-Measured at tempo `0.3` (glyph alive ~10 s, saw period 4 s): `life()` gives one clean ramp
+Measured at tempo `0.3` (glyph alive ~10 s, saw period 4 s): `age()` gives one clean ramp
 with zero snap-backs; `osc(0.25,"saw").free()` snaps back twice inside the same life.
 
 It's osc-family, so it's live per frame and composes with `.ease()`, `.range()`, `.spring()`
-and the comparisons. `.hold()` parks it — a held glyph sits where it is and only resumes
+and the comparisons. *(It was briefly called `life()`, which collided with the older
+`.life(s)` alias for `.decay(s)`. That name still works so old patches don't break, but
+`age()` is the one to use.)* `.hold()` parks it — a held glyph sits where it is and only resumes
 once it lets go.
+
+### Per-glyph defocus (`.soft`)
+
+`.soft(n)` blurs **one glyph**, not the layer — it widens that glyph's own antialias band,
+with `n` as a fraction of its radius so it scales with the glyph.
+
+| `n` | look |
+| --- | --- |
+| `0` | crisp (default) |
+| `0.15` | a soft edge |
+| `0.5` | hazy, half the glyph is fringe |
+| `1.2` | a smear with almost no solid core |
+
+Because it's an ordinary per-frame scalar it takes oscs, `live()`, `near()` and `age()` —
+which is what makes **depth of field** work:
+
+```js
+.soft(near(mouseX, mouseY, 0.4).range(0.5, 0))   // sharp under the cursor, blurred away from it
+.soft(age().range(0, 0.6))                        // glyphs defocus as they age
+.soft(live(mic()).range(0.6, 0))                  // the room snaps into focus when it's loud
+```
+
+It is not a convolution, so it is nearly free — unlike `.blur()`, which is a whole-layer
+pass. The trade is that it softens the glyph's **edge**: a filled circle reads as bokeh, a
+`ring` goes entirely to fringe, and a complex shape reads as a glow rather than a true blur.
+WebGL only — the Canvas2D fallback draws these crisp.
 
 ### Live signals (`live`)
 

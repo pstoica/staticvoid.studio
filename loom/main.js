@@ -444,6 +444,7 @@ function spawn(value, onset) {
     // 3D shading amount. 3D primitives (cube/sphere/torus/octa, id 11–14) default
     // to a matte shaded look so they read as 3D (like a p5 sphere); 2D shapes stay
     // flat (0). Override either way with .shade(n).
+    soft: baseNum('soft', 0),            // edge softness, fraction of the glyph's radius
     shade: sprInit.shade != null ? sprInit.shade : numAt(v.shade != null ? v.shade : (SHAPE_ID[v.shape] >= 11 && SHAPE_ID[v.shape] <= 14 ? 0.85 : 0), 0, phase),
     cap: v.cap || 'square',
     join: v.join || 'miter',
@@ -628,10 +629,10 @@ function interpPal(colors, t) {
 const isOsc = DSL.isOsc;
 const isSpring = DSL.isSpring;
 const applyEase = DSL.ease;   // named Penner curve, 0..1 → 0..1 (shared with pattern.js)
-const MOD_FIELDS = ['size', 'color', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade'];
+const MOD_FIELDS = ['size', 'color', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade', 'soft'];
 // fields a .spring() can drive: position (resolved in resolvePos) + the scalar mods
 // (resolved in glResolve/drawGlyph). NOT color (non-scalar). Each holds per-glyph state.
-const SPRING_FIELDS = ['x', 'y', 'radius', 'angle', 'pan', 'size', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade'];
+const SPRING_FIELDS = ['x', 'y', 'radius', 'angle', 'pan', 'size', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade', 'soft'];
 const SPRING_POS = new Set(['x', 'y', 'radius', 'angle', 'pan']);
 const _h1 = (x) => { const s = Math.sin((x + 0.123) * 12.9898) * 43758.5453; return s - Math.floor(s); };
 const _snoise = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return _h1(i) * (1 - u) + _h1(i + 1) * u; };
@@ -668,7 +669,7 @@ function evalOsc(d, age, gp = 0, st = 0, ageC = null, stC = null) {
   // happened to be when the glyph was born.
   // live(signal): re-read a signal every frame instead of using its frozen onset value.
   // `src` is deliberately not in freezeOscParams' key list, so it stays a live Pattern.
-  // life(): normalized progress through this glyph's own envelope, immune to cps / the master
+  // age(): normalized progress through this glyph's own envelope, immune to cps / the master
   // decay slider / .hold() — the thing a hand-matched free osc only approximates.
   if (d.shape === 'life') {
     const g = _curGlyph;
@@ -970,7 +971,7 @@ const CAP_ID = { round: 0, butt: 1, square: 2 };   // line/cross caps (spawn def
 const JOIN_ID = { miter: 0, round: 1, bevel: 2 };  // polygon corners (default miter = sharp)
 function glResolve(p, minDim, out) {
   const age = p.age, ageC = p.ageCycles, stC = p.spawnCycle;
-  let sizePx = p.size, rotTurns = p.rotTurns, rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline, shade = p.shade, color = null;
+  let sizePx = p.size, rotTurns = p.rotTurns, rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline, shade = p.shade, soft = p.soft, color = null;
   if (p.mods) { _curPos.x = W ? p.x / W : 0.5; _curPos.y = H ? p.y / H : 0.5; _curGlyph = p; }
   if (p.mods) for (const m of p.mods) {
     const val = evalOsc(m.osc, age, p.phase, p.spawnT, ageC, stC);
@@ -984,6 +985,7 @@ function glResolve(p, minDim, out) {
     else if (m.field === 'weight') weight = val;
     else if (m.field === 'outline') olw = val;
     else if (m.field === 'shade') shade = val;
+    else if (m.field === 'soft') soft = val;
   }
   if (p._spr) {                                          // springs (state integrated in tick), same field→unit mapping as mods
     const s = p._spr;
@@ -996,6 +998,7 @@ function glResolve(p, minDim, out) {
     if (s.weight != null) weight = s.weight;
     if (s.outline != null) olw = s.outline;
     if (s.shade != null) shade = s.shade;
+    if (s.soft != null) soft = s.soft;
   }
   if (!color) { if (!p._rgb) p._rgb = cssToRGB(p.color); color = p._rgb; }
   out.x = p.x; out.y = p.y;
@@ -1006,6 +1009,7 @@ function glResolve(p, minDim, out) {
   out.alpha = Math.max(0, Math.min(1, alpha * p._env));
   out.weight = olw != null ? Math.max(0.75, olw * sizePx) : Math.max(0.75, weight * minDim);
   out.shade = shade;
+  out.soft = Math.max(0, soft) * sizePx;   // fraction of radius → px for the shader
   out.open = open;
   const id = p.sprite || (SHAPE_ID[p.shape] != null ? SHAPE_ID[p.shape] : 0);
   out.shape = id;
@@ -1758,25 +1762,25 @@ function renderLayerChips() {
 // ── presets ───────────────────────────────────────────────────────────────────────
 const PRESETS = {
   // concentric rings from two drifting sources, each expanding exactly once over its own
-  // life. life() rather than a free saw: a saw only lines up with the lifetime at one tempo
+  // life. age() rather than a free saw: a saw only lines up with the lifetime at one tempo
   // and one master-decay setting, and wraps into a hard snap at any other.
   'ripples 2': `group(
   bg("#03040c"),
   shape("ring*5")
     .x(osc(0.07,"perlin").drift(0.2).range(0.25,0.75))
     .y(osc(0.09,"perlin").drift(0.3).range(0.3,0.7))
-    .size(life().ease("outCubic").range(0.01, 0.6))
-    .weight(life().range(0.014, 0.0008))
-    .alpha(life().range(0.6, 0))
-    .color(palette("ice").at(life().range(0.1, 0.9)))
+    .size(age().ease("outCubic").range(0.01, 0.6))
+    .weight(age().range(0.014, 0.0008))
+    .alpha(age().range(0.6, 0))
+    .color(palette("ice").at(age().range(0.1, 0.9)))
     .decay(4, "inOutSine"),
   shape("ring*3")
     .x(osc(0.05,"perlin").drift(0.4).range(0.3,0.7))
     .y(osc(0.06,"perlin").drift(0.1).range(0.35,0.65))
-    .size(life().ease("outCubic").range(0.02, 0.95))
-    .weight(life().range(0.01, 0.0005))
-    .alpha(life().range(0.35, 0))
-    .color(palette("ember").at(life().range(0.2, 0.8)))
+    .size(age().ease("outCubic").range(0.02, 0.95))
+    .weight(age().range(0.01, 0.0005))
+    .alpha(age().range(0.35, 0))
+    .color(palette("ember").at(age().range(0.2, 0.8)))
     .decay(rand.range(5, 9), "inOutSine")
 ).glow(0.5, 0.85)`,
   // 24 bars, each ONE held glyph whose size is read live every frame. The naive version

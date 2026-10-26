@@ -21,7 +21,7 @@ const FN = new Set(['shape', 's', 'n', 'polygon', 'polyline', 'stack', 'cat', 's
   'ballX', 'ballY', 'ballSeen', 'moving', 'thrown', 'caught', 'tapped', 'held', 'shaken', 'flight', 'gyro', 'accel', 'speed', 'apexed', 'apexHeight', 'landX', 'landY', 'landing',
   'fingerX', 'fingerY', 'fingerZ', 'fingerUp', 'fingersUp', 'pinch', 'palmX', 'palmY', 'handSeen', 'handNear', 'poseX', 'poseY', 'poseSeen',
   'mouthOpen', 'smile', 'browRaise', 'mouthX', 'mouthY', 'faceX', 'faceY', 'faceSeen',
-  'mic', 'micLow', 'micMid', 'micHigh', 'micBand', 'micHit', 'gx', 'gy', 'near', 'dist', 'live', 'life',
+  'mic', 'micLow', 'micMid', 'micHigh', 'micBand', 'micHit', 'gx', 'gy', 'near', 'dist', 'live', 'age', 'life',
   'text', 'spoken', 'said', 'spoke', 'saying', 'heard',
   'level', 'band', 'low', 'mid', 'high', 'hit', '$']);
 const SIG = new Set(['sine', 'cosine', 'saw', 'isaw', 'tri', 'square', 'rand', 'perlin', 'fbm', 'brown',
@@ -30,7 +30,7 @@ const METHOD = new Set(['fast', 'slow', 'rev', 'every', 'iter', 'palindrome', 'j
   'degrade', 'degradeBy', 'unDegradeBy', 'sometimes', 'sometimesBy', 'often', 'rarely', 'when', 'gate', 'early', 'late', 'burst',
   'range', 'add', 'sub', 'mul', 'div', 'color', 'size', 'x', 'y', 'radius', 'angle', 'grid', 'rotate',
   'rotateX', 'rotateY', 'spin', 'blend', 'alpha', 'opacity', 'pan', 'jitter', 'fill', 'stroke', 'weight',
-  'outline', 'shade', 'pixelate', 'blur', 'glow', 'meshfill', 'radiance', 'feedback', 'trails', 'silhouette', 'hue', 'brightness', 'contrast', 'saturate',
+  'outline', 'shade', 'soft', 'pixelate', 'blur', 'glow', 'meshfill', 'radiance', 'feedback', 'trails', 'silhouette', 'hue', 'brightness', 'contrast', 'saturate',
   'negative', 'invert', 'displace', 'kaleido', 'mirror', 'cap', 'join', 'open', 'vertex', 'attack', 'decay',
   'life', 'hold', 'sustain', 'onRelease', 'slew', 'id', 'n', 'stencil', 'set', 'spread', 'phase', 'rate', 'quantize', 'ease', 'segment', 'seg', 'sample', 'spring',
   'gt', 'gte', 'lt', 'lte', 'between', 'drift', 'free', 'sync', 'falloff',
@@ -73,7 +73,7 @@ const C_SIG = [
   ['white', 'alias of rand — white noise'],
   ['mouseX', 'pointer x'], ['mouseY', 'pointer y'], ['mouseDown', '1 while pressed'],
   ['gx', "this glyph's own x at birth — colour/size by where it landed"], ['gy', "this glyph's own y at birth"],
-  ['life', "how far this glyph is through its own life, 0→1 — one sweep, immune to tempo/decay changes"],
+  ['age', "how far this glyph is through its own life, 0→1 — one sweep, immune to tempo/decay changes"],
   ['live', 'read a SIGNAL every frame instead of freezing it at onset — live(micBand(3)).range(..)'],
   ['near', 'LIVE closeness of this glyph to a point (default the cursor) — a heat map. 4th arg = field shape: square|diamond|cross|ring|star|noise|n-gon'],
   ['dist', 'LIVE distance of this glyph to a point — near() inverted, unclamped'],
@@ -209,7 +209,8 @@ const HINT = {
   join: '("round"|"miter"|"bevel")', fill: '(0/1)', stroke: '(0/1)', vertex: '(0/1)',
   attack: '(seconds, curve?)', decay: '(seconds, curve?)',
   // two senses share this name: the signal life() and the .life(s) alias for .decay(s)
-  life: '() → 0..1 across the glyph\'s life   ·   .life(seconds) = alias for .decay',
+  age: '() → 0..1 across the glyph\'s life', life: '(seconds) = alias for .decay   ·   life() = old name for age()',
+  soft: '(0..1+ fraction of radius · 0 = crisp)',
   hold: '(condition)', id: '("key")', stencil: '(0..1)', burst: '(n, spread?)',
   // ── transforms ──
   fast: '(n)', slow: '(n)', every: '(n, f)', iter: '(n)', jux: '(f)', superimpose: '(f)',
