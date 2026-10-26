@@ -148,6 +148,8 @@ const C_METHOD = [
   ['pixelate', 'FX: mosaic'], ['blur', 'FX: gaussian blur'], ['glow', 'FX: light bleeds from content — glow(amount, reach)'],
   ['meshfill', 'FX: mesh gradient from the glyphs'], ['radiance', 'FX: 2D GI with shadows'],
   ['feedback', 'FX: trails/tunnel (4th arg = effects INSIDE the loop)'],
+  ['mask', 'show this layer only where the NAMED layer is bright — .mask("hole"), "alpha" mode, { invert, amount }'],
+  ['soft', 'per-glyph DEFOCUS, a fraction of the glyph\'s radius — cheap depth of field'],
   ['trails', 'FX: feedback, no warp'], ['silhouette', 'FX: mask by the person in the webcam — 1 inside, -1 outside, 2nd arg freezes the pose'],
   ['hue', 'FX: rotate hue'], ['brightness', 'FX'], ['contrast', 'FX'], ['saturate', 'FX'],
   ['negative', 'FX: invert'], ['invert', 'FX: invert'], ['displace', 'FX: warp'],
