@@ -987,6 +987,25 @@ and the comparisons. *(It was briefly called `life()`, which collided with the o
 `age()` is the one to use.)* `.hold()` parks it — a held glyph sits where it is and only resumes
 once it lets go.
 
+### Every osc parameter is patternable
+
+`.rate()`, `.phase()`, `.spread()`, `.drift()`, `.range()`, the arithmetic ops and the
+comparisons all accept a number, a pattern **or a mini-notation string**:
+
+```js
+.x(osc(1.2,"sine").spread("0.5 1 2").range(0.1, 0.9))   // three fan widths, per onset
+.x(osc("1 3","sine").range(0.1, 0.9))                     // rate alternates
+.x(osc(1).drift("<0 2>").range(0.1, 0.9))                 // drift flips each cycle
+.size(osc(1).range("0.05 0.1", 0.3))                      // the range itself moves
+```
+
+The value is sampled **at each glyph's onset**, so a pattern here gives per-glyph variety
+rather than animating within one glyph's life.
+
+The exceptions are the parameters that are genuinely *words*, not numbers: the waveform name
+in `osc(rate, "sine")`, the curve in `.ease("outCubic")`, and the field shape in
+`near("square")`. Those stay literal strings.
+
 ### Per-glyph defocus (`.soft`)
 
 `.soft(n)` blurs **one glyph**, not the layer — it widens that glyph's own antialias band,

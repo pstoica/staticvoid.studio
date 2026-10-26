@@ -1044,7 +1044,7 @@ function irand(k) { return signal((t) => Math.floor(timeRand(t) * k)); }
 // age. osc(rate, shape).range(lo, hi). Shapes: sine saw tri square rand perlin fbm.
 // Tempo-synced by default: rate is cycles-per-cycle, so it rides the clock and the
 // drawn structure is the same at any tempo. Use .free() for real-time (rate in Hz).
-function osc(rate = 1, shape = 'sine') { return makeOsc({ shape, rate, lo: 0, hi: 1, phase: 0 }); }
+function osc(rate = 1, shape = 'sine') { return makeOsc({ shape, rate: oscNum(rate), lo: 0, hi: 1, phase: 0 }); }
 // _cmp: the shared body of gt/gte/lt/lte. Without `release` it is a pure per-value test.
 // With one it keeps a latch — on() crosses it up, off() releases it — see Pattern.gt above.
 function _cmp(pat, trip, release, on, off) {
@@ -1056,14 +1056,20 @@ function _cmp(pat, trip, release, on, off) {
   }), reify(trip)), reify(release));
 }
 
+// Every NUMERIC osc parameter is patternable. A Pattern always worked (freezeOscParams
+// samples it at onset); a mini-notation STRING did not — it went through untouched and came
+// out NaN, so the glyph was positioned at NaN and silently never drew. Strings mean
+// mini-notation everywhere else in Loom, so reify them here too. Not applied to the params
+// that are genuinely words: the waveform name, .ease()'s curve, near()'s field shape.
+const oscNum = (x) => (typeof x === 'string' ? mini(x) : x);
 function makeOsc(o) {
   return {
     __osc: o,
-    range(lo, hi) { return makeOsc({ ...o, lo, hi }); },
-    rate(r) { return makeOsc({ ...o, rate: r }); },
-    phase(p) { return makeOsc({ ...o, phase: p }); },
-    spread(n = 1) { return makeOsc({ ...o, spread: n }); }, // per-glyph phase offset = n × onset phase
-    drift(r = 0.1) { return makeOsc({ ...o, drift: r }); }, // starting phase advances over global time = r × spawn seconds
+    range(lo, hi) { return makeOsc({ ...o, lo: oscNum(lo), hi: oscNum(hi) }); },
+    rate(r) { return makeOsc({ ...o, rate: oscNum(r) }); },
+    phase(p) { return makeOsc({ ...o, phase: oscNum(p) }); },
+    spread(n = 1) { return makeOsc({ ...o, spread: oscNum(n) }); }, // per-glyph phase offset = n × onset phase
+    drift(r = 0.1) { return makeOsc({ ...o, drift: oscNum(r) }); }, // starting phase advances over global time = r × spawn seconds
     fast(n) { return makeOsc({ ...o, rate: o.rate * n }); },
     slow(n) { return makeOsc({ ...o, rate: o.rate / n }); },
     // tempo: synced by default (rate is cycles-per-cycle, so structure holds across
@@ -1072,18 +1078,18 @@ function makeOsc(o) {
     sync(v = true) { return makeOsc({ ...o, free: !v }); },
     // arithmetic on the osc's output (x may be a number or another osc), applied
     // after range, evaluated live by the renderer.
-    add(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['+', x]] }); },
-    sub(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['-', x]] }); },
-    mul(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['*', x]] }); },
-    div(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['/', x]] }); },
-    quantize(n) { return makeOsc({ ...o, ops: [...(o.ops || []), ['q', n]] }); }, // snap to nearest 1/n
+    add(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['+', oscNum(x)]] }); },
+    sub(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['-', oscNum(x)]] }); },
+    mul(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['*', oscNum(x)]] }); },
+    div(x) { return makeOsc({ ...o, ops: [...(o.ops || []), ['/', oscNum(x)]] }); },
+    quantize(n) { return makeOsc({ ...o, ops: [...(o.ops || []), ['q', oscNum(n)]] }); }, // snap to nearest 1/n
     // comparisons → a hard 0/1, same as the signal forms (osc(0.5).gt(0.7) = a pulse train
     // with a 30% duty cycle). No hysteresis form here: an oscillator does not chatter.
-    gt(x = 0.5)  { return makeOsc({ ...o, ops: [...(o.ops || []), ['>', x]] }); },
-    gte(x = 0.5) { return makeOsc({ ...o, ops: [...(o.ops || []), ['>=', x]] }); },
-    lt(x = 0.5)  { return makeOsc({ ...o, ops: [...(o.ops || []), ['<', x]] }); },
-    lte(x = 0.5) { return makeOsc({ ...o, ops: [...(o.ops || []), ['<=', x]] }); },
-    between(lo = 0, hi = 1) { return makeOsc({ ...o, ops: [...(o.ops || []), ['bt', [lo, hi]]] }); },
+    gt(x = 0.5)  { return makeOsc({ ...o, ops: [...(o.ops || []), ['>', oscNum(x)]] }); },
+    gte(x = 0.5) { return makeOsc({ ...o, ops: [...(o.ops || []), ['>=', oscNum(x)]] }); },
+    lt(x = 0.5)  { return makeOsc({ ...o, ops: [...(o.ops || []), ['<', oscNum(x)]] }); },
+    lte(x = 0.5) { return makeOsc({ ...o, ops: [...(o.ops || []), ['<=', oscNum(x)]] }); },
+    between(lo = 0, hi = 1) { return makeOsc({ ...o, ops: [...(o.ops || []), ['bt', [oscNum(lo), oscNum(hi)]]] }); },
     // ease(name): shape the osc's 0..1 waveform through a Penner curve, BEFORE range —
     // same rule as Pattern.ease, so `osc(0.2).ease("inOutSine").range(0,0.4)` matches the
     // signal form. (A dedicated pre-range slot, not an op, which run post-range.)
@@ -1095,7 +1101,7 @@ function makeOsc(o) {
     // falloff(k): only meaningful on near()/dist() — how hard the field's edge is. 1 = the
     // default smoothstep, >1 concentrates the light at the centre (a tight hot spot), <1
     // spreads it out to a broad wash. Patternable, so the focus can breathe.
-    falloff(k = 1) { return makeOsc({ ...o, nk: k }); },
+    falloff(k = 1) { return makeOsc({ ...o, nk: oscNum(k) }); },
   };
 }
 const isOsc = (a) => a != null && typeof a === 'object' && a.__osc !== undefined;
