@@ -216,7 +216,7 @@ const HINT = {
   hold: '(condition)', id: '("key")', stencil: '(0..1)', burst: '(n, spread?)',
   // ── transforms ──
   fast: '(n)', slow: '(n)', every: '(n, f)', iter: '(n)', jux: '(f)', superimpose: '(f)',
-  off: '(cycles, f)', degradeBy: '(0..1)', sometimesBy: '(0..1, f)', when: '(cond, f)',
+  off: '(cycles, f) · not a multiple of 1/n or copies coincide', degradeBy: '(0..1)', sometimesBy: '(0..1, f)', when: '(cond, f)',
   early: '(cycles)', late: '(cycles)', range: '(lo, hi)', quantize: '(n steps)',
   segment: '(n/cycle)', seg: '(n/cycle)', sample: '(n/cycle)', ease: '("outExpo")',
   spread: '(n)', phase: '(turns)', rate: '(n)', drift: '(per second)', free: '(rate in Hz)',

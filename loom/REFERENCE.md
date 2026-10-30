@@ -515,7 +515,7 @@ Combinators that reshape a pattern. All return a pattern, so they chain.
 | `.palindrome()` | alternate forward / reversed cycles |
 | `.superimpose(p => …)` | overlay a transformed copy in place (parallel voices) |
 | `.jux(p => …)` | superimpose, but pan the two copies apart (left / right) |
-| `.off(t, p => …)` | superimpose, but shift the copy later by `t` cycles (a modifiable echo) |
+| `.off(t, p => …)` | superimpose, but shift the copy later by `t` cycles (a modifiable echo). **`t` must not be a multiple of your glyph spacing** — with `"circle*8"` the glyphs sit every `1/8` cycle, so `.off(1)`, `.off(0.5)` and `.off(0.25)` land the copy exactly on another glyph and it looks like the copy *replaced* the original rather than echoing it. Measured: `off(1)` → 100% of copies coincide, `off(0.37)` → 0%. Chaining `.off()` compounds (two calls = four taps, each inheriting the previous transform) |
 | `.burst(n, spread?)` | each onset becomes `n` **simultaneous** copies, phases fanned `i/n` apart — shapes **arranged on shapes**: `shape("square").burst(8).radius(0.3)` = 8 squares around a circle *per event*, blooming and fading together (`"square*8"` walks the same ring one at a time). Everything phase-driven fans out: the ring angle, `.grid(3)` cells (`burst(9).grid(3)` fills the grid at once), the default palette hue, osc `.spread()`. `spread` < 1 fans an arc; `n` patternable (`"<4 8>"`); `burst(1)` = identity |
 | `.degrade()` | drop ~50% of events (seeded by time) |
 | `.degradeBy(p)` | drop a fraction `p` of events |
