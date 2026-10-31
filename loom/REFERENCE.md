@@ -1006,6 +1006,33 @@ The exceptions are the parameters that are genuinely *words*, not numbers: the w
 in `osc(rate, "sine")`, the curve in `.ease("outCubic")`, and the field shape in
 `near("square")`. Those stay literal strings.
 
+### Depth (`.z`)
+
+`.z(n)` gives a flat glyph a real **depth**. Same units as position (a fraction of
+`min(w,h)`), positive = toward the viewer, `0` = the screen plane.
+
+Two things happen together, which is what makes it read as space rather than as a size
+control: the glyph **scales** by the pinhole `1/(1−z)`, and it **parallaxes** away from the
+canvas centre by the same factor.
+
+```js
+.z(rand.range(-1.5, 0.6))                        // scatter a field through depth
+.z(osc(0.2,"sine").spread(1).range(-1, 0.5))     // a wave rolling toward you
+.z(age().range(0, 0.6))                          // glyphs advance as they age
+.z(-0.8).soft(0.3)                                // far away and out of focus
+```
+
+Measured: a glyph at `z = 0.5` covers 4× the area of the same glyph at `z = 0` (the pinhole
+squared), and one at `x = 0.2, z = −0.6` lands at screen `0.312` against a predicted `0.313`.
+
+Pair it with `.soft()` for defocus-by-distance and with `.alpha()` for aerial perspective —
+`near()`/`age()` drive both, so a single depth signal can run all three.
+
+**Scope:** `.z()` moves the glyph itself, so it affects the SDF shapes and the raymarched 3D
+ones. Sprites (emoji, drawn packs, `text()`), imported meshes and `polygon()` fills have
+their own draw paths and ignore it. It is WebGL-only. This is a per-glyph pinhole, not a
+camera — see `persp()` for the global tilt projection that `rotateX/rotateY` ride on.
+
 ### Per-glyph defocus (`.soft`)
 
 `.soft(n)` blurs **one glyph**, not the layer — it widens that glyph's own antialias band,

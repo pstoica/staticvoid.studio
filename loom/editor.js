@@ -30,7 +30,7 @@ const METHOD = new Set(['fast', 'slow', 'rev', 'every', 'iter', 'palindrome', 'j
   'degrade', 'degradeBy', 'unDegradeBy', 'sometimes', 'sometimesBy', 'often', 'rarely', 'when', 'gate', 'early', 'late', 'burst',
   'range', 'add', 'sub', 'mul', 'div', 'color', 'size', 'x', 'y', 'radius', 'angle', 'grid', 'rotate',
   'rotateX', 'rotateY', 'spin', 'blend', 'alpha', 'opacity', 'pan', 'jitter', 'fill', 'stroke', 'weight',
-  'outline', 'shade', 'soft', 'pixelate', 'blur', 'glow', 'meshfill', 'radiance', 'feedback', 'trails', 'silhouette', 'hue', 'brightness', 'contrast', 'saturate',
+  'outline', 'shade', 'soft', 'z', 'pixelate', 'blur', 'glow', 'meshfill', 'radiance', 'feedback', 'trails', 'silhouette', 'hue', 'brightness', 'contrast', 'saturate',
   'negative', 'invert', 'displace', 'kaleido', 'mirror', 'cap', 'join', 'open', 'vertex', 'attack', 'decay',
   'life', 'hold', 'sustain', 'onRelease', 'slew', 'id', 'n', 'stencil', 'set', 'spread', 'phase', 'rate', 'quantize', 'ease', 'segment', 'seg', 'sample', 'spring',
   'gt', 'gte', 'lt', 'lte', 'between', 'drift', 'free', 'sync', 'falloff',
@@ -149,6 +149,7 @@ const C_METHOD = [
   ['meshfill', 'FX: mesh gradient from the glyphs'], ['radiance', 'FX: 2D GI with shadows'],
   ['feedback', 'FX: trails/tunnel (4th arg = effects INSIDE the loop)'],
   ['mask', 'show this layer only where the NAMED layer is bright — .mask("hole"), "alpha" mode, { invert, amount }'],
+  ['z', 'real DEPTH — scales by the pinhole 1/(1-z) AND parallaxes from centre'],
   ['soft', 'per-glyph DEFOCUS, a fraction of the glyph\'s radius — cheap depth of field'],
   ['trails', 'FX: feedback, no warp'], ['silhouette', 'FX: mask by the person in the webcam — 1 inside, -1 outside, 2nd arg freezes the pose'],
   ['hue', 'FX: rotate hue'], ['brightness', 'FX'], ['contrast', 'FX'], ['saturate', 'FX'],
@@ -212,7 +213,7 @@ const HINT = {
   attack: '(seconds, curve?)', decay: '(seconds, curve?)',
   // two senses share this name: the signal life() and the .life(s) alias for .decay(s)
   age: '() → 0..1 across the glyph\'s life', life: '(seconds) = alias for .decay   ·   life() = old name for age()',
-  soft: '(0..1+ fraction of radius · 0 = crisp)',
+  soft: '(0..1+ fraction of radius · 0 = crisp)', z: '(+ nearer · 0 = screen plane · fraction of min(w,h))',
   hold: '(condition)', id: '("key")', stencil: '(0..1)', burst: '(n, spread?)',
   // ── transforms ──
   fast: '(n)', slow: '(n)', every: '(n, f)', iter: '(n)', jux: '(f)', superimpose: '(f)',

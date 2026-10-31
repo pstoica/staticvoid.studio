@@ -123,7 +123,7 @@ const QUAD_IDX = new Uint16Array([0, 1, 2, 0, 2, 3]);
 
 // instance attributes: name → component count
 const IATTRS = {
-  iPos: 2, iRadius: 1, iRot: 1, iRotX: 1, iRotY: 1, iColor: 4, iAlpha: 1,   // iColor.a = 3D shade (packed; we're at the 16-attribute limit)
+  iPos: 3, iRadius: 1, iRot: 1, iRotX: 1, iRotY: 1, iColor: 4, iAlpha: 1,   // iColor.a = 3D shade (packed; we're at the 16-attribute limit)
   // At WebGL's 16-attribute limit, so cap+join share one slot (both are 0..2 enums) to make
   // room for iSoft. iColor.a already smuggles the 3D shade for the same reason.
   iWeight: 1, iOpen: 1, iShape: 1, iFill: 1, iStroke: 1, iVertex: 1, iCapJoin: 1, iSoft: 1,
@@ -134,8 +134,9 @@ const VERT = `
 precision highp float;
 uniform vec2 uResolution;       // viewport in CSS px (W, H); pixel→NDC mapping
 uniform float uPersp;           // tilt camera distance, glyph radii; <= 0 = orthographic
+uniform vec2 uCentre;           // vanishing point for .z parallax, px
 in vec3 position;        // quad corner in -1..1
-in vec2 iPos;            // glyph centre, pixel space
+in vec3 iPos;            // glyph centre, pixel space + .z depth (fraction of minDim, + = nearer)
 in float iRadius;        // glyph radius, px
 in float iRot;           // z rotation / spin, radians
 in float iRotX;          // 3D tilt around horizontal axis, radians
@@ -154,24 +155,31 @@ out vec2 vLocal;            // shape-space coordinate, px (un-rotated)
 out float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha, vSoft;
 out float vRot, vRotX, vRotY, vShade;   // angles + 3D shade forwarded to the fragment
 out vec3 vColor;
+// .z(n): a real depth for the 2D glyphs. n is in the same units as position (a fraction of
+// min(w,h)), positive = toward the viewer. The scale is the pinhole 1/(1-z), and the centre
+// parallaxes away from the vanishing point by the same factor, so a field of glyphs at
+// different z reads as depth rather than as a size change.
+float zScale(float z) { return clamp(1.0 / max(1.0 - z, 0.08), 0.0, 12.0); }
 void main() {
-  vR = iRadius; vWeight = iWeight; vOpen = iOpen; vShape = iShape;
+  float zs = zScale(iPos.z);
+  vec2 iPos2 = uCentre + (iPos.xy - uCentre) * zs;
+  vR = iRadius * zs; vWeight = iWeight * zs; vOpen = iOpen; vShape = iShape;
   vFill = iFill; vStroke = iStroke; vVertex = iVertex; vAlpha = iAlpha; vColor = iColor.rgb;
-  vCap = mod(iCapJoin, 4.0); vJoin = floor(iCapJoin / 4.0); vSoft = iSoft;
+  vCap = mod(iCapJoin, 4.0); vJoin = floor(iCapJoin / 4.0); vSoft = iSoft * zs;
   vRot = iRot; vRotX = iRotX; vRotY = iRotY; vShade = iColor.a;
   // 3D raymarched shapes (id >= 11): a screen-aligned billboard sized to the
   // bounding sphere; the tumble happens inside the fragment raymarch.
   if (int(iShape + 0.5) >= 11) {
-    vec2 local3 = position.xy * (iRadius * 1.15 + 2.0);
+    vec2 local3 = position.xy * (vR * 1.15 + 2.0);
     vLocal = local3;
-    vec2 P3 = local3 + iPos;
+    vec2 P3 = local3 + iPos2;
     gl_Position = vec4(2.0 * P3.x / uResolution.x - 1.0, 1.0 - 2.0 * P3.y / uResolution.y, 0.0, 1.0);
     return;
   }
-  float pad = iWeight * 0.5 + 2.0 + iSoft;  // stroke half-width + AA margin + softness bleed
+  float pad = vWeight * 0.5 + 2.0 + vSoft;  // stroke half-width + AA margin + softness bleed
   // a line's length scales with open ((1-open)*r), and open can exceed 1 (e.g.
   // .open(5) draws a streak 4x the radius) — size the quad to contain it.
-  float reach = (int(iShape + 0.5) == 9) ? abs(1.0 - iOpen) * iRadius : iRadius;
+  float reach = (int(iShape + 0.5) == 9) ? abs(1.0 - iOpen) * vR : vR;
   float ext = reach + pad;                   // quad half-extent, px
   vec2 local = position.xy * ext;            // shape-space position, px (flat, z=0)
   vLocal = local;
@@ -191,12 +199,12 @@ void main() {
   float x2 = x * cy + z * sy; z = -x * sy + z * cy; x = x2;
   float w = 1.0;
   if (uPersp > 0.0) {
-    float d = uPersp * max(1.0, iRadius);    // camera distance, px
+    float d = uPersp * max(1.0, vR);         // camera distance, px
     w = max((d - z) / d, 0.01);              // homogeneous depth (1 when flat)
   }
   float cz = cos(iRot), sz = sin(iRot);      // Z spin, screen space
   vec2 N = vec2(x * cz - y * sz, x * sz + y * cz);
-  vec2 P = N + iPos * w;                      // offset is perspective, centre is affine (×w)
+  vec2 P = N + iPos2 * w;                     // offset is perspective, centre is affine (×w)
   gl_Position = vec4(
     2.0 * P.x / uResolution.x - w,            // ÷w later → 2·world.x/W − 1
     w - 2.0 * P.y / uResolution.y,            // ÷w later → 1 − 2·world.y/H (y down)
@@ -1068,7 +1076,8 @@ export class GLRenderer {
     this._ensureCapacity(4096);
 
     // a material per blend mode (premultiplied output → custom blend factors)
-    this.uniforms = { uResolution: { value: new THREE.Vector2(1, 1) }, uPersp: { value: 2.6 } };
+    this.uniforms = { uResolution: { value: new THREE.Vector2(1, 1) }, uPersp: { value: 2.6 },
+      uCentre: { value: new THREE.Vector2(0, 0) } };   // .z parallax vanishing point
     // DoubleSide: the pixel-space projection flips Y, which inverts triangle
     // winding — without this, front-face culling drops every quad.
     const base = { glslVersion: THREE.GLSL3, uniforms: this.uniforms, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide };
@@ -1184,7 +1193,7 @@ export class GLRenderer {
     this.groupRTs = new Map();   // gid (or '$layer' for a bare bus) → { a, b, w, h } ping-pong
     this._buses = new Map();     // layer name → this frame's finished texture (masking)
 
-    this._scratch = { x: 0, y: 0, r: 0, soft: 0, rot: 0, rotX: 0, rotY: 0, rgb: [1, 1, 1], alpha: 1, weight: 1, open: 0, shape: 0, fill: 1, stroke: 0, blend: 'source-over' };
+    this._scratch = { x: 0, y: 0, r: 0, soft: 0, z: 0, rot: 0, rotX: 0, rotY: 0, rgb: [1, 1, 1], alpha: 1, weight: 1, open: 0, shape: 0, fill: 1, stroke: 0, blend: 'source-over' };
   }
 
   _getGroupRT(gid) {
@@ -1219,6 +1228,7 @@ export class GLRenderer {
     this.renderer.setPixelRatio(DPR);
     this.renderer.setSize(W, H, false);
     this.uniforms.uResolution.value.set(W, H);
+    this.uniforms.uCentre.value.set(W * 0.5, H * 0.5);   // .z parallaxes from the canvas centre
     const cam = this.camera;            // y grows downward, like Canvas2D (used for the line overlays)
     cam.left = 0; cam.right = W; cam.top = 0; cam.bottom = H;
     cam.updateProjectionMatrix();
@@ -1484,7 +1494,7 @@ export class GLRenderer {
         resolve(p, minDim, out);
         if ((out.shape >= 15 && out.shape < 20) || out.shape >= 100) continue;   // meshes → _drawMeshes, sprites → _drawSprites
         const a = this.arrays;
-        a.iPos[count * 2] = out.x; a.iPos[count * 2 + 1] = out.y;
+        a.iPos[count * 3] = out.x; a.iPos[count * 3 + 1] = out.y; a.iPos[count * 3 + 2] = out.z || 0;
         a.iRadius[count] = out.r;
         a.iRot[count] = out.rot;
         a.iRotX[count] = out.rotX; a.iRotY[count] = out.rotY;

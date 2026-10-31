@@ -340,6 +340,15 @@ class Pattern {
   //   .soft(age().range(0, 0.6))                        glyphs defocus as they age
   // WebGL only: the Canvas2D fallback draws these crisp (it has no cheap per-shape blur).
   soft(a)    { return this.set('soft', a); }
+  // z(n): real DEPTH for a flat glyph. Same units as position (a fraction of min(w,h)),
+  // positive = toward the viewer, 0 = the screen plane. The glyph scales by the pinhole
+  // 1/(1-z) AND parallaxes away from the canvas centre by the same factor, so a field at
+  // mixed depths reads as space rather than as glyphs of different sizes:
+  //   .z(rand.range(-1.5, 0.6))                  scatter through depth
+  //   .z(osc(0.2,"sine").spread(1).range(-1, 0.5))   a wave coming at you
+  // Pairs with .soft() for defocus-by-distance. WebGL only, and it moves the glyph itself —
+  // sprites, imported meshes and polygon fills keep their own paths and ignore it.
+  z(a)       { return this.set('z', a); }
   cap(a)    { return this.set('cap', a); }   // line ends: 'round' | 'butt' | 'square'
   join(a)   { return this.set('join', a); }  // corners:   'round' | 'miter' | 'bevel'
   rotateX(a){ return this.set('rotateX', a); }  // tilt around horizontal axis (turns)
