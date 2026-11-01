@@ -949,6 +949,43 @@ is composited, so stacking order doesn't constrain you. Two layers masking each 
 one frame late rather than breaking. A layer nobody references costs nothing extra; masking
 allocates buffers only for the layers actually involved.
 
+### A ramp inside each glyph (`gradient`)
+
+`.color()` paints a glyph one flat colour. `.gradient(b, c?, opts?)` makes it a **ramp**:
+`.color()` is the first stop, `b` the last, and `c` — when you give it — the middle one.
+
+```js
+shape("hex*12").grid(4)
+  .color("#ff2d6f").gradient("#2d9bff")              // two stops
+shape("circle*8").color("#ff2d6f").gradient("#2d9bff", "#ffe23d")   // three
+```
+
+The ramp lives in the **glyph's own un-rotated space**, not in screen space. Two things fall
+out of that, and both are the point: it **tumbles with the glyph** (`.rotate()`, `.spin()`
+and the 3D `.rotateX/Y()` carry it round), and it's normalised by the glyph's radius, so a
+field of glyphs at wildly different `.size()` all read as the same gradient rather than as
+slices of one big one.
+
+| option | does |
+|---|---|
+| `{ angle: t }` | which way the ramp points, in **turns** — `0` left→right, `0.25` bottom→top |
+| `{ mode: "linear" }` | the default: a straight ramp along `angle` |
+| `{ mode: "radial" }` | centre → rim, `angle` ignored |
+| `{ mode: "conic" }` | swept around the glyph, starting at `angle` |
+
+Every argument is patternable, and `angle` takes an **osc**, which is where it stops being a
+static fill:
+
+```js
+.gradient("#2d9bff", null, { angle: osc(0.25) })          // the ramp turns as it lives
+.gradient("#2d9bff", null, { angle: age(), mode: "conic" })  // one sweep per lifetime
+.gradient(palette("neon").at(rand))                       // every glyph a different last stop
+```
+
+It applies to the fill **and** the stroke, and to the raymarched 3D shapes
+(`cube`/`sphere`/`torus`/`octa`). `.shade()` still works on top — the ramp supplies the base
+colour the lighting multiplies, so a shaded sphere keeps its highlight.
+
 ### Your own shader (`glsl`)
 
 `.glsl(source, amount)` runs **your own fragment shader** over a group's finished texture, as

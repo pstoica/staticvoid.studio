@@ -449,6 +449,12 @@ function spawn(value, onset) {
     rim: baseNum('rim', 0),              // meshes: keep only the silhouette (0 = solid)
     cel: baseNum('cel', 0),              // meshes: quantize the lighting into n flat bands
     shade: sprInit.shade != null ? sprInit.shade : numAt(v.shade != null ? v.shade : (SHAPE_ID[v.shape] >= 11 && SHAPE_ID[v.shape] <= 14 ? 0.85 : 0), 0, phase),
+    // .gradient(): the ramp's other stops, resolved like .color() (an osc stop keeps moving
+    // over the glyph's life; anything else freezes at onset). gradMode 0 = no gradient.
+    gradB: v.gradB == null ? null : (isOsc(v.gradB) ? oscColor(freezeOscParams(v.gradB.__osc, onset), 0, phase) : resolveColor(v.gradB, phase)),
+    gradC: v.gradC == null ? null : (isOsc(v.gradC) ? oscColor(freezeOscParams(v.gradC.__osc, onset), 0, phase) : resolveColor(v.gradC, phase)),
+    gradAngle: baseNum('gradAngle', 0),
+    gradMode: v.gradMode == null ? 0 : numAt(v.gradMode, 0, phase) + (numAt(v.gradStops, 0, phase) > 2.5 ? 4 : 0),
     cap: v.cap || 'square',
     join: v.join || 'miter',
     open: baseNum('open', 0),
@@ -538,7 +544,7 @@ function spawn(value, onset) {
       if (ex.body && ex.pid === p.pid) { p.body = ex.body; p.physRot = ex.physRot; }  // sim keeps the body
       else if (ex.body && ex.pid) { const wd = physWorlds.get(ex.pid); if (wd) wd.remove(ex.body); }
       Object.assign(ex, p);
-      ex._rgb = null;                                                   // stale colour cache (glResolve)
+      ex._rgb = ex._rgbB = ex._rgbC = null;                             // stale colour caches (glResolve)
       if (!ex.body) { const xy = resolvePos(ex, minDim, ex.age); ex.x = xy[0]; ex.y = xy[1]; }
       return;
     }
@@ -632,10 +638,11 @@ function interpPal(colors, t) {
 const isOsc = DSL.isOsc;
 const isSpring = DSL.isSpring;
 const applyEase = DSL.ease;   // named Penner curve, 0..1 → 0..1 (shared with pattern.js)
-const MOD_FIELDS = ['size', 'color', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade', 'soft', 'z', 'rim', 'cel'];
+const BLACK3 = [0, 0, 0];   // the unset gradient stop; gradMode 0 means the shader never reads it
+const MOD_FIELDS = ['size', 'color', 'gradB', 'gradC', 'gradAngle', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade', 'soft', 'z', 'rim', 'cel'];
 // fields a .spring() can drive: position (resolved in resolvePos) + the scalar mods
 // (resolved in glResolve/drawGlyph). NOT color (non-scalar). Each holds per-glyph state.
-const SPRING_FIELDS = ['x', 'y', 'radius', 'angle', 'pan', 'size', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade', 'soft', 'z', 'rim', 'cel'];
+const SPRING_FIELDS = ['x', 'y', 'radius', 'angle', 'pan', 'size', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade', 'soft', 'z', 'rim', 'cel', 'gradAngle'];
 const SPRING_POS = new Set(['x', 'y', 'radius', 'angle', 'pan']);
 const _h1 = (x) => { const s = Math.sin((x + 0.123) * 12.9898) * 43758.5453; return s - Math.floor(s); };
 const _snoise = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return _h1(i) * (1 - u) + _h1(i + 1) * u; };
@@ -975,11 +982,15 @@ const JOIN_ID = { miter: 0, round: 1, bevel: 2 };  // polygon corners (default m
 function glResolve(p, minDim, out) {
   const age = p.age, ageC = p.ageCycles, stC = p.spawnCycle;
   let sizePx = p.size, rotTurns = p.rotTurns, rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline, shade = p.shade, soft = p.soft, zDepth = p.z, rim = p.rim, cel = p.cel, color = null;
+  let gradAngle = p.gradAngle, gradB = null, gradC = null;
   if (p.mods) { _curPos.x = W ? p.x / W : 0.5; _curPos.y = H ? p.y / H : 0.5; _curGlyph = p; }
   if (p.mods) for (const m of p.mods) {
     const val = evalOsc(m.osc, age, p.phase, p.spawnT, ageC, stC);
     if (m.field === 'size') sizePx = val * minDim;
     else if (m.field === 'color') color = oscColorRGB(m.osc, age, p.phase, p.spawnT, ageC, stC);
+    else if (m.field === 'gradB') gradB = oscColorRGB(m.osc, age, p.phase, p.spawnT, ageC, stC);
+    else if (m.field === 'gradC') gradC = oscColorRGB(m.osc, age, p.phase, p.spawnT, ageC, stC);
+    else if (m.field === 'gradAngle') gradAngle = val;
     else if (m.field === 'rotate') rotTurns = val;
     else if (m.field === 'rotateX') rotX = val * TAU;
     else if (m.field === 'rotateY') rotY = val * TAU;
@@ -1006,8 +1017,11 @@ function glResolve(p, minDim, out) {
     if (s.shade != null) shade = s.shade;
     if (s.soft != null) soft = s.soft;
     if (s.z != null) zDepth = s.z;
+    if (s.gradAngle != null) gradAngle = s.gradAngle;
   }
   if (!color) { if (!p._rgb) p._rgb = cssToRGB(p.color); color = p._rgb; }
+  if (!gradB) { if (!p._rgbB) p._rgbB = p.gradB ? cssToRGB(p.gradB) : BLACK3; gradB = p._rgbB; }
+  if (!gradC) { if (!p._rgbC) p._rgbC = p.gradC ? cssToRGB(p.gradC) : BLACK3; gradC = p._rgbC; }
   out.x = p.x; out.y = p.y;
   out.r = sizePx;
   out.rot = rotTurns * TAU + p.spin * age + p.physRot;   // physRot = rigid-body tumble (0 for non-physics)
@@ -1019,6 +1033,8 @@ function glResolve(p, minDim, out) {
   out.soft = Math.max(0, soft) * sizePx;   // fraction of radius → px for the shader
   out.z = zDepth;                          // depth, fraction of minDim (shader does the pinhole)
   out.rim = rim; out.cel = cel;            // mesh styling (silhouette-only / cel bands)
+  out.gradB = gradB; out.gradC = gradC;    // .gradient() stops + where the ramp points
+  out.gradAngle = gradAngle * TAU; out.gradMode = p.gradMode;
   out.open = open;
   const id = p.sprite || (SHAPE_ID[p.shape] != null ? SHAPE_ID[p.shape] : 0);
   out.shape = id;
@@ -1818,6 +1834,19 @@ const PRESETS = {
     .color(palette("ice").at(rand))
     .decay(2)
 ).glow(0.35, 0.7)`,
+
+  // .gradient(): each glyph is a RAMP, not a flat colour — and the ramp lives in the glyph's
+  // own space, so .rotate() carries it round and every .size() reads the same. The angle is
+  // age(), so each hex sweeps its gradient exactly once over its own life.
+  'gradient': `stack(
+  bg("#06060e"),
+  shape("hex*64").grid(8)
+    .size(0.055)
+    .rotate(osc(0.06).range(0, 1))
+    .color(palette("neon").at(rand))
+    .gradient(palette("ice").at(rand), null, { angle: age() })
+    .decay(2)
+)`,
 
   // .glsl(): the escape hatch. Your own fragment shader over the finished layer — here a
   // ripple that pushes the sample point around, plus a vignette, neither of which exists as

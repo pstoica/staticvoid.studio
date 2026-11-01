@@ -195,6 +195,13 @@ Loom's deps, so the dependency split is clean.
   valuable part of anime.js is its easing functions (see Tier 1) and, eventually, its timeline
   (above).
 
+- **Procedural fills.** `.gradient()` (shipped 2026-10-31) gave each glyph a ramp in its own
+  shape space; the next step is the same slot carrying a *pattern* — stripes, checker, noise,
+  rings — driven by the same osc-able angle, plus a scale and a phase so the fill can crawl.
+  The plumbing is already there: `gradAt()` in the SDF fragment shader switches on a mode enum
+  and `iGradC.a` has room for more of them, one instance attribute slot is still free (see
+  `IATTRS`), and `gradAngle` is already in `MOD_FIELDS`/`SPRING_FIELDS` so an osc reaches it.
+
 ## Dependencies
 - 1 (easing), 2 (`$`-layers), 3 (spring) are each standalone.
 - 4 (physics) is standalone-ish; benefits from 3 proving per-glyph dynamics; camera

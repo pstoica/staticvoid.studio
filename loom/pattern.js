@@ -79,6 +79,10 @@ function ease(name, t) {
 }
 
 // ── the Pattern type ──────────────────────────────────────────────────────────
+
+// .gradient() ramp shapes. 0 is "no gradient" and is what every glyph gets by default,
+// so the shader can skip the whole ramp with one compare.
+const GRAD_MODE = { none: 0, linear: 1, radial: 2, conic: 3, angular: 3 };
 class Pattern {
   constructor(query) { this.query = query; } // query: span -> hap[]
 
@@ -292,6 +296,25 @@ class Pattern {
     return appLeft(this.fmap((l) => (r) => Object.assign({}, l, { [name]: r })), right);
   }
   color(a) { return this.set('color', a); }
+  // gradient(b, c?, opts?): fill each glyph with a RAMP instead of one flat colour —
+  // .color() is the first stop, b the last, and c (when given) the middle one, which is the
+  // three-stop case. The ramp lives in the glyph's own un-rotated space, so it tumbles with
+  // the glyph and is the same across every .size(). Every argument is patternable, and
+  // `angle` takes an osc, so the ramp can turn over a glyph's life.
+  //   .color("#f0f").gradient("#0ff")                      // two stops, left → right
+  //   .color("#f0f").gradient("#0ff", "#ff0")              // three stops
+  //   .gradient("#0ff", null, { angle: osc(0.2), mode: "conic" })
+  gradient(b, c, opts) {
+    // .gradient(b, { angle }) — the middle stop is optional, so an options object in its
+    // place is detected by its keys rather than by its type (a colour may be a Pattern).
+    if (c && typeof c === 'object' && opts === undefined && ('angle' in c || 'mode' in c)) { opts = c; c = null; }
+    const o = opts || {};
+    let p2 = this.set('gradB', b == null ? '#000' : b);
+    p2 = p2.set('gradC', c == null ? '#000' : c);
+    p2 = p2.set('gradAngle', o.angle == null ? 0 : o.angle);
+    p2 = p2.set('gradMode', GRAD_MODE[String(o.mode || 'linear')] ?? 1);
+    return p2.set('gradStops', c == null ? 2 : 3);
+  }
   size(a)  { return this.set('size', a); }
   // n(i): pick the i-th FRAME of a drawn shape pack (see /loom/draw/) — patternable, so
   // shape("mypack").n("0 1 2 3") flips through frames like an Animal-Crossing flipbook.

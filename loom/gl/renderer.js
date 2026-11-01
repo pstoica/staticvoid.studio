@@ -141,10 +141,13 @@ const QUAD_IDX = new Uint16Array([0, 1, 2, 0, 2, 3]);
 
 // instance attributes: name → component count
 const IATTRS = {
-  iPos: 3, iRadius: 1, iRot: 1, iRotX: 1, iRotY: 1, iColor: 4, iAlpha: 1,   // iColor.a = 3D shade (packed; we're at the 16-attribute limit)
-  // At WebGL's 16-attribute limit, so cap+join share one slot (both are 0..2 enums) to make
-  // room for iSoft. iColor.a already smuggles the 3D shade for the same reason.
-  iWeight: 1, iOpen: 1, iShape: 1, iFill: 1, iStroke: 1, iVertex: 1, iCapJoin: 1, iSoft: 1,
+  iPos: 3, iRadius: 1, iRot: 1, iRotX: 1, iRotY: 1, iColor: 4, iAlpha: 1,   // iColor.a = 3D shade
+  // WebGL guarantees only 16 vertex attributes and `position` takes one, so every small
+  // enum is packed rather than given a slot of its own: iFlags carries cap, join and the
+  // three draw-mode bits, and iColor.a smuggles the 3D shade. That bought the room for the
+  // per-glyph gradient below — iGradB/iGradC are a whole vec4 each, which is what an
+  // attribute slot costs regardless. One slot is still free (procedural fills next).
+  iWeight: 1, iOpen: 1, iShape: 1, iFlags: 1, iSoft: 1, iGradB: 4, iGradC: 4,
 };
 const TRACE_CAP = 8192;         // max points in the trace polyline
 
@@ -164,15 +167,18 @@ in float iAlpha;         // 0..1, envelope already folded in
 in float iWeight;        // stroke width (full), px
 in float iOpen;          // arc/line gap 0..1
 in float iShape;         // shape id
-in float iFill;          // 0/1
-in float iStroke;        // 0/1
-in float iVertex;        // 0/1 — dot at each vertex
-in float iCapJoin;       // packed: cap (0 round, 1 butt, 2 square) + join (0 miter, 1 round, 2 bevel) * 4
+in float iFlags;         // packed: cap (0 round, 1 butt, 2 square) + join (0 miter, 1 round,
+                         // 2 bevel) * 4 + fill * 16 + stroke * 32 + vertex * 64
 in float iSoft;          // per-glyph edge softness in px — widens the AA band = defocus
+in vec4 iGradB;          // gradient stop B: rgb + .a = angle, radians
+in vec4 iGradC;          // gradient stop C: rgb + .a = mode (0 none, 1 linear, 2 radial,
+                         // 3 conic) + 4 when C is in play (a three-stop ramp)
 out vec2 vLocal;            // shape-space coordinate, px (un-rotated)
 out float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha, vSoft;
 out float vRot, vRotX, vRotY, vShade;   // angles + 3D shade forwarded to the fragment
 out vec3 vColor;
+out vec3 vColorB, vColorC;              // the gradient's other stops
+out vec2 vGrad;                         // .x = angle (radians), .y = mode flags
 // .z(n): a real depth for the 2D glyphs. n is in the same units as position (a fraction of
 // min(w,h)), positive = toward the viewer. The scale is the pinhole 1/(1-z), and the centre
 // parallaxes away from the vanishing point by the same factor, so a field of glyphs at
@@ -182,8 +188,14 @@ void main() {
   float zs = zScale(iPos.z);
   vec2 iPos2 = uCentre + (iPos.xy - uCentre) * zs;
   vR = iRadius * zs; vWeight = iWeight * zs; vOpen = iOpen; vShape = iShape;
-  vFill = iFill; vStroke = iStroke; vVertex = iVertex; vAlpha = iAlpha; vColor = iColor.rgb;
-  vCap = mod(iCapJoin, 4.0); vJoin = floor(iCapJoin / 4.0); vSoft = iSoft * zs;
+  vAlpha = iAlpha; vColor = iColor.rgb; vSoft = iSoft * zs;
+  float fl = iFlags;
+  vCap = mod(fl, 4.0);                  fl = floor(fl / 4.0);
+  vJoin = mod(fl, 4.0);                 fl = floor(fl / 4.0);
+  vFill = mod(fl, 2.0);                 fl = floor(fl / 2.0);
+  vStroke = mod(fl, 2.0);               fl = floor(fl / 2.0);
+  vVertex = mod(fl, 2.0);
+  vColorB = iGradB.rgb; vColorC = iGradC.rgb; vGrad = vec2(iGradB.a, iGradC.a);
   vRot = iRot; vRotX = iRotX; vRotY = iRotY; vShade = iColor.a;
   // 3D raymarched shapes (id >= 11): a screen-aligned billboard sized to the
   // bounding sphere; the tumble happens inside the fragment raymarch.
@@ -239,7 +251,26 @@ in vec2 vLocal;
 in float vR, vWeight, vOpen, vShape, vFill, vStroke, vVertex, vCap, vJoin, vAlpha, vSoft;
 in float vRot, vRotX, vRotY, vShade;
 in vec3 vColor;
+in vec3 vColorB, vColorC;
+in vec2 vGrad;           // .x = angle (radians), .y = mode + 4 when a third stop is in play
 out vec4 fragColor;
+
+// .gradient(b, c?): a ramp ACROSS each glyph, in its own un-rotated shape space, so the
+// gradient tumbles with the glyph instead of being painted on from screen space. q is in
+// maths-space px from the centre; normalising by vR makes the ramp size-independent, so a
+// field of glyphs at different sizes all read the same.
+vec3 gradAt(vec3 base, vec2 q) {
+  int fl = int(vGrad.y + 0.5);
+  int mode = fl & 3;
+  if (mode == 0) return base;
+  vec2 u = q / max(vR, 1e-4);
+  float t;
+  if (mode == 2)      t = clamp(length(u), 0.0, 1.0);                        // radial
+  else if (mode == 3) t = fract(atan(u.y, u.x) / TAU - vGrad.x);             // conic
+  else                t = clamp(dot(u, vec2(cos(vGrad.x), sin(vGrad.x))) * 0.5 + 0.5, 0.0, 1.0);
+  if ((fl & 4) == 0) return mix(base, vColorB, t);
+  return t < 0.5 ? mix(base, vColorB, t * 2.0) : mix(vColorB, vColorC, t * 2.0 - 1.0);
+}
 
 vec2 rot2(vec2 p, float a){ float c=cos(a), s=sin(a); return vec2(p.x*c-p.y*s, p.x*s+p.y*c); }
 
@@ -393,7 +424,7 @@ void main(){
       if (cov <= 0.002) discard;
     }
     float a = clamp(vAlpha * cov, 0.0, 1.0);
-    fragColor = vec4(clamp(vColor * shade, 0.0, 1.0) * a, a);
+    fragColor = vec4(clamp(gradAt(vColor, q) * shade, 0.0, 1.0) * a, a);
     return;
   }
 
@@ -468,7 +499,7 @@ void main(){
   }
   // .shade(n) on a 2D shape → glossy "plastic toy" puff: fake a domed normal from
   // the SDF (screen-space derivatives) and add diffuse + a tight specular.
-  vec3 outColor = vColor;
+  vec3 outColor = gradAt(vColor, q);
   if (vShade > 0.001 && !capped) {
     vec3 N;
     if (openCurve) {                         // ring / arc → a torus-like tube
@@ -488,7 +519,7 @@ void main(){
     vec3 L = normalize(vec3(-0.3, 0.5, 0.8));
     float diff = max(dot(N, L), 0.0);
     float spec = pow(max(dot(N, normalize(L + vec3(0.0, 0.0, 1.0))), 0.0), 28.0);
-    outColor = clamp(vColor * (0.45 + 0.6 * diff) + vec3(spec) * 0.75, 0.0, 1.0);
+    outColor = clamp(outColor * (0.45 + 0.6 * diff) + vec3(spec) * 0.75, 0.0, 1.0);
   }
   if (cov <= 0.0) discard;
   float a = clamp(vAlpha * cov, 0.0, 1.0);
@@ -1530,11 +1561,13 @@ export class GLRenderer {
         a.iWeight[count] = out.weight;
         a.iOpen[count] = out.open;
         a.iShape[count] = out.shape;
-        a.iFill[count] = out.fill;
-        a.iStroke[count] = out.stroke;
-        a.iVertex[count] = out.vertex;
-        a.iCapJoin[count] = out.cap + out.join * 4;
+        a.iFlags[count] = out.cap + out.join * 4 + out.fill * 16 + out.stroke * 32 + out.vertex * 64;
         a.iSoft[count] = out.soft;
+        const gb = out.gradB, gc = out.gradC;
+        a.iGradB[count * 4] = gb[0]; a.iGradB[count * 4 + 1] = gb[1]; a.iGradB[count * 4 + 2] = gb[2];
+        a.iGradB[count * 4 + 3] = out.gradAngle;
+        a.iGradC[count * 4] = gc[0]; a.iGradC[count * 4 + 1] = gc[1]; a.iGradC[count * 4 + 2] = gc[2];
+        a.iGradC[count * 4 + 3] = out.gradMode;
         count++;
       }
       if (!count) continue;
