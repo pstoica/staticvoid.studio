@@ -1044,10 +1044,19 @@ squared), and one at `x = 0.2, z = −0.6` lands at screen `0.312` against a pre
 Pair it with `.soft()` for defocus-by-distance and with `.alpha()` for aerial perspective —
 `near()`/`age()` drive both, so a single depth signal can run all three.
 
-**Scope:** `.z()` moves the glyph itself, so it affects the SDF shapes and the raymarched 3D
-ones. Sprites (emoji, drawn packs, `text()`), imported meshes and `polygon()` fills have
-their own draw paths and ignore it. It is WebGL-only. This is a per-glyph pinhole, not a
-camera — see `persp()` for the global tilt projection that `rotateX/rotateY` ride on.
+**Seeing it.** A *single centred* glyph with `.z()` only changes size — indistinguishable
+from changing `.size()`. Depth reads from two things `.z()` gives you and `.size()` doesn't:
+**parallax** (off-centre glyphs slide outward as they approach) and **relative** depth across
+many glyphs. So scatter them and vary z per glyph:
+
+```js
+shape("sphere*40").x(rand).y(rand).z(rand.range(-2, 0.5)).size(0.08).shade(0.9)
+```
+
+**Scope:** `.z()` moves the glyph itself — SDF shapes, the raymarched 3D shapes, and sprites
+(emoji, `text()`, drawn packs) all respond. Imported meshes and `polygon()` fills keep their
+own draw paths and ignore it. WebGL only. This is a per-glyph pinhole, not a camera — see
+`persp()` for the global tilt projection that `rotateX/rotateY` ride on.
 
 ### Per-glyph defocus (`.soft`)
 

@@ -488,8 +488,10 @@ const SPRITE_VERT = `
 precision highp float;
 uniform vec2 uResolution;
 uniform float uPersp;      // tilt camera distance, glyph radii; <= 0 = orthographic
+uniform vec2 uCentre;      // vanishing point for .z parallax, px
 attribute vec3 position;   // quad corner in -1..1
-attribute vec2 sPos;       // centre, css px
+attribute vec3 sPos;       // centre, css px + .z depth (the third component is free: an
+                           // attribute slot holds a vec4 either way)
 attribute float sRadius;   // half-size, px
 attribute float sAspect;   // width / height of the texture (1 = square; >1 = a word)
 attribute float sRot;      // z rotation, radians
@@ -506,15 +508,20 @@ void main() {
   vUv = mix(sUV.xy, sUV.zw, q);                                    // into this sprite's atlas rect
   vTint = sTint;
   vMode = sMode;
-  vec2 l = position.xy * sRadius * vec2(sAspect, 1.0);
+  // .z(): same pinhole as the SDF glyphs — scale by 1/(1-z) and parallax from the centre,
+  // so an emoji or a word sits in depth exactly like a circle does.
+  float zs = clamp(1.0 / max(1.0 - sPos.z, 0.08), 0.0, 12.0);
+  float R = sRadius * zs;
+  vec2 ctr = uCentre + (sPos.xy - uCentre) * zs;
+  vec2 l = position.xy * R * vec2(sAspect, 1.0);
   float cx = cos(sRotX), sx = sin(sRotX), cy = cos(sRotY), sy = sin(sRotY);
   float x = l.x, y = l.y * cx, z = l.y * sx;
   float x2 = x * cy + z * sy; z = -x * sy + z * cy; x = x2;
   float w = 1.0;
-  if (uPersp > 0.0) { float d = uPersp * max(1.0, sRadius); w = max((d - z) / d, 0.01); }
+  if (uPersp > 0.0) { float d = uPersp * max(1.0, R); w = max((d - z) / d, 0.01); }
   float c = cos(sRot), s = sin(sRot);
   vec2 N = vec2(x * c - y * s, x * s + y * c);
-  vec2 P = N + sPos * w;
+  vec2 P = N + ctr * w;
   gl_Position = vec4(2.0 * P.x / uResolution.x - w, w - 2.0 * P.y / uResolution.y, 0.0, w);
 }`;
 const SPRITE_FRAG = `
@@ -1624,8 +1631,8 @@ export class GLRenderer {
     const SPR_CAP = 4096;
     const geo = new THREE.InstancedBufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, 1, 0, -1, 1, 0]), 3));
-    this.sprArrays = { sPos: new Float32Array(SPR_CAP * 2), sRadius: new Float32Array(SPR_CAP), sAspect: new Float32Array(SPR_CAP), sRot: new Float32Array(SPR_CAP), sRotX: new Float32Array(SPR_CAP), sRotY: new Float32Array(SPR_CAP), sMode: new Float32Array(SPR_CAP), sUV: new Float32Array(SPR_CAP * 4), sTint: new Float32Array(SPR_CAP * 4) };
-    geo.setAttribute('sPos', new THREE.InstancedBufferAttribute(this.sprArrays.sPos, 2));
+    this.sprArrays = { sPos: new Float32Array(SPR_CAP * 3), sRadius: new Float32Array(SPR_CAP), sAspect: new Float32Array(SPR_CAP), sRot: new Float32Array(SPR_CAP), sRotX: new Float32Array(SPR_CAP), sRotY: new Float32Array(SPR_CAP), sMode: new Float32Array(SPR_CAP), sUV: new Float32Array(SPR_CAP * 4), sTint: new Float32Array(SPR_CAP * 4) };
+    geo.setAttribute('sPos', new THREE.InstancedBufferAttribute(this.sprArrays.sPos, 3));
     geo.setAttribute('sRadius', new THREE.InstancedBufferAttribute(this.sprArrays.sRadius, 1));
     geo.setAttribute('sAspect', new THREE.InstancedBufferAttribute(this.sprArrays.sAspect, 1));
     geo.setAttribute('sRot', new THREE.InstancedBufferAttribute(this.sprArrays.sRot, 1));
@@ -1636,7 +1643,8 @@ export class GLRenderer {
     geo.setAttribute('sTint', new THREE.InstancedBufferAttribute(this.sprArrays.sTint, 4));
     const mat = new THREE.RawShaderMaterial({
       vertexShader: SPRITE_VERT, fragmentShader: SPRITE_FRAG,
-      uniforms: { uResolution: this.uniforms.uResolution, uPersp: this.uniforms.uPersp, tMap: { value: null } },
+      uniforms: { uResolution: this.uniforms.uResolution, uPersp: this.uniforms.uPersp,
+        uCentre: this.uniforms.uCentre, tMap: { value: null } },   // shared: .z parallax origin
       transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
     });
     mat.blending = THREE.CustomBlending; mat.blendEquation = THREE.AddEquation;
@@ -1681,7 +1689,7 @@ export class GLRenderer {
     const push = (p, aspect, spriteUV) => {
       resolve(p, minDim, out);
       if (out.alpha <= 0.003) return;
-      A.sPos[n * 2] = out.x; A.sPos[n * 2 + 1] = out.y;
+      A.sPos[n * 3] = out.x; A.sPos[n * 3 + 1] = out.y; A.sPos[n * 3 + 2] = out.z || 0;
       A.sRadius[n] = out.r; A.sRot[n] = out.rot;
       A.sAspect[n] = aspect;
       A.sRotX[n] = out.rotX; A.sRotY[n] = out.rotY;
