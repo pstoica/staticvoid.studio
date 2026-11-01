@@ -1600,6 +1600,11 @@ export class GLRenderer {
   }
   _drawSprites(parts, target) {
     if (!this.spriteMesh || !this.sprites) return;
+    // Sprite id → particles. The buckets must be drawn in a STABLE order: a Map iterates in
+    // insertion order, which here is whichever sprite the oldest living particle happens to
+    // be, so the moment that one dies the entire z-order of the sprite types swaps. With two
+    // emoji alternating that measured 23 flips a second and reads exactly like z-fighting.
+    // Sorting by id costs nothing and picks one consistent order instead.
     const buckets = new Map();                     // sprite id → particles
     for (const p of parts) {
       if (!p.sprite) continue;
@@ -1610,7 +1615,8 @@ export class GLRenderer {
     const r = this.renderer, out = this._scratch, minDim = this._minDim, resolve = this._resolve;
     const A = this.sprArrays, geo = this.spriteMesh.geometry, mat = this.spriteMesh.material;
     r.setRenderTarget(target || null);
-    for (const [id, list] of buckets) {
+    for (const id of [...buckets.keys()].sort((a, b) => a - b)) {
+      const list = buckets.get(id);
       const spr = this.sprites[id]; if (!spr) continue;
       const aspect = spr.aspect || 1;              // >1 for a word: the quad widens to match
       let n = 0;
