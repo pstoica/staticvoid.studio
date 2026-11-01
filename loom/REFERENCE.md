@@ -949,6 +949,46 @@ is composited, so stacking order doesn't constrain you. Two layers masking each 
 one frame late rather than breaking. A layer nobody references costs nothing extra; masking
 allocates buffers only for the layers actually involved.
 
+### Your own shader (`glsl`)
+
+`.glsl(source, amount)` runs **your own fragment shader** over a group's finished texture, as
+an ordinary step in the FX chain. It's the escape hatch: anything the built-in FX don't cover,
+you write by hand.
+
+```js
+group(shape("circle*8").color(palette("neon").at(rand)).glow(0.6))
+  .glsl(`
+    vec2 uv = vUv + vec2(sin(vUv.y * 40.0 + uTime * 2.0) * 0.01, 0.0);
+    fragColor = texture(tMap, uv);
+  `)
+```
+
+You get a small, fixed uniform surface:
+
+| name | is |
+|---|---|
+| `tMap` | the layer so far, as a **premultiplied** sampler2D |
+| `vUv` | `0..1` across the layer, `(0,0)` **top**-left — `vUv.y` grows downward on screen |
+| `uTexel` | `1.0 / resolution` — add to `vUv` to step one pixel |
+| `uTime` | seconds since the page loaded |
+| `uAmount` | the second argument, **patternable** — the knob for live tweaking |
+
+Write just a **body** and Loom wraps it in `main()` for you; write a full `void main() { … }`
+and it's used as-is. Either way the uniforms, `vUv` and `fragColor` are already declared, so
+don't redeclare them. It's GLSL ES 3.0 (`texture()`, not `texture2D()`).
+
+Because `tMap` is premultiplied, `c.rgb` is already scaled by `c.a` — tint and warp work as
+you'd expect, but if you want to brighten, multiply `c.rgb` and leave `c.a` alone:
+
+```js
+.glsl(`vec4 c = texture(tMap, vUv); fragColor = vec4(c.rgb * uAmount, c.a);`, 2.0)
+```
+
+A shader that doesn't compile becomes a **pass-through** — the layer draws as if the verb
+weren't there, and the driver's error (with line numbers that match what you wrote) goes to
+the console once. So a typo mid-performance dims nothing. Compiled shaders are cached by
+source string, which is why a patch can re-run on every keystroke without stalling.
+
 ### Lifetime controls take signals too
 
 `.attack(s)` and `.decay(s, curve)` are **sampled once at onset**, so each glyph keeps the

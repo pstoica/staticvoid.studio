@@ -35,7 +35,7 @@ const METHOD = new Set(['fast', 'slow', 'rev', 'every', 'iter', 'palindrome', 'j
   'life', 'hold', 'sustain', 'onRelease', 'slew', 'id', 'n', 'stencil', 'set', 'spread', 'phase', 'rate', 'quantize', 'ease', 'segment', 'seg', 'sample', 'spring',
   'gt', 'gte', 'lt', 'lte', 'between', 'drift', 'free', 'sync', 'falloff',
   'tile', 'dots', 'halftone', 'rgbshift', 'rgb', 'posterize', 'dither', 'scanlines', 'slice', 'lens',
-  'scale', 'move', 'turn', 'aspect', 'hidden', 'mask']);
+  'scale', 'move', 'turn', 'aspect', 'hidden', 'mask', 'glsl']);
 
 // ── autocomplete ────────────────────────────────────────────────────────────────
 // The API is wide enough that remembering it is the main friction, so completion
@@ -163,6 +163,7 @@ const C_METHOD = [
   ['scanlines', 'FX: CRT lines'], ['slice', 'FX: offset bands'], ['lens', 'FX: barrel distortion'],
   ['scale', 'FX: zoom the layer'], ['move', 'FX: translate the layer'], ['turn', 'FX: rotate the layer'],
   ['aspect', 'FX: crop to a ratio'], ['hidden', 'render to a buffer but do not composite'],
+  ['glsl', 'FX: YOUR OWN fragment shader over the layer — tMap, vUv, uTexel, uTime, uAmount'],
 ];
 const SHAPE_NAMES = ['dot', 'circle', 'ring', 'arc', 'square', 'box', 'tri', 'pent', 'hex', 'star',
   'plus', 'line', 'cross', 'cube', 'sphere', 'torus', 'hoop', 'octa',
@@ -231,6 +232,7 @@ const HINT = {
   meshfill: '(amount 0..1, k 1..32, warp?, sharp 0.5..4)', radiance: '(amount, reach)',
   feedback: '(fade 0..1, zoom≈1, rot, loopFx?)', trails: '(fade 0..1, loopFx?)',
   silhouette: '(1 inside | -1 outside, snap?)', mask: '("layer", { mode, invert, amount })',
+  glsl: '(`fragColor = texture(tMap, vUv);`, amount 0..1) — body or full void main(); uniforms: tMap vUv uTexel uTime uAmount',
   hidden: '(on = true)', hue: '(turns)', brightness: '(n)', contrast: '(n)', saturate: '(n)',
   kaleido: '(wedges)', mirror: '(0/1)', tile: '(n)', dots: '(size)', rgbshift: '(amount)',
   posterize: '(levels ≥2)', dither: '(levels ≥2)', scanlines: '(0..1)', lens: '(amount)',

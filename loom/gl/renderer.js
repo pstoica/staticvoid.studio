@@ -1981,6 +1981,56 @@ export class GLRenderer {
 
   // run the group's FX chain in call order, ping-ponging between rt.a/rt.b; return
   // the final texture. feedback uses a separate persistent history pair (rt.h).
+  // .glsl(src): compile a user fragment shader as a chain pass. Cached by source string,
+  // because a patch re-runs on every keystroke and compiling per frame would stall. A shader
+  // that fails to compile is remembered as broken and the pass becomes a pass-through, so a
+  // typo dims nothing and crashes nothing — the error goes to the console once.
+  _userShader(src) {
+    if (!this._glslCache) this._glslCache = new Map();
+    const hit = this._glslCache.get(src);
+    if (hit !== undefined) return hit;
+    const body = String(src || '');
+    // Accept a bare expression body or a full main(). The uniform surface is prepended
+    // either way — only the main() wrapper is conditional, so a shader that declares its
+    // own main still gets tMap/vUv/fragColor without having to redeclare them.
+    const head = `
+precision highp float;
+uniform sampler2D tMap;    // the layer so far (premultiplied)
+uniform vec2 uTexel;       // 1 / resolution
+uniform float uTime;       // seconds
+uniform float uAmount;     // the verb's second argument, for patching
+in vec2 vUv;
+out vec4 fragColor;
+`;
+    const frag = /void\s+main\s*\(/.test(body) ? head + body : `${head}void main() {
+${body}
+}`;
+    // Validate up front on a throwaway GL shader object. three.js compiles lazily and a
+    // bad program makes it *skip* the draw, which leaves the ping-pong target holding the
+    // previous patch's pixels — a typo would show someone else's output rather than nothing.
+    // Compiling by hand touches no renderer state and hands us the driver's own error text.
+    const gl = this.renderer.getContext();
+    const sh = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(sh, `#version 300 es\n${frag}`);
+    gl.compileShader(sh);
+    const ok = gl.getShaderParameter(sh, gl.COMPILE_STATUS);
+    const info = ok ? null : (gl.getShaderInfoLog(sh) || '').trim();
+    gl.deleteShader(sh);
+    if (!ok) {
+      console.warn('Loom .glsl(): shader did not compile, pass skipped —\n' + info);
+      this._glslCache.set(src, null);
+      return null;
+    }
+    const mat = new THREE.RawShaderMaterial({
+      glslVersion: THREE.GLSL3, vertexShader: FS_VERT3, fragmentShader: frag,
+      uniforms: { tMap: { value: null }, uTexel: { value: new THREE.Vector2(1, 1) },
+        uTime: { value: 0 }, uAmount: { value: 1 } },
+      depthTest: false, depthWrite: false,
+    });
+    this._glslCache.set(src, mat);
+    return mat;
+  }
+
   _applyChain(rt, fx) {
     if (!fx || !fx.chain || !fx.chain.length) return rt.a.texture;
     let read = rt.a, write = rt.b, silhIdx = -1;
@@ -2133,6 +2183,21 @@ export class GLRenderer {
         if (amount <= 0.0) continue;                   // off
         const m = this.fx.negative; m.uniforms.uAmount.value = amount;
         this._blit(m, read.texture, write); swap();
+      } else if (t === 'glsl') {
+        const m = this._userShader(e.src);
+        if (!m) continue;                              // broken shader → pass through (no swap)
+        m.uniforms.uTexel.value.set(1 / rt.w, 1 / rt.h);
+        m.uniforms.uTime.value = this._elapsed || 0;
+        m.uniforms.uAmount.value = this._num(e.amount == null ? 1 : e.amount, 1);
+        // A link/compile failure throws out of render() with the render target still bound
+        // to this group's buffer, which would leave every later pass — and the screen —
+        // drawing into it. Remember the source as broken and rebind before carrying on.
+        try { this._blit(m, read.texture, write); swap(); }
+        catch (err) {
+          console.warn('Loom .glsl(): shader failed —', err && err.message);
+          this._glslCache.set(String(e.src), null);
+          this.renderer.setRenderTarget(null);
+        }
       } else if (t === 'mask') {
         // the source layer's finished texture, published by the bus pass in render()
         const src = this._buses && this._buses.get(String(e.src));

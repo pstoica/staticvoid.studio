@@ -1819,6 +1819,24 @@ const PRESETS = {
     .decay(2)
 ).glow(0.35, 0.7)`,
 
+  // .glsl(): the escape hatch. Your own fragment shader over the finished layer — here a
+  // ripple that pushes the sample point around, plus a vignette, neither of which exists as
+  // a built-in verb. Uniforms are tMap, vUv, uTexel, uTime and uAmount (the 2nd argument).
+  'shader': `stack(
+  bg("#04040a"),
+  group(
+    shape("dot*256").grid(16)
+      .size(0.016)
+      .color(palette("neon").at(rand))
+      .decay(0.4)
+  ).glsl(\`
+    float d = length(vUv - 0.5);
+    vec2 uv = vUv + normalize(vUv - 0.5 + 1e-5) * sin(d * 42.0 - uTime * 2.4) * 0.02 * uAmount;
+    vec4 c = texture(tMap, uv);
+    fragColor = c * (1.0 - d * 0.9);
+  \`, 1)
+)`,
+
   // mask + meshfill: the colour field exists everywhere, but you only see it through the
   // window — and the window is the sound. Drag the mouse to move it.
   'mask field': `stack(

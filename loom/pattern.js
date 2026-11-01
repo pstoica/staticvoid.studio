@@ -1226,7 +1226,9 @@ let _echoGen = 0;               // monotonic generation id for echo() layers (NO
 const _groupFx = new Map();
 const _echoGroups = [];         // {fam, cap} for echo() groups in the current compile
 function _resetGroups() { _gid = 0; _groupFx.clear(); _echoGroups.length = 0; }
-const MASK_LITERAL = new Set(['src', 'mode']);   // identifiers, not patternable values
+// Keys whose value is an identifier or a block of source text, not a patternable value:
+// _push would otherwise run them through mini() and hand the renderer a Pattern.
+const FX_LITERAL = { mask: new Set(['src', 'mode']), glsl: new Set(['src']) };
 class Group {
   constructor(pat) { this._pat = reify(pat); this._gid = ++_gid; this._fx = { chain: [] }; _groupFx.set(this._gid, this._fx); }
   // Each effect appends to an ordered chain; the renderer runs them in call order
@@ -1241,7 +1243,7 @@ class Group {
   // literal luma/alpha; reifying those turned them into empty Patterns and the mask silently
   // did nothing (silhouette's `mode`, by contrast, is a number and stays patternable).
   _push(fx) {
-    const lit = fx.type === 'mask' ? MASK_LITERAL : null;
+    const lit = FX_LITERAL[fx.type] || null;
     for (const k in fx) {
       if (k === 'type' || (lit && lit.has(k))) continue;
       if (typeof fx[k] === 'string') fx[k] = mini(fx[k]);
@@ -1252,6 +1254,14 @@ class Group {
   // so it runs at the point you write it — put it last to mask the finished look, or early
   // to mask the glyphs and let a later blur bleed past the edge.
   mask(src, opts) { return this._push(_maskDesc(src, opts)); }
+  // glsl(source, amount?): run your own fragment shader over the layer. The source may be a
+  // full `void main(){...}` or just a body; either way you get tMap (the layer so far,
+  // premultiplied), vUv, uTexel (1/resolution), uTime (seconds) and uAmount (the 2nd arg,
+  // patternable). A shader that does not compile becomes a pass-through and logs once.
+  //   group(...).glsl(`
+  //     vec4 c = texture(tMap, vUv + vec2(sin(vUv.y * 40.0 + uTime) * 0.01, 0.0));
+  //     fragColor = c;`)
+  glsl(source, amount) { return this._push({ type: 'glsl', src: String(source), amount: amount == null ? 1 : amount }); }
   // hidden(): render to the group's buffer (so it stays sampleable as a mask source) but do
   // not composite it to screen.
   hidden(on = true) { this._fx.hidden = !!on; return this; }
