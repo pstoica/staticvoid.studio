@@ -496,12 +496,14 @@ attribute float sRot;      // z rotation, radians
 attribute float sRotX;     // 3D tilt, radians
 attribute float sRotY;
 attribute float sMode;     // 0 = multiply the texture's colours · 1 = luminance stencil
+attribute vec4 sUV;        // this sprite's rect in the atlas (u0, v0, u1, v1)
 attribute vec4 sTint;      // rgb tint (white = natural) + alpha
 varying vec2 vUv;
 varying vec4 vTint;
 varying float vMode;
 void main() {
-  vUv = vec2(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5);   // y-down screen ↔ flipY texture
+  vec2 q = vec2(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5);   // y-down screen ↔ flipY texture
+  vUv = mix(sUV.xy, sUV.zw, q);                                    // into this sprite's atlas rect
   vTint = sTint;
   vMode = sMode;
   vec2 l = position.xy * sRadius * vec2(sAspect, 1.0);
@@ -1532,6 +1534,42 @@ export class GLRenderer {
   // is told its aspect (sAspect). Height stays 128 either way, so .size() means the same
   // thing for a word as for an emoji, and a single glyph still lands in a square canvas —
   // exactly what it got before this existed.
+  // All text/emoji sprites are rasterized at the same HEIGHT (128px) with variable width, so
+  // they shelf-pack trivially into one atlas — and once they share a texture, the painter's
+  // order walk in _drawSprites collapses any number of mixed emoji into a SINGLE run. That
+  // is what lets "[💀 🎃 🧙]*120" layer by age at one draw call instead of falling back to
+  // per-texture batches where the highest sprite id always wins.
+  //
+  // Drawn packs stay on their own textures: a pack in `pixels` mode needs NEAREST
+  // magnification and the atlas can only have one filter. Mips are off for the same
+  // single-texture reason (neighbouring cells would bleed at small sizes), which is the
+  // trade — a very small text sprite aliases slightly more than it used to.
+  _atlasFit(w, h) {
+    const A = this._atlas;
+    if (!A) return null;
+    if (h > A.rowH) return null;
+    if (A.x + w + A.pad > A.size) { A.x = 0; A.y += A.rowH + A.pad; }   // next shelf
+    if (A.y + A.rowH + A.pad > A.size) return null;                      // full
+    const box = { x: A.x, y: A.y };
+    A.x += w + A.pad;
+    return box;
+  }
+  _ensureAtlas() {
+    if (this._atlas) return this._atlas;
+    const size = 2048, c = document.createElement('canvas');
+    c.width = c.height = size;
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    // the uv rects are in canvas coordinates (row 0 = top), so the texture must not be
+    // flipped. A private per-sprite texture keeps flipY and a full [0,0,1,1] rect, which
+    // leaves its sampling exactly as it was.
+    tex.flipY = false;
+    this._atlas = { canvas: c, ctx: c.getContext('2d'), tex, size, x: 0, y: 0, rowH: 128, pad: 2 };
+    return this._atlas;
+  }
+
   ensureSprite(id, str) {
     if (!this.sprites) this.sprites = {};
     if (this.sprites[id]) return;
@@ -1546,10 +1584,20 @@ export class GLRenderer {
     x2.font = FONT;
     x2.fillStyle = '#fff';
     x2.fillText(str, w / 2, S / 2 + S * 0.04, w - S * 0.1);
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter;
-    this.sprites[id] = { tex, aspect: w / S };
+    const A = this._ensureAtlas();
+    const box = this._atlasFit(w, S);
+    if (box) {                                     // the normal path: share one texture
+      A.ctx.clearRect(box.x, box.y, w, S);
+      A.ctx.drawImage(c, box.x, box.y);
+      A.tex.needsUpdate = true;
+      this.sprites[id] = { tex: A.tex, aspect: w / S,
+        uv: [box.x / A.size, box.y / A.size, (box.x + w) / A.size, (box.y + S) / A.size] };
+    } else {                                       // atlas full: fall back to a private texture
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter;
+      this.sprites[id] = { tex, aspect: w / S, uv: [0, 0, 1, 1] };
+    }
     this._ensureSpriteRig();
   }
   // drawn-pack frames: the grid is rasterized through the pack's CONNECTOR mode
@@ -1566,7 +1614,7 @@ export class GLRenderer {
       tex.magFilter = (!mode || mode === 'pixels') ? THREE.NearestFilter : THREE.LinearFilter;
       tex.minFilter = THREE.LinearMipmapLinearFilter;
       if (this.sprites[id] && this.sprites[id].tex) this.sprites[id].tex.dispose();
-      this.sprites[id] = { tex, ver };
+      this.sprites[id] = { tex, ver, uv: [0, 0, 1, 1] };
       this._ensureSpriteRig();
     };
     img.src = url;
@@ -1576,7 +1624,7 @@ export class GLRenderer {
     const SPR_CAP = 4096;
     const geo = new THREE.InstancedBufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, 1, 0, -1, 1, 0]), 3));
-    this.sprArrays = { sPos: new Float32Array(SPR_CAP * 2), sRadius: new Float32Array(SPR_CAP), sAspect: new Float32Array(SPR_CAP), sRot: new Float32Array(SPR_CAP), sRotX: new Float32Array(SPR_CAP), sRotY: new Float32Array(SPR_CAP), sMode: new Float32Array(SPR_CAP), sTint: new Float32Array(SPR_CAP * 4) };
+    this.sprArrays = { sPos: new Float32Array(SPR_CAP * 2), sRadius: new Float32Array(SPR_CAP), sAspect: new Float32Array(SPR_CAP), sRot: new Float32Array(SPR_CAP), sRotX: new Float32Array(SPR_CAP), sRotY: new Float32Array(SPR_CAP), sMode: new Float32Array(SPR_CAP), sUV: new Float32Array(SPR_CAP * 4), sTint: new Float32Array(SPR_CAP * 4) };
     geo.setAttribute('sPos', new THREE.InstancedBufferAttribute(this.sprArrays.sPos, 2));
     geo.setAttribute('sRadius', new THREE.InstancedBufferAttribute(this.sprArrays.sRadius, 1));
     geo.setAttribute('sAspect', new THREE.InstancedBufferAttribute(this.sprArrays.sAspect, 1));
@@ -1584,6 +1632,7 @@ export class GLRenderer {
     geo.setAttribute('sRotX', new THREE.InstancedBufferAttribute(this.sprArrays.sRotX, 1));
     geo.setAttribute('sRotY', new THREE.InstancedBufferAttribute(this.sprArrays.sRotY, 1));
     geo.setAttribute('sMode', new THREE.InstancedBufferAttribute(this.sprArrays.sMode, 1));
+    geo.setAttribute('sUV', new THREE.InstancedBufferAttribute(this.sprArrays.sUV, 4));
     geo.setAttribute('sTint', new THREE.InstancedBufferAttribute(this.sprArrays.sTint, 4));
     const mat = new THREE.RawShaderMaterial({
       vertexShader: SPRITE_VERT, fragmentShader: SPRITE_FRAG,
@@ -1611,26 +1660,25 @@ export class GLRenderer {
 
     // Count the runs of consecutive same-sprite glyphs. One run per texture switch is what
     // true painter's order costs; a patch using a single emoji is always 1.
-    let runs = 0, last = -1, any = false;
+    let runs = 0, lastTex = null, any = false;
     for (const p of parts) {
-      if (!p.sprite || !this.sprites[p.sprite]) continue;
+      const spr = p.sprite && this.sprites[p.sprite];
+      if (!spr) continue;
       any = true;
-      if (p.sprite !== last) { runs++; last = p.sprite; }
+      if (spr.tex !== lastTex) { runs++; lastTex = spr.tex; }   // atlas sprites share one texture
     }
     if (!any) return;
 
-    let n = 0, runId = -1;
+    let n = 0, runTex = null;
     const flush = () => {
-      if (!n || runId < 0) { n = 0; return; }
-      const spr = this.sprites[runId];
-      if (!spr) { n = 0; return; }
-      for (const name of ['sPos', 'sRadius', 'sAspect', 'sRot', 'sRotX', 'sRotY', 'sMode', 'sTint']) geo.getAttribute(name).needsUpdate = true;
+      if (!n || !runTex) { n = 0; return; }
+      for (const name of ['sPos', 'sRadius', 'sAspect', 'sRot', 'sRotX', 'sRotY', 'sMode', 'sUV', 'sTint']) geo.getAttribute(name).needsUpdate = true;
       geo.instanceCount = n;
-      mat.uniforms.tMap.value = spr.tex;
+      mat.uniforms.tMap.value = runTex;
       r.render(this.spriteScene, this.camera);
       n = 0;
     };
-    const push = (p, aspect) => {
+    const push = (p, aspect, spriteUV) => {
       resolve(p, minDim, out);
       if (out.alpha <= 0.003) return;
       A.sPos[n * 2] = out.x; A.sPos[n * 2 + 1] = out.y;
@@ -1638,6 +1686,8 @@ export class GLRenderer {
       A.sAspect[n] = aspect;
       A.sRotX[n] = out.rotX; A.sRotY[n] = out.rotY;
       A.sMode[n] = out.stencil || 0;
+      const uv = spriteUV || [0, 0, 1, 1];
+      A.sUV[n * 4] = uv[0]; A.sUV[n * 4 + 1] = uv[1]; A.sUV[n * 4 + 2] = uv[2]; A.sUV[n * 4 + 3] = uv[3];
       A.sTint[n * 4] = out.rgb[0]; A.sTint[n * 4 + 1] = out.rgb[1]; A.sTint[n * 4 + 2] = out.rgb[2]; A.sTint[n * 4 + 3] = out.alpha;
       n++;
     };
@@ -1649,8 +1699,8 @@ export class GLRenderer {
       for (const p of parts) {
         const spr = p.sprite && this.sprites[p.sprite];
         if (!spr) continue;
-        if (p.sprite !== runId || n >= this._sprCap) { flush(); runId = p.sprite; }
-        push(p, spr.aspect || 1);
+        if (spr.tex !== runTex || n >= this._sprCap) { flush(); runTex = spr.tex; }
+        push(p, spr.aspect || 1, spr.uv);
       }
       flush();
     } else {
@@ -1666,8 +1716,8 @@ export class GLRenderer {
       }
       for (const id of [...buckets.keys()].sort((a, b) => a - b)) {
         const spr = this.sprites[id];
-        runId = id;
-        for (const p of buckets.get(id)) { if (n >= this._sprCap) flush(); push(p, spr.aspect || 1); }
+        runTex = spr.tex;
+        for (const p of buckets.get(id)) { if (n >= this._sprCap) flush(); push(p, spr.aspect || 1, spr.uv); }
         flush();
       }
     }

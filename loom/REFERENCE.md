@@ -1006,6 +1006,22 @@ The exceptions are the parameters that are genuinely *words*, not numbers: the w
 in `osc(rate, "sine")`, the curve in `.ease("outCubic")`, and the field shape in
 `near("square")`. Those stay literal strings.
 
+### How sprites layer
+
+Emoji, `text()` words and drawn-pack frames all draw through the sprite path, and they
+**layer by age** like every other glyph — the one spawned later sits on top. `shape("💀 🎃")`
+puts the pumpkin above the skull; swap the order in the pattern and the skull wins.
+
+That works because every text/emoji sprite is packed into **one texture atlas**, so any
+number of mixed emoji draw in a single instanced call in spawn order. Measured: 363 glyphs
+across three emoji → 1 draw call, 0.1 ms a frame.
+
+Drawn packs keep their own textures — a pack in `pixels` mode needs NEAREST magnification and
+an atlas can only carry one filter. Mixing packs with emoji therefore costs a draw call per
+switch, and past a budget of 24 switches Loom falls back to one draw per texture, which
+layers each sprite *type* consistently rather than by age. You only reach that with heavy
+interleaving of many different packs.
+
 ### Depth (`.z`)
 
 `.z(n)` gives a flat glyph a real **depth**. Same units as position (a fraction of
