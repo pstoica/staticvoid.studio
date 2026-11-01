@@ -1022,6 +1022,29 @@ switch, and past a budget of 24 switches Loom falls back to one draw per texture
 layers each sprite *type* consistently rather than by age. You only reach that with heavy
 interleaving of many different packs.
 
+### Outline and cel shading (`.rim` / `.cel`)
+
+For the imported models, two cheap styling controls that beat a wireframe:
+
+```js
+shape("bong*12").rim(0.5).shade(0.9)      // only the SILHOUETTE — a hollow outline drawing
+shape("knot*6").cel(3).shade(1)           // three flat tones instead of a smooth ramp
+shape("bong*8").rim(0.3).cel(2)           // outline plus two-tone — comic ink
+```
+
+`rim(n)` keeps only the outline, `n` being its thickness (`0` = solid). It works because the
+models are drawn in screen space, so a normal pointing *across* the view is exactly the
+silhouette — which means an outline at **any triangle count, for free**: no inverted hull, no
+second draw, no simplification. Measured on `bong`: solid covers 47% of its bounding box,
+`rim(0.4)` covers 2%, `rim(0.7)` 12%.
+
+`cel(n)` quantizes the lighting into `n` flat bands. Measured: smooth shading produced 8
+distinct tones across the model, `cel(3)` produced 2 and `cel(2)` produced 1.
+
+Both are per-glyph and patternable, so `.rim(sine.range(0, 0.6))` dissolves a solid model
+into an outline and back. Unlike `.stroke(1).fill(0)` (a wireframe, decided per *model*),
+these are per-glyph — so half your copies can be solid and half outlines.
+
 ### Wireframe meshes
 
 The imported models (`bong`, `knot`, `amongus`, `balloons`, `chain`) draw as a **wireframe**

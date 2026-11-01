@@ -46,13 +46,15 @@ uniform vec2 uResolution;
 uniform mat4 uModel;       // per-instance model matrix (rendered one instance at a time)
 uniform vec4 uTint;        // rgb + alpha
 uniform float uShade;      // 0 = flat/unlit, 1 = faceted lighting
+uniform vec2 uStyle;       // x = rim (silhouette only), y = cel bands
 in vec3 position;
 in vec3 normal;
 out vec4 vTint;
 out float vShade;
 out vec3 vN;               // world-space (flat) normal for shading
+out vec2 vStyle;
 void main() {
-  vShade = uShade;
+  vShade = uShade; vStyle = uStyle;
   vec4 wp = uModel * vec4(position, 1.0);
   vN = mat3(uModel) * normal;            // uniform model scale → normalize in the fragment
   // depth is only used to resolve THIS instance's own front/back faces (one pass per
@@ -70,20 +72,34 @@ precision highp float;
 in vec4 vTint;
 in float vShade;
 in vec3 vN;
+in vec2 vStyle;   // x = rim (silhouette only), y = cel bands
 out vec4 fragColor;
 void main() {
   // flat (per-face) normal from the geometry — robust to overlapping instances. (A
   // screen-space derivative normal corrupts where the depth pre-pass lets a 2x2 quad
   // survive from different faces, which turned stacked meshes near-black.)
   // y is screen-down here, so light from "above" is -y; matte, no specular.
+  vec3 N = normalize(vN);
+  if (N.z < 0.0) N = -N;                                  // face the camera (DoubleSide)
   float shade = 1.0;
   if (vShade > 0.001) {
-    vec3 N = normalize(vN);
-    if (N.z < 0.0) N = -N;                                // face the camera (DoubleSide)
     float diff = 0.5 + 0.5 * max(dot(N, normalize(vec3(0.25, -0.35, 0.9))), 0.0);
+    // .cel(n): quantize the lighting into n flat bands instead of a smooth ramp
+    if (vStyle.y > 1.5) {
+      float b = floor(vStyle.y);
+      diff = floor(diff * b) / max(b - 1.0, 1.0);
+    }
     shade = mix(1.0, diff, clamp(vShade, 0.0, 1.0));      // 0 = flat/unlit
   }
   float a = clamp(vTint.a, 0.0, 1.0);
+  // .rim(n): keep only the SILHOUETTE. The models are drawn in screen space, so a normal
+  // pointing across the view (N.z ~ 0) is exactly the outline of the shape — no inverted
+  // hull, no extra draw, and it costs nothing on a model of any triangle count.
+  if (vStyle.x > 0.001) {
+    float edge = 1.0 - abs(N.z);                          // 1 at the silhouette, 0 face-on
+    float t = clamp(vStyle.x, 0.0, 1.0);
+    a *= smoothstep(1.0 - t, 1.0 - t * 0.35, edge);
+  }
   fragColor = vec4(clamp(vTint.rgb * shade, 0.0, 1.0) * a, a);   // premultiplied
 }`;
 // instanced variant of MESH_VERT for the OPAQUE batch: many solid meshes in one draw.
@@ -98,11 +114,13 @@ in vec3 normal;
 in mat4 instanceMatrix;
 in vec4 aTint;             // rgb + alpha
 in float aShade;          // 0 = flat/unlit, 1 = faceted lighting
+in vec2 aStyle;           // x = rim, y = cel bands
 out vec4 vTint;
 out float vShade;
 out vec3 vN;
+out vec2 vStyle;
 void main() {
-  vShade = aShade;
+  vShade = aShade; vStyle = aStyle;
   vec4 wp = instanceMatrix * vec4(position, 1.0);
   vN = mat3(instanceMatrix) * normal;
   float scale = max(length(instanceMatrix[0].xyz), 1.0);
@@ -1772,6 +1790,7 @@ export class GLRenderer {
     geo.computeVertexNormals();            // …rebuild per-face (non-indexed → flat)
     geo.setAttribute('aTint', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH * 4), 4));
     geo.setAttribute('aShade', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH), 1));
+    geo.setAttribute('aStyle', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH * 2), 2));
 
     const blend = {
       blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
@@ -1784,6 +1803,7 @@ export class GLRenderer {
         uModel: { value: new THREE.Matrix4() },
         uTint: { value: new THREE.Vector4(1, 1, 1, 1) },
         uShade: { value: 0 },
+        uStyle: { value: new THREE.Vector2(0, 0) },   // rim / cel bands
       },
       vertexShader: MESH_VERT, fragmentShader: MESH_FRAG,
       transparent: true, depthTest: true, depthWrite: true, side: THREE.DoubleSide, ...blend,
@@ -1910,9 +1930,11 @@ export class GLRenderer {
         const t = b.geometry.getAttribute('aTint').array;
         t[n * 4] = out.rgb[0]; t[n * 4 + 1] = out.rgb[1]; t[n * 4 + 2] = out.rgb[2]; t[n * 4 + 3] = out.alpha;
         b.geometry.getAttribute('aShade').array[n] = out.shade;
+        const st = b.geometry.getAttribute('aStyle').array;
+        st[n * 2] = out.rim || 0; st[n * 2 + 1] = out.cel || 0;
         b.count = n + 1;
       } else {                                 // translucent → per-instance, in paint order
-        solos.push({ solo: entry.solo, m: this._m4.clone(), rgb: out.rgb.slice(0, 3), a: out.alpha, shade: out.shade });
+        solos.push({ solo: entry.solo, m: this._m4.clone(), rgb: out.rgb.slice(0, 3), a: out.alpha, shade: out.shade, rim: out.rim || 0, cel: out.cel || 0 });
       }
       drew++;
     }
@@ -1926,7 +1948,7 @@ export class GLRenderer {
       if (e.solo) e.solo.material.wireframe = w;
     }
     const batches = [];
-    for (const k in this.meshObjs) { const b = this.meshObjs[k].batch; if (b.count > 0) { b.visible = true; b.instanceMatrix.needsUpdate = true; b.geometry.getAttribute('aTint').needsUpdate = true; b.geometry.getAttribute('aShade').needsUpdate = true; batches.push(b); } }
+    for (const k in this.meshObjs) { const b = this.meshObjs[k].batch; if (b.count > 0) { b.visible = true; b.instanceMatrix.needsUpdate = true; b.geometry.getAttribute('aTint').needsUpdate = true; b.geometry.getAttribute('aShade').needsUpdate = true; b.geometry.getAttribute('aStyle').needsUpdate = true; batches.push(b); } }
     if (batches.length) {
       r.clear(false, true, false);
       for (const b of batches) { const m = b.material; m.colorWrite = false; m.depthWrite = true; m.depthFunc = THREE.LessEqualDepth; }
@@ -1942,6 +1964,7 @@ export class GLRenderer {
       u.uModel.value.copy(s.m);
       u.uTint.value.set(s.rgb[0], s.rgb[1], s.rgb[2], s.a);
       u.uShade.value = s.shade;
+      u.uStyle.value.set(s.rim, s.cel);
       s.solo.visible = true;
       r.clear(false, true, false);
       const m = s.solo.material;

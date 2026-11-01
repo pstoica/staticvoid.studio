@@ -446,6 +446,8 @@ function spawn(value, onset) {
     // flat (0). Override either way with .shade(n).
     soft: baseNum('soft', 0),            // edge softness, fraction of the glyph's radius
     z: baseNum('z', 0),                  // depth: + toward the viewer, 0 = the screen plane
+    rim: baseNum('rim', 0),              // meshes: keep only the silhouette (0 = solid)
+    cel: baseNum('cel', 0),              // meshes: quantize the lighting into n flat bands
     shade: sprInit.shade != null ? sprInit.shade : numAt(v.shade != null ? v.shade : (SHAPE_ID[v.shape] >= 11 && SHAPE_ID[v.shape] <= 14 ? 0.85 : 0), 0, phase),
     cap: v.cap || 'square',
     join: v.join || 'miter',
@@ -630,10 +632,10 @@ function interpPal(colors, t) {
 const isOsc = DSL.isOsc;
 const isSpring = DSL.isSpring;
 const applyEase = DSL.ease;   // named Penner curve, 0..1 → 0..1 (shared with pattern.js)
-const MOD_FIELDS = ['size', 'color', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade', 'soft', 'z'];
+const MOD_FIELDS = ['size', 'color', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade', 'soft', 'z', 'rim', 'cel'];
 // fields a .spring() can drive: position (resolved in resolvePos) + the scalar mods
 // (resolved in glResolve/drawGlyph). NOT color (non-scalar). Each holds per-glyph state.
-const SPRING_FIELDS = ['x', 'y', 'radius', 'angle', 'pan', 'size', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade', 'soft', 'z'];
+const SPRING_FIELDS = ['x', 'y', 'radius', 'angle', 'pan', 'size', 'rotate', 'rotateX', 'rotateY', 'open', 'alpha', 'weight', 'outline', 'shade', 'soft', 'z', 'rim', 'cel'];
 const SPRING_POS = new Set(['x', 'y', 'radius', 'angle', 'pan']);
 const _h1 = (x) => { const s = Math.sin((x + 0.123) * 12.9898) * 43758.5453; return s - Math.floor(s); };
 const _snoise = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return _h1(i) * (1 - u) + _h1(i + 1) * u; };
@@ -972,7 +974,7 @@ const CAP_ID = { round: 0, butt: 1, square: 2 };   // line/cross caps (spawn def
 const JOIN_ID = { miter: 0, round: 1, bevel: 2 };  // polygon corners (default miter = sharp)
 function glResolve(p, minDim, out) {
   const age = p.age, ageC = p.ageCycles, stC = p.spawnCycle;
-  let sizePx = p.size, rotTurns = p.rotTurns, rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline, shade = p.shade, soft = p.soft, zDepth = p.z, color = null;
+  let sizePx = p.size, rotTurns = p.rotTurns, rotX = p.rotX, rotY = p.rotY, open = p.open, alpha = p.alpha, weight = p.weight, olw = p.outline, shade = p.shade, soft = p.soft, zDepth = p.z, rim = p.rim, cel = p.cel, color = null;
   if (p.mods) { _curPos.x = W ? p.x / W : 0.5; _curPos.y = H ? p.y / H : 0.5; _curGlyph = p; }
   if (p.mods) for (const m of p.mods) {
     const val = evalOsc(m.osc, age, p.phase, p.spawnT, ageC, stC);
@@ -988,6 +990,8 @@ function glResolve(p, minDim, out) {
     else if (m.field === 'shade') shade = val;
     else if (m.field === 'soft') soft = val;
     else if (m.field === 'z') zDepth = val;
+    else if (m.field === 'rim') rim = val;
+    else if (m.field === 'cel') cel = val;
   }
   if (p._spr) {                                          // springs (state integrated in tick), same field→unit mapping as mods
     const s = p._spr;
@@ -1014,6 +1018,7 @@ function glResolve(p, minDim, out) {
   out.shade = shade;
   out.soft = Math.max(0, soft) * sizePx;   // fraction of radius → px for the shader
   out.z = zDepth;                          // depth, fraction of minDim (shader does the pinhole)
+  out.rim = rim; out.cel = cel;            // mesh styling (silhouette-only / cel bands)
   out.open = open;
   const id = p.sprite || (SHAPE_ID[p.shape] != null ? SHAPE_ID[p.shape] : 0);
   out.shape = id;

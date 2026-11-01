@@ -349,6 +349,15 @@ class Pattern {
   // Pairs with .soft() for defocus-by-distance. WebGL only, and it moves the glyph itself —
   // sprites, imported meshes and polygon fills keep their own paths and ignore it.
   z(a)       { return this.set('z', a); }
+  // rim(n) / cel(n): styling for the IMPORTED MESHES (bong, knot, amongus, balloons, chain).
+  // rim keeps only the SILHOUETTE — the models are drawn in screen space, so a normal facing
+  // across the view is exactly the outline, which means an outline at any triangle count for
+  // free (no inverted hull, no second draw, no simplification). cel quantizes the lighting
+  // into n flat bands instead of a smooth ramp.
+  //   shape("bong*12").rim(0.5).shade(0.9)        a hollow outline drawing
+  //   shape("knot*6").cel(3).shade(1)             three-tone cel shading
+  rim(a)     { return this.set('rim', a); }
+  cel(a)     { return this.set('cel', a); }
   cap(a)    { return this.set('cap', a); }   // line ends: 'round' | 'butt' | 'square'
   join(a)   { return this.set('join', a); }  // corners:   'round' | 'miter' | 'bevel'
   rotateX(a){ return this.set('rotateX', a); }  // tilt around horizontal axis (turns)
