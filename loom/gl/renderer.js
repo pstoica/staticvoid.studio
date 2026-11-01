@@ -1598,45 +1598,78 @@ export class GLRenderer {
     this.spriteScene.add(this.spriteMesh);
     this._sprCap = SPR_CAP;
   }
+  // How many draw calls of sprite interleaving to pay for before giving up on true painter's
+  // order. Each flush is a full three.js render() with its state setup — measured at ~0.074ms,
+  // so 24 runs is ~1.8ms a frame. Pure painter's order on alternating emoji measured 13.5ms
+  // (two emoji, 238 glyphs) and 52ms (four emoji, 784), which is 19fps — not affordable.
+  static SPRITE_RUN_BUDGET = 24;
+
   _drawSprites(parts, target) {
     if (!this.spriteMesh || !this.sprites) return;
-    // Sprite id → particles. The buckets must be drawn in a STABLE order: a Map iterates in
-    // insertion order, which here is whichever sprite the oldest living particle happens to
-    // be, so the moment that one dies the entire z-order of the sprite types swaps. With two
-    // emoji alternating that measured 23 flips a second and reads exactly like z-fighting.
-    // Sorting by id costs nothing and picks one consistent order instead.
-    const buckets = new Map();                     // sprite id → particles
-    for (const p of parts) {
-      if (!p.sprite) continue;
-      let b = buckets.get(p.sprite); if (!b) buckets.set(p.sprite, b = []);
-      b.push(p);
-    }
-    if (!buckets.size) return;
     const r = this.renderer, out = this._scratch, minDim = this._minDim, resolve = this._resolve;
     const A = this.sprArrays, geo = this.spriteMesh.geometry, mat = this.spriteMesh.material;
-    r.setRenderTarget(target || null);
-    for (const id of [...buckets.keys()].sort((a, b) => a - b)) {
-      const list = buckets.get(id);
-      const spr = this.sprites[id]; if (!spr) continue;
-      const aspect = spr.aspect || 1;              // >1 for a word: the quad widens to match
-      let n = 0;
-      for (const p of list) {
-        if (n >= this._sprCap) break;
-        resolve(p, minDim, out);
-        if (out.alpha <= 0.003) continue;
-        A.sPos[n * 2] = out.x; A.sPos[n * 2 + 1] = out.y;
-        A.sRadius[n] = out.r; A.sRot[n] = out.rot;
-        A.sAspect[n] = aspect;
-        A.sRotX[n] = out.rotX; A.sRotY[n] = out.rotY;
-        A.sMode[n] = out.stencil || 0;
-        A.sTint[n * 4] = out.rgb[0]; A.sTint[n * 4 + 1] = out.rgb[1]; A.sTint[n * 4 + 2] = out.rgb[2]; A.sTint[n * 4 + 3] = out.alpha;
-        n++;
-      }
-      if (!n) continue;
+
+    // Count the runs of consecutive same-sprite glyphs. One run per texture switch is what
+    // true painter's order costs; a patch using a single emoji is always 1.
+    let runs = 0, last = -1, any = false;
+    for (const p of parts) {
+      if (!p.sprite || !this.sprites[p.sprite]) continue;
+      any = true;
+      if (p.sprite !== last) { runs++; last = p.sprite; }
+    }
+    if (!any) return;
+
+    let n = 0, runId = -1;
+    const flush = () => {
+      if (!n || runId < 0) { n = 0; return; }
+      const spr = this.sprites[runId];
+      if (!spr) { n = 0; return; }
       for (const name of ['sPos', 'sRadius', 'sAspect', 'sRot', 'sRotX', 'sRotY', 'sMode', 'sTint']) geo.getAttribute(name).needsUpdate = true;
       geo.instanceCount = n;
       mat.uniforms.tMap.value = spr.tex;
       r.render(this.spriteScene, this.camera);
+      n = 0;
+    };
+    const push = (p, aspect) => {
+      resolve(p, minDim, out);
+      if (out.alpha <= 0.003) return;
+      A.sPos[n * 2] = out.x; A.sPos[n * 2 + 1] = out.y;
+      A.sRadius[n] = out.r; A.sRot[n] = out.rot;
+      A.sAspect[n] = aspect;
+      A.sRotX[n] = out.rotX; A.sRotY[n] = out.rotY;
+      A.sMode[n] = out.stencil || 0;
+      A.sTint[n * 4] = out.rgb[0]; A.sTint[n * 4 + 1] = out.rgb[1]; A.sTint[n * 4 + 2] = out.rgb[2]; A.sTint[n * 4 + 3] = out.alpha;
+      n++;
+    };
+
+    r.setRenderTarget(target || null);
+    if (runs <= GLRenderer.SPRITE_RUN_BUDGET) {
+      // cheap enough: walk in spawn order so sprites layer by AGE like every other shape,
+      // flushing whenever the texture changes
+      for (const p of parts) {
+        const spr = p.sprite && this.sprites[p.sprite];
+        if (!spr) continue;
+        if (p.sprite !== runId || n >= this._sprCap) { flush(); runId = p.sprite; }
+        push(p, spr.aspect || 1);
+      }
+      flush();
+    } else {
+      // too much interleaving to draw in order: fall back to one instanced draw per texture,
+      // sorted by id so the layering is at least STABLE. Without the sort the bucket order
+      // came from whichever sprite the oldest particle was, and flipped ~23 times a second
+      // when it died — which is what reads as z-fighting.
+      const buckets = new Map();
+      for (const p of parts) {
+        if (!p.sprite || !this.sprites[p.sprite]) continue;
+        let b = buckets.get(p.sprite); if (!b) buckets.set(p.sprite, b = []);
+        b.push(p);
+      }
+      for (const id of [...buckets.keys()].sort((a, b) => a - b)) {
+        const spr = this.sprites[id];
+        runId = id;
+        for (const p of buckets.get(id)) { if (n >= this._sprCap) flush(); push(p, spr.aspect || 1); }
+        flush();
+      }
     }
     r.setRenderTarget(null);
   }
