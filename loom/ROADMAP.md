@@ -183,7 +183,7 @@ Loom's deps, so the dependency split is clean.
   For alpha, `.decay(s, curve)` is still the tool — alpha is also × the lifetime envelope.
 - **Copying / clone.** A first-class way to fork a source through *parallel* FX. Possible today
   via `stack(group(src).fxA, group(src).fxB)` (each `group()` = its own FX bus); wants a tidier
-  clone verb. Note: meshes are all at `z=0` (no DSL depth), so copies separate only in x/y.
+  clone verb. ~~Note: meshes are all at `z=0` (no DSL depth)~~ — **fixed 2026-10-31** by `.z()`.
 - **Audio-reactivity** + **juggling polygon** (read N ball coords → one multi-vertex glyph) —
   both flagged feasible, not started.
 - **Timeline choreography.** An anime.js-style global *score* animating Loom's knobs (cps,

@@ -1881,8 +1881,13 @@ export class GLRenderer {
       if (!entry) { if (out.shape >= 15 && out.shape < 20) this._ensureMesh(out.shape); continue; }  // lazy-load on first use (15..19 = models)
       this._euler.set(out.rotX, out.rotY, out.rot, 'XYZ');
       this._m4.makeRotationFromEuler(this._euler);
-      this._m4.scale(this._v3.set(out.r, out.r, out.r));
-      this._m4.setPosition(out.x, out.y, 0);
+      // .z(): the same pinhole the SDF glyphs and sprites use — scale by 1/(1-z) and
+      // parallax from the canvas centre. Meshes used to be pinned to z=0, so stacked copies
+      // could only ever be separated in x/y.
+      const mzs = Math.max(0, Math.min(12, 1 / Math.max(1 - (out.z || 0), 0.08)));
+      const mcx = this.W * 0.5, mcy = this.H * 0.5;
+      this._m4.scale(this._v3.set(out.r * mzs, out.r * mzs, out.r * mzs));
+      this._m4.setPosition(mcx + (out.x - mcx) * mzs, mcy + (out.y - mcy) * mzs, 0);
       // Partition by the ACTUAL (enveloped) alpha: the attack/decay envelope makes a
       // mesh genuinely translucent while it fades, and the batch's depth pre-pass ignores
       // alpha — so a near-transparent instance batched as "opaque" would claim the depth

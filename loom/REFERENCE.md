@@ -1053,9 +1053,10 @@ many glyphs. So scatter them and vary z per glyph:
 shape("sphere*40").x(rand).y(rand).z(rand.range(-2, 0.5)).size(0.08).shade(0.9)
 ```
 
-**Scope:** `.z()` moves the glyph itself — SDF shapes, the raymarched 3D shapes, and sprites
-(emoji, `text()`, drawn packs) all respond. Imported meshes and `polygon()` fills keep their
-own draw paths and ignore it. WebGL only. This is a per-glyph pinhole, not a camera — see
+**Scope:** `.z()` moves the glyph itself, and every drawing path now responds — SDF shapes,
+the raymarched 3D shapes, sprites (emoji, `text()`, drawn packs) and imported meshes. Only
+`polygon()` fills still ignore it. WebGL only. (Imported meshes used to be pinned at `z=0`,
+so stacked copies could only separate in x/y — `.z()` is what finally splits them in depth.) This is a per-glyph pinhole, not a camera — see
 `persp()` for the global tilt projection that `rotateX/rotateY` ride on.
 
 ### Per-glyph defocus (`.soft`)
