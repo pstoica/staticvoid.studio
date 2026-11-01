@@ -1869,6 +1869,7 @@ export class GLRenderer {
   _drawMeshes(parts, target) {
     if (!parts.length) return;
     const r = this.renderer, out = this._scratch, minDim = this._minDim, resolve = this._resolve;
+    const wire = {};                      // mesh id → render it as a wireframe this frame
     for (const k in this.meshObjs) { const e = this.meshObjs[k]; e.batch.count = 0; e.batch.visible = false; e.solo.visible = false; }
     const solos = (this._soloList || (this._soloList = []));
     solos.length = 0;
@@ -1896,6 +1897,11 @@ export class GLRenderer {
       // for a few frames (MESH_SOLID_FRAMES), so a one-frame envelope peak doesn't flip a
       // glyph into the batch (behind the solos) for a single strobing frame. See the
       // constant's note. Counter rides on the particle; reset the instant alpha drops.
+      // .stroke(1).fill(0) → draw this model as a wireframe. `wireframe` is a MATERIAL flag
+      // and the batch shares one material per mesh id, so this is decided per MODEL, not per
+      // glyph: the last glyph of a given mesh in the frame wins. That covers the normal case
+      // (a patch sets stroke/fill once) and quietly ignores mixing them within one model.
+      wire[out.shape] = out.stroke > 0.5 && out.fill < 0.5;
       part._meshSolid = out.alpha >= 0.996 ? (part._meshSolid || 0) + 1 : 0;
       if (part._meshSolid >= MESH_SOLID_FRAMES) {  // sustained-opaque → instanced batch
         const b = entry.batch, n = b.count;
@@ -1914,6 +1920,11 @@ export class GLRenderer {
     r.setRenderTarget(target);
 
     // ── phase A: opaque batch (two-pass so envelope fades still show one face/pixel) ──
+    for (const k in this.meshObjs) {      // one wireframe decision per model, both materials
+      const e = this.meshObjs[k], w = !!wire[k];
+      if (e.batch) e.batch.material.wireframe = w;
+      if (e.solo) e.solo.material.wireframe = w;
+    }
     const batches = [];
     for (const k in this.meshObjs) { const b = this.meshObjs[k].batch; if (b.count > 0) { b.visible = true; b.instanceMatrix.needsUpdate = true; b.geometry.getAttribute('aTint').needsUpdate = true; b.geometry.getAttribute('aShade').needsUpdate = true; batches.push(b); } }
     if (batches.length) {

@@ -1022,6 +1022,27 @@ switch, and past a budget of 24 switches Loom falls back to one draw per texture
 layers each sprite *type* consistently rather than by age. You only reach that with heavy
 interleaving of many different packs.
 
+### Wireframe meshes
+
+The imported models (`bong`, `knot`, `amongus`, `balloons`, `chain`) draw as a **wireframe**
+when you ask for stroke without fill:
+
+```js
+shape("bong*12").stroke(1).fill(0).color("#6cf").shade(0.9)
+```
+
+Measured on `bong`: solid fills 50% of its own bounding box, wireframe 18% — the model's
+triangle edges, hollow inside.
+
+Caveat worth knowing: `wireframe` is a **material** flag and all instances of one model share
+a material, so this is decided **per model, not per glyph** — the last glyph of that model in
+the frame wins. Setting stroke/fill once for the patch (the normal case) works; alternating
+`.stroke("[0 1]")` across glyphs of the *same* model will not give you half solid and half
+wire. Two different models can differ freely.
+
+The raymarched 3D shapes (`cube`, `sphere`, `torus`, `hoop`, `octa`) have their own
+`.fill(0).stroke(1).weight(w)` handling and are unaffected by this.
+
 ### Depth (`.z`)
 
 `.z(n)` gives a flat glyph a real **depth**. Same units as position (a fraction of
