@@ -982,9 +982,14 @@ static fill:
 .gradient(palette("neon").at(rand))                       // every glyph a different last stop
 ```
 
-It applies to the fill **and** the stroke, and to the raymarched 3D shapes
-(`cube`/`sphere`/`torus`/`octa`). `.shade()` still works on top — the ramp supplies the base
-colour the lighting multiplies, so a shaded sphere keeps its highlight.
+It applies to the fill **and** the stroke, to the raymarched 3D shapes
+(`cube`/`sphere`/`torus`/`octa`), and to **imported meshes** — for those the ramp runs through
+the model's own object space (centred, unit radius), so it is painted onto the model and
+turns with `.rotateX/Y()` rather than sitting still in front of it, and `radial` runs from the
+model's centre out to its hull. It works on a `.stroke(1).fill(0)` wireframe too.
+
+`.shade()` still works on top — the ramp supplies the base colour the lighting multiplies, so
+a shaded sphere keeps its highlight — as do `.rim()` and `.cel()`.
 
 ### Your own shader (`glsl`)
 

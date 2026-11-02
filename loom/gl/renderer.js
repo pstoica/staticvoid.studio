@@ -47,14 +47,20 @@ uniform mat4 uModel;       // per-instance model matrix (rendered one instance a
 uniform vec4 uTint;        // rgb + alpha
 uniform float uShade;      // 0 = flat/unlit, 1 = faceted lighting
 uniform vec2 uStyle;       // x = rim (silhouette only), y = cel bands
+uniform vec4 uGradB;       // .gradient() stop B: rgb + angle (radians)
+uniform vec4 uGradC;       // stop C: rgb + mode (0 none, 1 linear, 2 radial, 3 conic) + 4 = 3 stops
 in vec3 position;
 in vec3 normal;
 out vec4 vTint;
 out float vShade;
 out vec3 vN;               // world-space (flat) normal for shading
 out vec2 vStyle;
+out vec3 vGB, vGC, vObj;
+out vec2 vGrad;
 void main() {
   vShade = uShade; vStyle = uStyle;
+  vGB = uGradB.rgb; vGC = uGradC.rgb; vGrad = vec2(uGradB.a, uGradC.a);
+  vObj = position;         // object space, already centred and normalised to unit radius
   vec4 wp = uModel * vec4(position, 1.0);
   vN = mat3(uModel) * normal;            // uniform model scale → normalize in the fragment
   // depth is only used to resolve THIS instance's own front/back faces (one pass per
@@ -73,7 +79,27 @@ in vec4 vTint;
 in float vShade;
 in vec3 vN;
 in vec2 vStyle;   // x = rim (silhouette only), y = cel bands
+in vec3 vGB, vGC, vObj;
+in vec2 vGrad;    // .x = angle (radians), .y = mode + 4 when a third stop is in play
 out vec4 fragColor;
+
+// .gradient() on an imported mesh. The 2D glyphs ramp across their own un-rotated shape
+// space; the mesh equivalent is OBJECT space, which _buildMesh already centres and scales
+// to unit radius — so the ramp is painted onto the model and tumbles with it, and one
+// .gradient() reads the same on a model of any size or triangle count. y is negated to
+// match the glyphs' maths-space convention, where angle 0.25 means bottom-to-top.
+vec3 meshGrad(vec3 base) {
+  int fl = int(vGrad.y + 0.5);
+  int mode = fl & 3;
+  if (mode == 0) return base;
+  vec3 o = vec3(vObj.x, -vObj.y, vObj.z);
+  float t;
+  if (mode == 2)      t = clamp(length(o), 0.0, 1.0);                   // radial: centre → hull
+  else if (mode == 3) t = fract(atan(o.y, o.x) / 6.28318530718 - vGrad.x);
+  else                t = clamp(dot(o.xy, vec2(cos(vGrad.x), sin(vGrad.x))) * 0.5 + 0.5, 0.0, 1.0);
+  if ((fl & 4) == 0) return mix(base, vGB, t);
+  return t < 0.5 ? mix(base, vGB, t * 2.0) : mix(vGB, vGC, t * 2.0 - 1.0);
+}
 void main() {
   // flat (per-face) normal from the geometry — robust to overlapping instances. (A
   // screen-space derivative normal corrupts where the depth pre-pass lets a 2x2 quad
@@ -100,7 +126,7 @@ void main() {
     float t = clamp(vStyle.x, 0.0, 1.0);
     a *= smoothstep(1.0 - t, 1.0 - t * 0.35, edge);
   }
-  fragColor = vec4(clamp(vTint.rgb * shade, 0.0, 1.0) * a, a);   // premultiplied
+  fragColor = vec4(clamp(meshGrad(vTint.rgb) * shade, 0.0, 1.0) * a, a);   // premultiplied
 }`;
 // instanced variant of MESH_VERT for the OPAQUE batch: many solid meshes in one draw.
 // Opaque objects can share a depth buffer (hard occlusion is the correct result), so we
@@ -115,12 +141,18 @@ in mat4 instanceMatrix;
 in vec4 aTint;             // rgb + alpha
 in float aShade;          // 0 = flat/unlit, 1 = faceted lighting
 in vec2 aStyle;           // x = rim, y = cel bands
+in vec4 aGradB;           // .gradient() stop B: rgb + angle (radians)
+in vec4 aGradC;           // stop C: rgb + mode + 4 = three stops
 out vec4 vTint;
 out float vShade;
 out vec3 vN;
 out vec2 vStyle;
+out vec3 vGB, vGC, vObj;
+out vec2 vGrad;
 void main() {
   vShade = aShade; vStyle = aStyle;
+  vGB = aGradB.rgb; vGC = aGradC.rgb; vGrad = vec2(aGradB.a, aGradC.a);
+  vObj = position;
   vec4 wp = instanceMatrix * vec4(position, 1.0);
   vN = mat3(instanceMatrix) * normal;
   float scale = max(length(instanceMatrix[0].xyz), 1.0);
@@ -1801,7 +1833,8 @@ export class GLRenderer {
   // unit radius. Two draw paths share one geometry: an instanced `batch` for opaque
   // instances (one cheap draw, hard occlusion is correct for solids) and a `solo` Mesh
   // for translucent ones (rendered one at a time in _drawMeshes so they composite like
-  // 2D glyphs). Source materials/colours are dropped — meshes are flat-tinted today.
+  // 2D glyphs). The source file's own materials/colours are dropped: a mesh takes .color(),
+  // optionally ramped across object space by .gradient() (see meshGrad in MESH_FRAG).
   _buildMesh(id, root) {
     const geos = [];
     root.updateMatrixWorld(true);
@@ -1824,6 +1857,8 @@ export class GLRenderer {
     geo.setAttribute('aTint', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH * 4), 4));
     geo.setAttribute('aShade', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH), 1));
     geo.setAttribute('aStyle', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH * 2), 2));
+    geo.setAttribute('aGradB', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH * 4), 4));
+    geo.setAttribute('aGradC', new THREE.InstancedBufferAttribute(new Float32Array(MAX_MESH * 4), 4));
 
     const blend = {
       blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
@@ -1837,6 +1872,8 @@ export class GLRenderer {
         uTint: { value: new THREE.Vector4(1, 1, 1, 1) },
         uShade: { value: 0 },
         uStyle: { value: new THREE.Vector2(0, 0) },   // rim / cel bands
+        uGradB: { value: new THREE.Vector4(0, 0, 0, 0) },   // .gradient() stops; .a of
+        uGradC: { value: new THREE.Vector4(0, 0, 0, 0) },   // uGradC is 0 = no gradient
       },
       vertexShader: MESH_VERT, fragmentShader: MESH_FRAG,
       transparent: true, depthTest: true, depthWrite: true, side: THREE.DoubleSide, ...blend,
@@ -1965,9 +2002,13 @@ export class GLRenderer {
         b.geometry.getAttribute('aShade').array[n] = out.shade;
         const st = b.geometry.getAttribute('aStyle').array;
         st[n * 2] = out.rim || 0; st[n * 2 + 1] = out.cel || 0;
+        const gb = b.geometry.getAttribute('aGradB').array, gc = b.geometry.getAttribute('aGradC').array;
+        gb[n * 4] = out.gradB[0]; gb[n * 4 + 1] = out.gradB[1]; gb[n * 4 + 2] = out.gradB[2]; gb[n * 4 + 3] = out.gradAngle;
+        gc[n * 4] = out.gradC[0]; gc[n * 4 + 1] = out.gradC[1]; gc[n * 4 + 2] = out.gradC[2]; gc[n * 4 + 3] = out.gradMode;
         b.count = n + 1;
       } else {                                 // translucent → per-instance, in paint order
-        solos.push({ solo: entry.solo, m: this._m4.clone(), rgb: out.rgb.slice(0, 3), a: out.alpha, shade: out.shade, rim: out.rim || 0, cel: out.cel || 0 });
+        solos.push({ solo: entry.solo, m: this._m4.clone(), rgb: out.rgb.slice(0, 3), a: out.alpha, shade: out.shade, rim: out.rim || 0, cel: out.cel || 0,
+          gradB: out.gradB.slice(0, 3), gradC: out.gradC.slice(0, 3), gradAngle: out.gradAngle, gradMode: out.gradMode });
       }
       drew++;
     }
@@ -1981,7 +2022,7 @@ export class GLRenderer {
       if (e.solo) e.solo.material.wireframe = w;
     }
     const batches = [];
-    for (const k in this.meshObjs) { const b = this.meshObjs[k].batch; if (b.count > 0) { b.visible = true; b.instanceMatrix.needsUpdate = true; b.geometry.getAttribute('aTint').needsUpdate = true; b.geometry.getAttribute('aShade').needsUpdate = true; b.geometry.getAttribute('aStyle').needsUpdate = true; batches.push(b); } }
+    for (const k in this.meshObjs) { const b = this.meshObjs[k].batch; if (b.count > 0) { b.visible = true; b.instanceMatrix.needsUpdate = true; b.geometry.getAttribute('aTint').needsUpdate = true; b.geometry.getAttribute('aShade').needsUpdate = true; b.geometry.getAttribute('aStyle').needsUpdate = true; b.geometry.getAttribute('aGradB').needsUpdate = true; b.geometry.getAttribute('aGradC').needsUpdate = true; batches.push(b); } }
     if (batches.length) {
       r.clear(false, true, false);
       for (const b of batches) { const m = b.material; m.colorWrite = false; m.depthWrite = true; m.depthFunc = THREE.LessEqualDepth; }
@@ -1998,6 +2039,8 @@ export class GLRenderer {
       u.uTint.value.set(s.rgb[0], s.rgb[1], s.rgb[2], s.a);
       u.uShade.value = s.shade;
       u.uStyle.value.set(s.rim, s.cel);
+      u.uGradB.value.set(s.gradB[0], s.gradB[1], s.gradB[2], s.gradAngle);
+      u.uGradC.value.set(s.gradC[0], s.gradC[1], s.gradC[2], s.gradMode);
       s.solo.visible = true;
       r.clear(false, true, false);
       const m = s.solo.material;
