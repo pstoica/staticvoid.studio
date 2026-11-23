@@ -116,26 +116,52 @@ language lives in `pattern.js`, untouched by any of this except where noted.)
 
 ## Next major milestone — split Loom into its own project
 
-*(Patrick, 2026-10-23.)* Loom currently rides inside the staticvoid.studio Vite
+*(Patrick, 2026-10-23; revised 2026-11-22.)* Loom rides inside the staticvoid.studio Vite
 multi-page site as two of five entries (`loom/index.html`, `loom/draw/index.html` in
-`vite.config.js`), sharing one repo, one build and one deploy with the marketing site,
-the omnichord and tic-tac-toe. It has outgrown that: the heavy deps (three, rapier,
-mediapipe, codemirror) are Loom-only, and every Loom commit redeploys the whole site.
+`vite.config.js`), sharing one repo, one build and one deploy with the landing page, the
+omnichord and tic-tac-toe. It has outgrown that: of the thirteen runtime deps, eight are
+Loom's alone (`@codemirror/*` ×5, `@lezer/highlight`, `@dimforge/rapier2d-compat`,
+`qrcode-generator`), `three` and `@mediapipe/tasks-vision` are shared only with the
+omnichord and the landing page, and every Loom commit redeploys the whole site. **That
+deploy cadence is the actual motivation** — the dependency weight is a symptom.
 
-**The one genuinely destructive detail: `localStorage` is per-ORIGIN.** Everything a user
-has made lives there — `loom.presets` (saved patches), `loom.shapepacks` (everything drawn
-in the pixel editor), `loom.code` (the current patch), plus `loom.clock`, `loom.side`,
-`loom.sidetab`, `loom.camLabel`, `loom.feedShow`, `loom.epilepsy`. Moving
-`staticvoid.studio/loom` → `loom.staticvoid.studio` (or any new domain) **orphans all of
-it** — the data isn't deleted, it's just unreachable from the new origin, which looks
-identical to deletion from the user's side. So a split needs an export/import path, or a
-one-time migration page served from the OLD origin that hands the data over (postMessage
-from an iframe on the old origin is the usual trick). Decide this BEFORE moving, not after.
+**Splitting the repo and changing the origin are independent decisions.** An earlier draft
+of this section treated them as one event and warned that the split would orphan every
+user's `localStorage`. That conflated two things. `localStorage` is keyed by ORIGIN, not by
+repo: extract Loom to its own repo and keep serving it at `staticvoid.studio/loom` and
+nothing a user can see changes at all. The origin question only arrives the day a separate
+domain does, and it can be deferred indefinitely.
+
+When that day comes, it is also not a project: Loom is a single-user tool, so moving origin
+is a console paste, not a migration page.
+
+```js
+// on the OLD origin, in devtools
+copy(JSON.stringify({p: localStorage['loom.presets'], s: localStorage['loom.shapepacks']}))
+```
+
+Those two keys are the only ones holding made things — saved patches and everything drawn
+in the pixel editor. The other fifteen (`loom.code`, `loom.clock`, `loom.side`,
+`loom.sidetab`, `loom.sidewidth`, `loom.presetCollapsed`, `loom.ranOnce`, `loom.camLabel`,
+`loom.epilepsy`, `loom.feedOn`, `loom.feedHost`, `loom.feedShow`, `loom.feedVideo`,
+`loom.feedFlip`, `loom.feedOpacity`) are UI and feed state, re-set by hand in seconds.
+There is no export/import UI and it isn't worth building one for one user.
+
+**Keeping `/loom` served while the repo lives elsewhere** — two routes, both Cloudflare,
+which `loom-room/` already uses:
+
+- **Second Pages project behind a route** (preferred). Loom gets its own repo, build and
+  deploy cadence; a Cloudflare route sends `staticvoid.studio/loom/*` to it. Same origin,
+  so nothing moves under the user; svs stays the umbrella. A separate domain later is then
+  a DNS change pointed at the same Pages project.
+- **Submodule.** `loom/` becomes a submodule and `vite.config.js` keeps both entries
+  untouched. Quicker to set up, but svs still builds and deploys Loom — which leaves the
+  original motivation unaddressed. A stopgap, not the destination.
 
 Other things in scope, none of them hard: `loom-room/` is already a standalone Cloudflare
 Worker with its own wrangler config, so it moves as-is; the draw editor's QR/room host
 field points at it by URL. Keep a redirect from the old path. The root site keeps none of
-Loom's deps, so the dependency split is clean.
+Loom's own deps, so the dependency split is clean.
 
 ## Backlog / jot-down (not now)
 
