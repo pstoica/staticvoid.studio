@@ -2198,6 +2198,53 @@ $("rings", shape("ring*5")
   .radius(osc(0.3, "rand").spread(1).range(0.12, 0.44).spring(120, 9))
   .color("#56b6ff").weight(0.005).decay(2.5))`,
 
+  // hypnagogic: closed-eye vision rather than a light show — nothing cuts, everything
+  // smears. Three slow luminous cells drift on perlin and PULSE (size + alpha + a throb on
+  // the whole group), and `.feedback(fade, zoom, rot, loop)` turns each pulse into an
+  // AFTERIMAGE: the loop builder runs hue/blur/brightness/displace on the history every
+  // frame INSIDE the loop, so the ghosts keep rotating hue and melting as they recirculate
+  // (a chained effect would touch the output once and never the history). Over the top, a
+  // hand-painted emulsion — a churn of soft colour blobs and vertical scratches.
+  // Two things that aren't obvious: `.soft()` blurs ONE GLYPH (widening its own antialias
+  // band), which is what makes the cells read as light rather than as discs; and `rand`
+  // freezes per ONSET, so all 22 burst copies would land on the same spot — `osc(rate,
+  // "rand").spread(22)` is what gives each copy its own random walk.
+  'hypnagogic': `$("dark", bg("#03020a"))
+$("cells", group(
+  shape("circle*3")
+    .x(osc(0.11, "perlin").spread(3).range(0.22, 0.78))
+    .y(osc(0.13, "perlin").spread(5).phase(0.31).range(0.22, 0.78))
+    .size(osc(0.26, "sine").spread(3).range(0.035, 0.16))
+    .alpha(osc(0.19, "sine").spread(3).range(0.12, 1))
+    .soft(osc(0.17, "sine").spread(3).range(0.12, 0.7))
+    .color(palette("neon").at(osc(0.04).spread(1)))
+    .decay(4)
+).feedback(slider(0.945, 0.80, 0.99, 0.945), 1.022, 0.006,
+           f => f.hue(0.013).blur(1.2).brightness(0.95).displace(0.012, 2.6))
+ .glow(0.4, 0.55).contrast(1.12).lens(0.12)
+ .opacity(osc(0.33, "sine").range(0.45, 1)))
+$("paint", group(
+  shape("circle*16").burst(22)
+    .x(osc(0.7, "rand").spread(22).range(0, 1))
+    .y(osc(0.9, "rand").spread(22).phase(0.41).range(0, 1))
+    .size(osc(0.5, "rand").spread(22).range(0.01, 0.14))
+    .soft(osc(0.6, "rand").spread(22).range(0.04, 0.85))
+    .alpha(osc(0.8, "rand").spread(22).range(0.15, 0.6))
+    .color(palette("rainbow"))
+    .blend("lighter").jitter(0.005)
+    .attack(0.01).decay(0.06)
+).rgbshift(0.003, 0.12).trails(0.5).opacity(slider(0.70, 0, 1, 0.70)))
+$("scratch", group(
+  shape("line*24").burst(5)
+    .x(osc(1.3, "rand").spread(5).range(0, 1))
+    .y(osc(1.7, "rand").spread(5).phase(0.5).range(0, 1))
+    .rotate(osc(1.1, "rand").spread(5).range(0.21, 0.29))
+    .size(osc(0.9, "rand").spread(5).range(0.03, 0.22))
+    .weight(0.004).color("#fff")
+    .alpha(osc(2.1, "rand").spread(5).range(0.05, 0.35))
+    .blend("lighter").attack(0.01).decay(0.08)
+))`,
+
   // physics: each onset spawns a rapier2d rigid BODY (the engine is lazy-loaded on first
   // use). Shapes rain from the top, bounce off the floor/walls and COLLIDE with each other
   // — the inter-body dynamics spring/osc can't do. opts (gravity/bounce/drag/vel/spin) are
