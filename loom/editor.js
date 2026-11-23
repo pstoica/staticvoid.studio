@@ -448,7 +448,10 @@ function scanSliders(text) {
     let i = m.index + m[0].length;
     const a = NUM.exec(text.slice(i));
     if (!a) continue;
-    const argFrom = i + (a[0].length - a[1].length), argTo = i + a[0].length;
+    // The rewritten range OWNS the pad columns fmtPad writes (plain spaces only — never a
+    // newline), so the padding is replaced on each drag instead of accumulating.
+    const numAt = i + (a[0].length - a[1].length);
+    const argFrom = /^[ \t]*$/.test(text.slice(i, numAt)) ? i : numAt, argTo = i + a[0].length;
     let j = argTo, nums = [];
     for (let k = 0; k < 3; k++) {                          // up to three more numeric args (min, max, default)
       const c = /^\s*,\s*(-?\d*\.?\d+)/.exec(text.slice(j));
@@ -467,9 +470,15 @@ function scanSliders(text) {
 }
 const niceStep = (min, max) => { const r = Math.abs(max - min) || 1; return r <= 2 ? 0.01 : r <= 20 ? 0.1 : r <= 200 ? 1 : 10; };
 const stepDecimals = (step) => Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
-// format to the step's decimal count, KEEPING trailing zeros — a fixed-width number so the
-// inline slider doesn't jitter/reflow as you drag (0.30 → 0.45, not 0.3 → 0.45).
+// format to the step's decimal count, KEEPING trailing zeros (0.30 → 0.45, not 0.3 → 0.45).
 const fmtNum = (v, step) => v.toFixed(stepDecimals(step));
+// …then pad it to a FIXED column width taken from the slider's own range, so a minus sign or
+// an extra digit appearing can't reflow the line. Without this the track slides out from under
+// the pointer the instant the width changes: crossing zero on a -1.5…1.5 slider shifted it 9px
+// (≈0.3 of the range), which bounced you straight back to positive — you could never drag past
+// 0 — and the same fight happened at 10 on a 1…12 slider.
+const fmtPad = (v, step, min, max) =>
+  fmtNum(v, step).padStart(Math.max(fmtNum(min, step).length, fmtNum(max, step).length));
 // each slider gets a DISTINCT solid colour (rotating hues) so you can tell several apart at a
 // glance. OKLCH keeps every hue at the same perceived lightness/chroma (unlike HSL).
 const SLIDER_HUES = [265, 200, 150, 95, 45, 330, 25, 175];
@@ -496,7 +505,7 @@ class SliderWidget extends WidgetType {
       if (!s) return;
       const cl = Math.max(this.min, Math.min(this.max, v));
       input.value = cl;
-      view.dispatch({ changes: { from: s.argFrom, to: s.argTo, insert: fmtNum(cl, step) } });
+      view.dispatch({ changes: { from: s.argFrom, to: s.argTo, insert: fmtPad(cl, step, this.min, this.max) } });
       if (view.loomRerun) view.loomRerun();
     };
     input.addEventListener('input', () => commit(+input.value));
