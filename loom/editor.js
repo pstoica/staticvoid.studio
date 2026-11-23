@@ -612,11 +612,17 @@ const liveSigPlugin = ViewPlugin.fromClass(class {
   update(u) { if (u.docChanged || u.viewportChanged) this.decorations = buildLiveDecos(u.view); }
 }, { decorations: (v) => v.decorations });
 
-// Create the editor into `parent`. opts: { doc, onRun, onChange, onFocus, rerun }.
+// Create the editor into `parent`. opts: { doc, onRun, onClear, onChange, onFocus, rerun }.
 // Returns { view, getCode, setCode, insert, focus, hasFocus }.
 export function createEditor(parent, opts = {}) {
+  // App-level chords, bound FIRST so they outrank the editing keymap below — ⌘⇧K is
+  // deleteLine in CodeMirror's defaults, so without this it ate a line of the patch on its
+  // way to clearing the canvas. They preventDefault, which is how the document-level
+  // handler in main.js knows not to run them a second time.
   const runKeys = keymap.of([
     { key: 'Mod-Enter', preventDefault: true, run: () => { opts.onRun && opts.onRun(); return true; } },
+    { key: 'Mod-Shift-k', preventDefault: true, run: () => { opts.onClear && opts.onClear(); return true; } },
+    { key: 'Mod-Shift-Backspace', preventDefault: true, run: () => { opts.onClear && opts.onClear(); return true; } },
   ]);
   const listeners = EditorView.updateListener.of((u) => {
     if (u.docChanged && opts.onChange) opts.onChange();

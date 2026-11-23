@@ -53,6 +53,7 @@ const decayRange = $('#decayrange');
 // focus() / hasFocus(). ⌘↵ runs; tab inserts spaces; highlighting + undo are built in.
 const editor = createEditor($('#editwrap'), {
   onRun: () => { run(); flash(); },
+  onClear: () => clearCanvas(),   // ⌘⇧K / ⌘⇧⌫ — bound here too so CodeMirror can't claim them
   onFocus: (focused) => { document.body.classList.toggle('editing', focused); activity(); },
   rerun: () => run(),   // inline slider drags re-run live (no flash)
 });
@@ -2751,14 +2752,15 @@ window.addEventListener('wheel', (e) => {
   e.preventDefault();
 }, { passive: false });
 document.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented) return;          // the editor's own keymap already handled it
   if ((e.metaKey || e.ctrlKey) && (e.key === '.' || ((e.shiftKey) && (e.key === 'H' || e.key === 'h')))) {
     e.preventDefault(); setChromeHidden(!document.body.classList.contains('chrome-hidden')); return;
   }
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
     e.preventDefault(); togglePerform(); return;
   }
-  if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'K' || e.key === 'k')) {
-    e.preventDefault(); clearCanvas(); return;             // clear the canvas (works mid-edit too)
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'K' || e.key === 'k' || e.key === 'Backspace')) {
+    e.preventDefault(); clearCanvas(); return;             // clear the canvas (when the editor isn't focused)
   }
   if (e.key === 'Escape') {
     if (document.body.classList.contains('chrome-hidden')) { setChromeHidden(false); return; }
