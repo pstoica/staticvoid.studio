@@ -1953,6 +1953,63 @@ const PRESETS = {
   ).rgbshift(caught("c").range(0.001, 0.012)).scanlines(0.25)
 
 ).glow(0.12, 0.5)`,
+
+  // the same three balls as a SHAPE rather than three auras: polygon(["a","b","c"]) is one
+  // glyph whose corners ARE the balls, .fill(1) makes it solid, and .fast(64) resamples the
+  // corners often enough to keep up with a throw. The look is the feedback zoom — 1.2 redraws
+  // each echo 20% larger, so every frame of the triangle fires outward in expanding rings
+  // while the rainbow drifts underneath. Trails/dust read accel() and speed(), which the host
+  // derives from the camera when a ball has no IMU. Needs the juggling feed (?feed); the dust
+  // attractor and the fingertip sparkles also use Loom's own camera via MediaPipe.
+  'juggle tri': `$("cam", cam(0.3))
+
+const SHADES = {
+  a: ["#ff4d6d", "#ff8a5c", "#ff5fa2"],   // coral → orange → pink
+  b: ["#ffd166", "#ffe8a3", "#f4a259"],   // gold → cream → amber
+  c: ["#4dd2ff", "#7b9cff", "#5ef2d6"],   // sky → periwinkle → aqua
+}
+const trail = (id, i) => shape("tri*120").x(ballX(id)).y(ballY(id))
+  .rotate(osc(0.5).spread(2).drift(0.1))
+  .gate(ballSeen(id))
+  .size(speed(id).range(0.006, 0.01))
+  .color(palette(SHADES[id]).at(osc(0.6).phase(i / 3)))
+  .opacity(accel(id).range(0.01, 0.6))
+  .decay(speed(id).range(0.3, 2))
+
+$("trails", group(stack(trail("a", 0), trail("b", 1), trail("c", 2)))
+  .feedback(0.86, 1.006, 0.002, f => f.hue(0.003))
+  .glow(accel("a").add(accel("b")).add(accel("c")).div(3).range(0.15, 0.6), 0.5))
+
+// attractors, no gravity: each ball sheds dust pulled toward the NEXT ball (a→b→c→a) with a
+// little swirl, so colour streams around between them; while your right hand is in view the
+// dust is drawn to your palm instead
+const hand = handSeen("right")
+const toward = (ball, palm) => ball.mul(hand.range(1, 0)).add(palm.mul(hand))
+const dust = (id, next) => physics(
+  shape("dot*24").x(ballX(id)).y(ballY(id))
+    .gate(ballSeen(id))
+    .size(rand.range(0.003, 0.009))
+    .color(palette(SHADES[id]).at(rand))
+    .decay(1.6),
+  { gravity: 0, drag: 0.9, vel: 0.08, swirl: 0.3, attract: 0.9,
+    ax: toward(ballX(next), palmX("right")), ay: toward(ballY(next), palmY("right")) })
+$("dust", group(stack(dust("a", "b"), dust("b", "c"), dust("c", "a"))).glow(0.25, 0.4))
+
+// faint sparkles off your raised fingertips, so you can see where Loom thinks your hands are
+$("hands", stack(...["left", "right"].map((h) => stack(...[0, 1, 2, 3, 4].map((f) =>
+  shape("dot*12").x(fingerX(f, h)).y(fingerY(f, h))
+    .gate(fingerUp(f, h))
+    .size(0.004).color("#ffffff").opacity(0.35).decay(0.4))))))
+
+// the triangle: a rainbow fill across the three balls, exploding outward
+$("tri", group(
+  polygon(["a", "b", "c"]).fast(64)
+    .gate(ballSeen("a").mul(ballSeen("b")).mul(ballSeen("c")))
+    .fill(1)
+    .color(palette("rainbow").at(osc(2).drift(0.5)))
+    .opacity(0.7).decay(0.4)
+)
+  .feedback(0.8, 1.2, 0))`,
   // a heat map under the cursor: every cell reads its own live distance to the pointer, so
   // the grid bulges and glows where you point instead of anything moving
   'heat': `stack(
